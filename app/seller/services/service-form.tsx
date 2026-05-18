@@ -57,11 +57,12 @@ function jsonString(value: unknown) {
 function getErrorMessage(error: unknown): string {
   if (typeof error === "string") return error;
   if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message: unknown }).message);
+    return getErrorMessage((error as { message: unknown }).message);
   }
 
   try {
-    return JSON.stringify(error);
+    const serialized = JSON.stringify(error);
+    return serialized && serialized !== "{}" ? serialized : "Unknown error";
   } catch {
     return "Unknown error";
   }

@@ -19,6 +19,8 @@
 import { NextResponse } from "next/server";
 import { listAllStoreServices } from "@/lib/services/store-service-persistence";
 
+export const revalidate = 0;
+
 export async function GET() {
   const { services, warning } = await listAllStoreServices();
 

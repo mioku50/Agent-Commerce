@@ -31,6 +31,8 @@ import {
 } from "@/lib/services/registry";
 import { getStoreServiceBySlug } from "@/lib/services/store-service-persistence";
 
+export const dynamic = "force-dynamic";
+
 type ServiceDetailPageProps = {
   params: Promise<{
     slug: string;
@@ -89,11 +91,6 @@ function JsonPanel({ title, value }: { title: string; value: unknown }) {
   );
 }
 
-async function getCachedStoreService(slug: string) {
-  "use cache";
-  return getStoreServiceBySlug(slug);
-}
-
 export function generateStaticParams() {
   return serviceRegistry.map((service) => ({ slug: service.slug }));
 }
@@ -102,7 +99,7 @@ export async function generateMetadata({
   params,
 }: ServiceDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const service = await getCachedStoreService(slug);
+  const service = await getStoreServiceBySlug(slug);
 
   if (!service) {
     return {
@@ -120,7 +117,7 @@ export default async function ServiceDetailPage({
   params,
 }: ServiceDetailPageProps) {
   const { slug } = await params;
-  const service = await getCachedStoreService(slug);
+  const service = await getStoreServiceBySlug(slug);
 
   if (!service) notFound();
 
