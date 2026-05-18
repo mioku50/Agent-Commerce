@@ -106,7 +106,7 @@ export async function generateMetadata({
 
   if (!service) {
     return {
-      title: "Service Not Found | Arc Agent Commerce",
+      title: "API Service | Arc Agent Commerce",
     };
   }
 

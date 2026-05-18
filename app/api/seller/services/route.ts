@@ -1,10 +1,34 @@
+import { revalidatePath } from "next/cache";
 import { NextResponse } from "next/server";
 import {
   createDynamicStoreService,
   listDynamicStoreServiceRows,
   rowToSellerService,
 } from "@/lib/services/store-service-persistence";
-import { parseSellerServiceRequest } from "@/app/api/seller/services/validation";
+import {
+  getErrorMessage,
+  parseSellerServiceRequest,
+  type ValidationContext,
+} from "@/app/api/seller/services/validation";
+
+function logValidationError(
+  action: string,
+  context: ValidationContext,
+  error: unknown,
+) {
+  console.warn(
+    "[seller-services] Validation failed",
+    JSON.stringify({
+      action,
+      slug: context.slug,
+      normalizedStatus: context.normalizedStatus,
+      normalizedSourceType: context.normalizedSourceType,
+      normalizedMethod: context.normalizedMethod,
+      price: context.price,
+      error: getErrorMessage(error),
+    }),
+  );
+}
 
 export async function GET() {
   const { services, warning } = await listDynamicStoreServiceRows();
@@ -18,14 +42,18 @@ export async function GET() {
 export async function POST(request: Request) {
   const parsed = await parseSellerServiceRequest(request);
   if ("error" in parsed) {
+    logValidationError("create", parsed.context, parsed.error);
     return NextResponse.json({ error: parsed.error }, { status: parsed.status });
   }
 
   try {
     const service = await createDynamicStoreService(parsed.input);
+    revalidatePath("/store");
+    revalidatePath(`/store/${service.slug}`);
+    revalidatePath("/api/store/services");
     return NextResponse.json({ service }, { status: 201 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = getErrorMessage(error);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

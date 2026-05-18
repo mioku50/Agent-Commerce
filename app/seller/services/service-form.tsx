@@ -54,6 +54,34 @@ function jsonString(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function getErrorMessage(error: unknown): string {
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object" && "message" in error) {
+    return String((error as { message: unknown }).message);
+  }
+
+  try {
+    return JSON.stringify(error);
+  } catch {
+    return "Unknown error";
+  }
+}
+
+function normalizePriceInput(value: string) {
+  const normalized = value.trim().replace(",", ".");
+
+  if (!normalized || !/^\d+(?:\.\d+)?$/.test(normalized)) {
+    throw new Error("Price must be a valid number like 0.002");
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new Error("Price must be a valid number like 0.002");
+  }
+
+  return parsed;
+}
+
 function defaultService() {
   return {
     name: "",
@@ -160,7 +188,7 @@ export function SellerServiceForm({ initialService }: SellerServiceFormProps) {
         longDescription: form.longDescription,
         category: form.category,
         method: form.method,
-        priceUsd: Number(form.priceUsd),
+        priceUsd: normalizePriceInput(form.priceUsd),
         status: form.status,
         sourceType: form.sourceType,
         exampleUseCase: form.exampleUseCase,
@@ -184,17 +212,17 @@ export function SellerServiceForm({ initialService }: SellerServiceFormProps) {
       const body = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        throw new Error(
-          typeof body.error === "string"
-            ? body.error
-            : "Failed to save seller service.",
-        );
+        throw new Error(getErrorMessage(body.error ?? body));
+      }
+
+      if (!body.service?.slug) {
+        throw new Error(getErrorMessage(body.error ?? body));
       }
 
       router.refresh();
       router.push(`/store/${body.service.slug}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      setError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -290,11 +318,12 @@ export function SellerServiceForm({ initialService }: SellerServiceFormProps) {
               <Label htmlFor="priceUsd">Price in USDC</Label>
               <Input
                 id="priceUsd"
-                type="number"
+                type="text"
+                inputMode="decimal"
                 min="0"
-                step="0.000001"
                 value={form.priceUsd}
                 onChange={(event) => update("priceUsd", event.target.value)}
+                placeholder="0.002"
                 required
               />
             </div>
