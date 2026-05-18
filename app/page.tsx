@@ -17,7 +17,14 @@
  */
 
 import Link from "next/link";
-import { BookOpen, Bot, ChartNoAxesCombined, LayoutDashboard, Store } from "lucide-react";
+import {
+  BookOpen,
+  Bot,
+  ChartNoAxesCombined,
+  LayoutDashboard,
+  ListChecks,
+  Store,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const features = [
@@ -72,6 +79,12 @@ export default function Home() {
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
+              <Link href="/runs">
+                <ListChecks />
+                View Agent Runs
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
               <Link href="https://github.com/mioku50/Agent-Commerce#readme">
                 <BookOpen />
                 View README
@@ -90,8 +103,8 @@ export default function Home() {
           <div className="divide-y">
             {[
               ["Premium Quote", "0.001 USDC", "GET"],
-              ["Market Snapshot", "0.005 USDC", "GET"],
-              ["Agent Task", "0.01 USDC", "POST"],
+              ["Market Snapshot", "0.01 USDC", "GET"],
+              ["Agent Task", "0.03 USDC", "GET"],
             ].map(([name, price, method]) => (
               <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-5" key={name}>
                 <div>

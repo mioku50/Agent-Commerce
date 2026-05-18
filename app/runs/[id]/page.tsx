@@ -1,0 +1,272 @@
+/**
+ * Copyright 2026 Circle Internet Group, Inc.  All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { connection } from "next/server";
+import { Suspense } from "react";
+import { ArrowLeft, ExternalLink } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CopyButton } from "@/components/copy-button";
+import {
+  fetchAgentRunDetail,
+  type PublicAgentRun,
+  type PublicAgentStep,
+} from "@/lib/agent/runs-public";
+import { shortenHash } from "@/lib/utils";
+
+type RunDetailPageProps = {
+  params: Promise<{
+    id: string;
+  }>;
+};
+
+export const metadata = {
+  title: "Agent Run | Arc Agent Commerce",
+};
+
+function statusVariant(status: string) {
+  if (status === "completed" || status === "paid") return "default";
+  if (status === "failed") return "destructive";
+  if (status === "running" || status === "selected" || status === "payment_required") {
+    return "secondary";
+  }
+  return "outline";
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function JsonPreview({ value }: { value: unknown }) {
+  if (value === null || value === undefined) return null;
+
+  return (
+    <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs leading-5">
+      {JSON.stringify(value, null, 2)}
+    </pre>
+  );
+}
+
+function RunSummary({ run }: { run: PublicAgentRun }) {
+  return (
+    <Card className="rounded-lg shadow-sm">
+      <CardHeader>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
+          <Badge variant="secondary">{run.mode}</Badge>
+        </div>
+        <CardTitle className="text-3xl">{run.task}</CardTitle>
+        <p className="text-sm text-muted-foreground">{formatDate(run.created_at)}</p>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-5">
+          <div>
+            <dt className="text-muted-foreground">Budget</dt>
+            <dd className="font-mono">{run.budget_usdc} USDC</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Spent</dt>
+            <dd className="font-mono">{run.spent_usdc} USDC</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Paid</dt>
+            <dd className="font-mono">{run.paid_count ?? 0}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Skipped</dt>
+            <dd className="font-mono">{run.skipped_count ?? 0}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Wallet</dt>
+            <dd className="font-mono">
+              {run.agent_wallet ? shortenHash(run.agent_wallet, 5) : "n/a"}
+            </dd>
+          </div>
+        </dl>
+        {run.summary ? (
+          <p className="rounded-md bg-secondary p-3 text-sm text-secondary-foreground">
+            {run.summary}
+          </p>
+        ) : null}
+        {run.error ? (
+          <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {run.error}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
+
+function TimelineStep({ step }: { step: PublicAgentStep }) {
+  return (
+    <Card className="rounded-lg shadow-sm">
+      <CardHeader>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">Step {step.step_index}</Badge>
+          <Badge variant={statusVariant(step.status)}>{step.status}</Badge>
+          {step.method ? <Badge variant="outline">{step.method}</Badge> : null}
+        </div>
+        <CardTitle className="text-xl">
+          {step.service_name ?? step.service_slug ?? "Unknown service"}
+        </CardTitle>
+        {step.endpoint ? (
+          <p className="break-all font-mono text-xs text-muted-foreground">
+            {step.endpoint}
+          </p>
+        ) : null}
+      </CardHeader>
+      <CardContent className="grid gap-4">
+        <dl className="grid gap-3 text-sm sm:grid-cols-3">
+          <div>
+            <dt className="text-muted-foreground">Price</dt>
+            <dd className="font-mono">{step.price_usdc ?? "0"} USDC</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Request ID</dt>
+            <dd className="font-mono">
+              {step.request_id ? shortenHash(step.request_id, 6) : "n/a"}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Payment event</dt>
+            <dd>
+              {step.payment_event_id ? (
+                <Link
+                  href="/dashboard"
+                  className="inline-flex items-center gap-1 text-primary hover:underline"
+                >
+                  {shortenHash(step.payment_event_id, 6)}
+                  <ExternalLink size={12} />
+                </Link>
+              ) : (
+                <span className="text-muted-foreground">n/a</span>
+              )}
+            </dd>
+          </div>
+        </dl>
+
+        {step.reasoning ? (
+          <div>
+            <h2 className="text-sm font-semibold uppercase text-muted-foreground">
+              Reasoning
+            </h2>
+            <p className="mt-2 leading-7">{step.reasoning}</p>
+          </div>
+        ) : null}
+
+        {step.error ? (
+          <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+            {step.error}
+          </p>
+        ) : null}
+
+        <div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold uppercase text-muted-foreground">
+              Response preview
+            </h2>
+            {step.response_preview ? (
+              <CopyButton
+                value={JSON.stringify(step.response_preview, null, 2)}
+                label="Copy preview"
+              />
+            ) : null}
+          </div>
+          <JsonPreview value={step.response_preview} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+async function RunDetail({ params }: RunDetailPageProps) {
+  await connection();
+  const { id } = await params;
+  const result = await fetchAgentRunDetail(id).catch(() => null);
+
+  if (!result) notFound();
+
+  return (
+    <>
+      <section className="border-b bg-secondary/30">
+        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+          <Button asChild variant="ghost" className="mb-6 px-0">
+            <Link href="/runs">
+              <ArrowLeft />
+              Back to Agent Runs
+            </Link>
+          </Button>
+          <RunSummary run={result.run} />
+        </div>
+      </section>
+
+      <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6">
+        {result.steps.length === 0 ? (
+          <Card className="rounded-lg">
+            <CardContent className="p-6 text-sm text-muted-foreground">
+              No timeline steps have been recorded for this run yet.
+            </CardContent>
+          </Card>
+        ) : (
+          result.steps.map((step) => (
+            <TimelineStep key={step.id} step={step} />
+          ))
+        )}
+      </section>
+    </>
+  );
+}
+
+function RunDetailFallback() {
+  return (
+    <>
+      <section className="border-b bg-secondary/30">
+        <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+          <Button asChild variant="ghost" className="mb-6 px-0">
+            <Link href="/runs">
+              <ArrowLeft />
+              Back to Agent Runs
+            </Link>
+          </Button>
+          <Card className="rounded-lg">
+            <CardContent className="p-6 text-sm text-muted-foreground">
+              Loading agent run...
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+    </>
+  );
+}
+
+export default function RunDetailPage({ params }: RunDetailPageProps) {
+  return (
+    <main className="min-h-screen bg-background">
+      <Suspense fallback={<RunDetailFallback />}>
+        <RunDetail params={params} />
+      </Suspense>
+    </main>
+  );
+}

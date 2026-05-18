@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import * as readline from "node:readline/promises";
-import { GatewayClient } from "@circle-fin/x402-batching/client";
+import { GatewayClient, type PayResult } from "@circle-fin/x402-batching/client";
 import {
   createPublicClient,
   createWalletClient,
@@ -23,45 +22,100 @@ import {
 import {
   installPaymentHttpDiagnostics,
   printPaymentHttpDiagnostics,
+  type PaymentHttpExchange,
 } from "./lib/agent/payment-http-diagnostics.ts";
+import {
+  createAgentRun,
+  createAgentStep,
+  findRecentPaymentEvent,
+  updateAgentRun,
+  updateAgentStep,
+  type AgentRunStatus,
+  type AgentStepRow,
+  type AgentStepStatus,
+} from "./lib/agent/run-persistence.ts";
+import type { ApiService, ServiceMethod, ServiceStatus } from "./lib/services/registry.ts";
 
-type Endpoint = {
-  url: string;
-  method: "GET" | "POST";
-  body?: Record<string, unknown>;
+type ServiceDiscoveryResponse = {
+  services?: ApiService[];
+};
+
+type CliArgs = {
+  task: string;
+  spendingLimit: number;
+  mode: "scripted";
 };
 
 type RunStatus =
   | "created"
-  | "preflight"
+  | "discovering"
+  | "planning"
   | "funding"
   | "funded"
   | "depositing"
   | "deposited"
   | "running"
+  | "completed"
   | "failed"
   | "stopped";
 
+type LocalStepLog = {
+  stepIndex: number;
+  serviceSlug: string;
+  serviceName: string;
+  status: AgentStepStatus;
+  reasoning: string;
+  requestId?: string | null;
+  paymentEventId?: string | null;
+  error?: string | null;
+};
+
 type RunLog = {
   runId: string;
+  supabaseRunId: string | null;
   createdAt: string;
   updatedAt: string;
+  task: string;
+  mode: "scripted";
   baseUrl: string;
   funderAddress: string;
+  sellerAddress: string;
   ephemeralAgentAddress: string;
   ephemeralAgentPrivateKey: string;
   walletSource: "generated" | "AGENT_PRIVATE_KEY";
+  budgetUsdc: string;
+  spentUsdc: string;
   depositAmountUsdc: string;
   targetNetwork: string;
   fundingTxHash: string | null;
   usdcTransferTxHash: string | null;
   depositTxHash: string | null;
   status: RunStatus;
+  steps: LocalStepLog[];
+  summary: string | null;
   errors: Array<{
     at: string;
     stage: string;
     message: string;
   }>;
+};
+
+type ServiceDecision = {
+  service: ApiService;
+  decision: "selected" | "skipped";
+  reasoning: string;
+  expectedPriceUsd: number;
+};
+
+type ExecutableDecision = ServiceDecision & {
+  step: AgentStepRow | null;
+  stepIndex: number;
+};
+
+type PreflightResult = {
+  requestId?: string;
+  paymentRequired?: unknown;
+  responseBody?: string;
 };
 
 const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000" as const;
@@ -70,25 +124,51 @@ const ARC_TESTNET_RPC =
 const TARGET_NETWORK = "Arc Testnet (chain ID 5042002)";
 const GAS_FUND_AMOUNT = parseEther("0.01");
 const RUN_DIR = ".agent-runs";
+const DEFAULT_TASK =
+  "Explore the API Store and buy the minimum useful services to produce a short agent commerce proof.";
+const DEFAULT_BUDGET_USDC = 0.0113;
+const PURCHASE_ORDER = [
+  "premium-quote",
+  "market-snapshot",
+  "text-analyzer",
+  "agent-task",
+] as const;
 
-// --- Parse CLI args ---
-function parseArgs() {
+function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
   let spendingLimit: number | null = null;
+  let task = DEFAULT_TASK;
+  let mode = "scripted";
 
   for (let i = 0; i < args.length; i++) {
     if (args[i] === "--limit" && args[i + 1]) {
-      const val = parseFloat(args[i + 1]);
-      if (Number.isNaN(val) || val <= 0) {
-        console.error("--limit must be a positive number (USDC amount)");
-        process.exit(1);
+      const val = Number(args[i + 1]);
+      if (!Number.isFinite(val) || val <= 0) {
+        throw new Error("--limit must be a positive number (USDC amount).");
       }
       spendingLimit = val;
       i++;
+    } else if (args[i] === "--task" && args[i + 1]) {
+      task = args[i + 1].trim();
+      if (!task) throw new Error("--task must not be empty.");
+      i++;
+    } else if (args[i] === "--mode" && args[i + 1]) {
+      mode = args[i + 1].trim();
+      i++;
+    } else {
+      throw new Error(`Unknown or incomplete argument: ${args[i]}`);
     }
   }
 
-  return { spendingLimit };
+  if (mode !== "scripted") {
+    throw new Error("Phase 3 supports --mode scripted only.");
+  }
+
+  return {
+    task,
+    spendingLimit: spendingLimit ?? DEFAULT_BUDGET_USDC,
+    mode,
+  };
 }
 
 function requireEnv(name: string) {
@@ -144,14 +224,6 @@ function parsePositiveIntegerEnv(name: string, fallback: number) {
   return parsed;
 }
 
-function parseStrictlyPositiveIntegerEnv(name: string, fallback: number) {
-  const parsed = parsePositiveIntegerEnv(name, fallback);
-  if (parsed <= 0) {
-    throw new Error(`${name} must be greater than 0.`);
-  }
-  return parsed;
-}
-
 function parseBooleanEnv(name: string) {
   const value = process.env[name]?.trim().toLowerCase();
   return value === "1" || value === "true" || value === "yes";
@@ -167,6 +239,40 @@ function normalizeBaseUrl(raw: string) {
 
 function createRunId(date = new Date()) {
   return date.toISOString().replace(/:/g, "-").replace(/\.\d{3}Z$/, "Z");
+}
+
+function formatUsdc(amount: number) {
+  const formatted = amount.toFixed(6).replace(/\.?0+$/, "");
+  return formatted === "" ? "0" : formatted;
+}
+
+function roundUsdc(amount: number) {
+  return Math.round(amount * 1_000_000) / 1_000_000;
+}
+
+function isServiceStatus(value: unknown): value is ServiceStatus {
+  return value === "live" || value === "mock" || value === "coming-soon";
+}
+
+function isServiceMethod(value: unknown): value is ServiceMethod {
+  return value === "GET" || value === "POST";
+}
+
+function isApiService(value: unknown): value is ApiService {
+  if (!value || typeof value !== "object") return false;
+  const service = value as Record<string, unknown>;
+
+  return (
+    typeof service.id === "string" &&
+    typeof service.slug === "string" &&
+    typeof service.name === "string" &&
+    typeof service.shortDescription === "string" &&
+    typeof service.category === "string" &&
+    isServiceMethod(service.method) &&
+    typeof service.endpoint === "string" &&
+    typeof service.priceUsd === "number" &&
+    isServiceStatus(service.status)
+  );
 }
 
 async function writeRunLog(runFilePath: string, runLog: RunLog) {
@@ -189,34 +295,11 @@ async function appendRunError(
   await writeRunLog(runFilePath, runLog);
 }
 
-function retryCommand(runFilePath: string, spendingLimit: number | null) {
-  const limitArgs = spendingLimit === null ? "" : ` -- --limit ${spendingLimit}`;
-  return `AGENT_PRIVATE_KEY=$(node -e "console.log(require('./${runFilePath}').ephemeralAgentPrivateKey)") AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent${limitArgs}`;
+function retryCommand(runFilePath: string, args: CliArgs) {
+  const task = args.task.replace(/"/g, '\\"');
+  return `AGENT_PRIVATE_KEY=$(node -e "console.log(require('./${runFilePath}').ephemeralAgentPrivateKey)") AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "${task}" --limit ${formatUsdc(args.spendingLimit)} --mode ${args.mode}`;
 }
 
-async function promptForAllowance(totalSpent: number): Promise<number> {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-  try {
-    const answer = await rl.question(
-      "\nSpending limit reached. Enter additional allowance in USDC (or 0 to quit): ",
-    );
-    const val = parseFloat(answer);
-    if (Number.isNaN(val) || val < 0) {
-      console.error("Invalid amount. Exiting.");
-      process.exit(0);
-    }
-    if (val === 0) {
-      console.log(`Agent stopped. Total spent: ${totalSpent.toFixed(6)} USDC`);
-      process.exit(0);
-    }
-    return val;
-  } finally {
-    rl.close();
-  }
-}
-
-// Retry helper for nonce collisions when multiple agents fund from the same wallet concurrently.
-// On collision the other agent's tx confirms first, shifting the nonce — a short retry resolves it.
 async function withNonceRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
   const maxRetries = 5;
   for (let attempt = 0; attempt < maxRetries; attempt++) {
@@ -237,18 +320,225 @@ async function withNonceRetry<T>(fn: () => Promise<T>, label: string): Promise<T
   throw new Error("unreachable");
 }
 
-async function main() {
-  const { spendingLimit: initialSpendingLimit } = parseArgs();
-  let spendingLimit = initialSpendingLimit;
-  let totalSpent = 0;
-  let paused = false;
-  let index = 0;
-  let inFlight = 0;
-  let redepositing = false;
-  let paymentInterval: ReturnType<typeof setInterval> | null = null;
-  let balanceInterval: ReturnType<typeof setInterval> | null = null;
-  let shutdownStarted = false;
+function sortedServices(services: ApiService[]) {
+  return [...services].sort((a, b) => {
+    const aIndex = PURCHASE_ORDER.indexOf(a.slug as (typeof PURCHASE_ORDER)[number]);
+    const bIndex = PURCHASE_ORDER.indexOf(b.slug as (typeof PURCHASE_ORDER)[number]);
+    const normalizedA = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
+    const normalizedB = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
 
+    if (normalizedA !== normalizedB) return normalizedA - normalizedB;
+    return a.priceUsd - b.priceUsd;
+  });
+}
+
+function matches(task: string, pattern: RegExp) {
+  return pattern.test(task.toLowerCase());
+}
+
+function serviceReasonForSelection(service: ApiService, task: string) {
+  if (service.slug === "premium-quote") {
+    return "Low-cost proof of payment and useful short context for the task.";
+  }
+
+  if (service.slug === "market-snapshot") {
+    return "The task asks for market, data, context, research, or report material, and this service provides paid market data at a reasonable cost.";
+  }
+
+  if (service.slug === "text-analyzer") {
+    return "The task involves analysis, summary, text, or report generation, so a paid compute step can analyze the generated context.";
+  }
+
+  if (service.slug === "agent-task") {
+    return "The task justifies a higher-value multi-step agent task, and the remaining budget can cover it.";
+  }
+
+  return `The service appears useful for this task: ${task}`;
+}
+
+function shouldSelectLiveService(service: ApiService, task: string, budget: number) {
+  if (service.slug === "premium-quote") return true;
+  if (service.slug === "market-snapshot") {
+    return matches(task, /\b(market|data|context|report|research|snapshot|financial)\b/);
+  }
+  if (service.slug === "text-analyzer") {
+    return matches(task, /\b(text|summary|summarize|analysis|analyze|report|draft|write)\b/);
+  }
+  if (service.slug === "agent-task") {
+    return (
+      budget >= 0.0413 &&
+      matches(task, /\b(agent task|task|multi[- ]step|puzzle|work order)\b/)
+    );
+  }
+  return false;
+}
+
+function planPurchases(task: string, budget: number, services: ApiService[]) {
+  let remaining = budget;
+
+  return sortedServices(services).map((service): ServiceDecision => {
+    if (service.status === "coming-soon") {
+      return {
+        service,
+        decision: "skipped",
+        reasoning: "This service is coming soon and does not have a live paid endpoint in Phase 3.",
+        expectedPriceUsd: service.priceUsd,
+      };
+    }
+
+    if (service.status !== "live") {
+      return {
+        service,
+        decision: "skipped",
+        reasoning: "This service is not marked live, so the scripted buyer-agent will not spend budget on it.",
+        expectedPriceUsd: service.priceUsd,
+      };
+    }
+
+    if (!shouldSelectLiveService(service, task, budget)) {
+      return {
+        service,
+        decision: "skipped",
+        reasoning: "The scripted policy did not find enough task relevance to justify this paid call.",
+        expectedPriceUsd: service.priceUsd,
+      };
+    }
+
+    if (service.priceUsd > remaining + 0.0000001) {
+      return {
+        service,
+        decision: "skipped",
+        reasoning: `Skipped because ${service.priceLabel} exceeds the remaining budget of ${formatUsdc(remaining)} USDC.`,
+        expectedPriceUsd: service.priceUsd,
+      };
+    }
+
+    remaining = roundUsdc(remaining - service.priceUsd);
+
+    return {
+      service,
+      decision: "selected",
+      reasoning: serviceReasonForSelection(service, task),
+      expectedPriceUsd: service.priceUsd,
+    };
+  });
+}
+
+function serviceUrl(baseUrl: string, service: ApiService) {
+  return `${baseUrl}${service.endpoint}`;
+}
+
+function createTextAnalyzerBody(task: string, paidPreviews: unknown[]) {
+  const context = paidPreviews.length > 0
+    ? JSON.stringify(paidPreviews, null, 2)
+    : "No paid context has been collected yet.";
+
+  return {
+    text: `Task: ${task}\n\nPaid context collected so far:\n${context}`,
+  };
+}
+
+function requestBodyForService(
+  service: ApiService,
+  task: string,
+  paidPreviews: unknown[],
+) {
+  if (service.method !== "POST") return undefined;
+
+  if (service.slug === "text-analyzer") {
+    return createTextAnalyzerBody(task, paidPreviews);
+  }
+
+  const example = service.exampleRequest as { body?: Record<string, unknown> };
+  return example.body ?? {};
+}
+
+function requestInitForService(service: ApiService, body: unknown): RequestInit {
+  return {
+    method: service.method,
+    headers: service.method === "POST" ? { "Content-Type": "application/json" } : undefined,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  };
+}
+
+function latestExchange(
+  exchanges: PaymentHttpExchange[],
+  paidAttempt?: boolean,
+) {
+  const filtered = paidAttempt === undefined
+    ? exchanges
+    : exchanges.filter((exchange) => exchange.paidAttempt === paidAttempt);
+
+  return filtered.at(-1);
+}
+
+function previewJson(value: unknown, maxChars = 1600): unknown {
+  const encoded = JSON.stringify(value);
+  if (!encoded) return null;
+  if (encoded.length <= maxChars) return value;
+
+  return {
+    truncated: true,
+    preview: encoded.slice(0, maxChars),
+  };
+}
+
+function safeRaw(value: Record<string, unknown>) {
+  return previewJson(value, 2200) as Record<string, unknown>;
+}
+
+function updateLocalStep(
+  runLog: RunLog,
+  stepIndex: number,
+  patch: Partial<LocalStepLog>,
+) {
+  const index = runLog.steps.findIndex((step) => step.stepIndex === stepIndex);
+  if (index === -1) return;
+  runLog.steps[index] = { ...runLog.steps[index], ...patch };
+}
+
+function runSummary(input: {
+  selected: number;
+  skipped: number;
+  paid: number;
+  failed: number;
+  spent: number;
+}) {
+  return `Selected ${input.selected}, paid ${input.paid}, skipped ${input.skipped}, failed ${input.failed}. Spent ${formatUsdc(input.spent)} USDC.`;
+}
+
+async function fetchServiceRegistry(baseUrl: string, retries: number, timeoutMs: number) {
+  const response = await fetchWithRetry(
+    `${baseUrl}/api/store/services`,
+    { method: "GET" },
+    {
+      retries,
+      timeoutMs,
+      label: "Service discovery GET /api/store/services",
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Service discovery failed with HTTP ${response.status}.`);
+  }
+
+  const data = (await response.json()) as ServiceDiscoveryResponse;
+  const services = data.services;
+
+  if (!Array.isArray(services)) {
+    throw new Error("Service discovery response did not include a services array.");
+  }
+
+  const invalid = services.find((service) => !isApiService(service));
+  if (invalid) {
+    throw new Error(`Service discovery returned an invalid service record: ${JSON.stringify(invalid)}`);
+  }
+
+  return services;
+}
+
+async function main() {
+  const args = parseArgs();
   const baseUrl = normalizeBaseUrl(requireEnv("BASE_URL"));
   const buyerAddress = requireAddress("BUYER_ADDRESS");
   const sellerAddress = requireAddress("SELLER_ADDRESS");
@@ -257,7 +547,6 @@ async function main() {
   const depositAmount = parsePositiveAmountEnv("AGENT_DEPOSIT_USDC", "1");
   const fetchRetries = parsePositiveIntegerEnv("AGENT_FETCH_RETRIES", 3);
   const fetchTimeoutMs = parsePositiveIntegerEnv("AGENT_FETCH_TIMEOUT_MS", 30_000);
-  const maxInFlight = parseStrictlyPositiveIntegerEnv("AGENT_MAX_IN_FLIGHT", 1);
   const postDepositWaitMs = parsePositiveIntegerEnv("AGENT_POST_DEPOSIT_WAIT_MS", 0);
   const skipFunding = parseBooleanEnv("AGENT_SKIP_FUNDING");
   const skipDeposit = parseBooleanEnv("AGENT_SKIP_DEPOSIT");
@@ -272,17 +561,6 @@ async function main() {
     label: "agent HTTP request",
   });
   const httpDiagnostics = installPaymentHttpDiagnostics(baseUrl);
-
-  const endpoints: Endpoint[] = [
-    { url: `${baseUrl}/api/premium/quote`, method: "GET" },
-    { url: `${baseUrl}/api/premium/dataset`, method: "GET" },
-    {
-      url: `${baseUrl}/api/premium/compute`,
-      method: "POST",
-      body: { text: "Hello from the Arc Agent Commerce API Store Demo!" },
-    },
-    { url: `${baseUrl}/api/premium/agent-task`, method: "GET" },
-  ];
 
   const agentKey = agentKeyFromEnv ?? generatePrivateKey();
   const agentAccount = privateKeyToAccount(agentKey);
@@ -310,55 +588,70 @@ async function main() {
   const runFilePath = path.join(RUN_DIR, `${runId}.json`);
   const runLog: RunLog = {
     runId,
+    supabaseRunId: null,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    task: args.task,
+    mode: args.mode,
     baseUrl,
     funderAddress: funderAccount.address,
+    sellerAddress,
     ephemeralAgentAddress: agentAccount.address,
     ephemeralAgentPrivateKey: agentKey,
     walletSource: agentKeyFromEnv ? "AGENT_PRIVATE_KEY" : "generated",
+    budgetUsdc: formatUsdc(args.spendingLimit),
+    spentUsdc: "0",
     depositAmountUsdc: depositAmount,
     targetNetwork: TARGET_NETWORK,
     fundingTxHash: null,
     usdcTransferTxHash: null,
     depositTxHash: null,
     status: "created",
+    steps: [],
+    summary: null,
     errors: [],
   };
   await writeRunLog(runFilePath, runLog);
 
+  const supabaseRun = await createAgentRun({
+    task: args.task,
+    mode: args.mode,
+    status: "running",
+    base_url: baseUrl,
+    agent_wallet: agentAccount.address,
+    budget_usdc: formatUsdc(args.spendingLimit),
+    spent_usdc: "0",
+    raw: {
+      localRunId: runId,
+      walletSource: runLog.walletSource,
+      targetNetwork: TARGET_NETWORK,
+      mcp: "raw Arc Docs MCP fallback verified before implementation",
+    },
+  });
+  runLog.supabaseRunId = supabaseRun?.id ?? null;
+  await writeRunLog(runFilePath, runLog);
+
   console.log(`Run file: ${runFilePath}`);
+  console.log(`Supabase run: ${runLog.supabaseRunId ?? "not persisted"}`);
+  console.log(`Task: ${args.task}`);
+  console.log(`Mode: ${args.mode}`);
+  console.log(`Budget: ${formatUsdc(args.spendingLimit)} USDC`);
   console.log(`Agent wallet: ${agentAccount.address}`);
   console.log(`Funder wallet: ${funderAccount.address}`);
   console.log(`Seller address: ${sellerAddress}`);
   console.log(`Target network: ${TARGET_NETWORK}`);
   console.log(`Base URL: ${baseUrl}`);
-  console.log(
-    skipDeposit
-      ? "This run will reuse existing Gateway balance and skip the initial deposit."
-      : `This run will deposit ${depositAmount} USDC into Gateway from the ephemeral wallet.`,
-  );
-  console.log(`Max in-flight paid requests: ${maxInFlight}`);
-  if (postDepositWaitMs > 0) {
-    console.log(`Post-deposit wait: ${postDepositWaitMs}ms`);
-  }
-
-  if (spendingLimit !== null) {
-    console.log(`Spending limit: ${spendingLimit} USDC`);
-  }
-
-  async function stopIntervals() {
-    if (paymentInterval) clearInterval(paymentInterval);
-    if (balanceInterval) clearInterval(balanceInterval);
-  }
 
   async function gracefulFailure(stage: string, error: unknown) {
-    if (shutdownStarted) return;
-    shutdownStarted = true;
-    paused = true;
-    await stopIntervals();
     runLog.status = "failed";
+    runLog.summary = `${stage} failed: ${toErrorMessage(error)}`;
     await appendRunError(runFilePath, runLog, stage, error);
+    await updateAgentRun(runLog.supabaseRunId, {
+      status: "failed",
+      spent_usdc: runLog.spentUsdc,
+      summary: runLog.summary,
+      error: toErrorMessage(error),
+    });
 
     console.error("\nAgent runner stopped gracefully.");
     if (runLog.depositTxHash) {
@@ -368,45 +661,23 @@ async function main() {
     console.error(`Reason: ${toErrorMessage(error)}`);
     console.error(`Run file: ${runFilePath}`);
     console.error("Retry with the same wallet and existing Gateway balance:");
-    console.error(retryCommand(runFilePath, spendingLimit));
-    process.exitCode = 1;
-
-    setTimeout(() => process.exit(1), 50);
+    console.error(retryCommand(runFilePath, args));
   }
 
   process.once("SIGINT", () => {
     void (async () => {
-      if (shutdownStarted) return;
-      shutdownStarted = true;
-      await stopIntervals();
       runLog.status = "stopped";
+      runLog.summary = "Agent run stopped by SIGINT.";
       await writeRunLog(runFilePath, runLog);
+      await updateAgentRun(runLog.supabaseRunId, {
+        status: "stopped",
+        spent_usdc: runLog.spentUsdc,
+        summary: runLog.summary,
+      });
       console.log(`\nAgent stopped. Run file: ${runFilePath}`);
       process.exit(0);
     })();
   });
-
-  async function preflightProtectedEndpoint() {
-    runLog.status = "preflight";
-    await writeRunLog(runFilePath, runLog);
-
-    const response = await fetchWithRetry(endpoints[0].url, {
-      method: "GET",
-    }, {
-      retries: fetchRetries,
-      timeoutMs: fetchTimeoutMs,
-      label: `Protected endpoint preflight ${endpoints[0].url}`,
-    });
-
-    if (response.status !== 402) {
-      console.warn(
-        `Preflight expected HTTP 402 from ${endpoints[0].url}, received ${response.status}. Continuing because the app is reachable.`,
-      );
-      return;
-    }
-
-    console.log("Protected endpoint preflight passed: received HTTP 402.");
-  }
 
   async function fundAgentWallet() {
     if (skipFunding) {
@@ -449,7 +720,7 @@ async function main() {
   }
 
   async function depositToGateway() {
-    if (skipDeposit && !runLog.depositTxHash) {
+    if (skipDeposit) {
       console.log("Skipping initial Gateway deposit because AGENT_SKIP_DEPOSIT=1.");
       return;
     }
@@ -503,138 +774,268 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, postDepositWaitMs));
   }
 
-  const redepositThreshold = 500_000n;
-  const usdcAmount = parseUnits(depositAmount, 6);
-
-  async function refundAndRedeposit() {
-    const txHash = await withNonceRetry(
-      () => funderWallet.writeContract({
-        address: ARC_TESTNET_USDC,
-        abi: erc20Abi,
-        functionName: "transfer",
-        args: [agentAccount.address, usdcAmount],
-      }),
-      "Redeposit tx",
+  async function preflightPaymentRequirement(
+    service: ApiService,
+    body: unknown,
+  ): Promise<PreflightResult> {
+    const url = serviceUrl(baseUrl, service);
+    const response = await fetchWithRetry(
+      url,
+      requestInitForService(service, body),
+      {
+        retries: fetchRetries,
+        timeoutMs: fetchTimeoutMs,
+        label: `Payment requirement preflight ${service.method} ${url}`,
+      },
     );
-    await publicClient.waitForTransactionReceipt({ hash: txHash });
-    await depositToGateway();
+    const exchanges = httpDiagnostics.getRecent(url);
+    const exchange = latestExchange(exchanges, false);
+    const responseBody = await response.clone().text().catch(() => "");
+
+    if (response.status !== 402) {
+      console.warn(
+        `Preflight expected HTTP 402 from ${service.endpoint}, received ${response.status}. Continuing to paid request.`,
+      );
+    } else {
+      console.log(`  ${service.name}: payment requirement received (HTTP 402).`);
+    }
+
+    return {
+      requestId:
+        response.headers.get("X-Agent-Commerce-Request-Id") ??
+        exchange?.requestId,
+      paymentRequired: exchange?.paymentRequired,
+      responseBody: responseBody.slice(0, 800),
+    };
   }
 
-  async function checkAndRedeposit() {
-    if (redepositing || paused || shutdownStarted) return;
-    redepositing = true;
+  async function executePaidStep(decision: ExecutableDecision, paidPreviews: unknown[]) {
+    const { service, step, stepIndex } = decision;
+    const url = serviceUrl(baseUrl, service);
+    const body = requestBodyForService(service, args.task, paidPreviews);
+
+    updateLocalStep(runLog, stepIndex, { status: "selected" });
+    await writeRunLog(runFilePath, runLog);
+    await updateAgentStep(step?.id ?? null, {
+      status: "selected",
+      raw: safeRaw({ decision: "selected" }),
+    });
+
+    const preflight = await preflightPaymentRequirement(service, body);
+    updateLocalStep(runLog, stepIndex, {
+      status: "payment_required",
+      requestId: preflight.requestId ?? null,
+    });
+    await writeRunLog(runFilePath, runLog);
+    await updateAgentStep(step?.id ?? null, {
+      status: "payment_required",
+      request_id: preflight.requestId ?? null,
+      raw: safeRaw({
+        paymentRequired: preflight.paymentRequired,
+        responseBody: preflight.responseBody,
+      }),
+    });
+
+    const paymentStartedAt = new Date(Date.now() - 5000);
+    let result: PayResult<unknown>;
     try {
-      const balances = await withRetry(
-        () => gateway.getBalances(),
+      result = await withRetry(
+        () => gateway.pay(url, { method: service.method, body }),
         {
           retries: fetchRetries,
           timeoutMs: fetchTimeoutMs,
-          label: "Gateway balance check",
+          label: `Paid API request ${service.method} ${url}`,
         },
       );
-      if (balances.gateway.available < redepositThreshold) {
-        console.log(
-          `\nGateway balance low (${balances.gateway.formattedAvailable}), redepositing...`,
-        );
-        if (balances.wallet.balance > 0n) {
-          await depositToGateway();
-        } else {
-          await refundAndRedeposit();
-        }
-      }
     } catch (error) {
-      await appendRunError(runFilePath, runLog, "Gateway balance check", error);
-      console.error("Balance check failed:", toErrorMessage(error));
-    } finally {
-      redepositing = false;
+      const exchanges = httpDiagnostics.getRecent(url);
+      const exchange = latestExchange(exchanges);
+      const requestId = exchange?.requestId ?? preflight.requestId ?? null;
+
+      updateLocalStep(runLog, stepIndex, {
+        status: "failed",
+        requestId,
+        error: toErrorMessage(error),
+      });
+      await writeRunLog(runFilePath, runLog);
+      await updateAgentStep(step?.id ?? null, {
+        status: "failed",
+        request_id: requestId,
+        error: toErrorMessage(error),
+        raw: safeRaw({ diagnostics: exchanges }),
+      });
+      printPaymentHttpDiagnostics(exchanges, runFilePath);
+      throw error;
     }
-  }
 
-  async function handleLimitReached() {
-    if (spendingLimit === null || shutdownStarted) return;
+    const amount = Number(result.formattedAmount);
+    const safeAmount = Number.isFinite(amount) ? amount : service.priceUsd;
+    const currentSpent = Number(runLog.spentUsdc);
+    const nextSpent = roundUsdc(currentSpent + safeAmount);
+    runLog.spentUsdc = formatUsdc(nextSpent);
 
-    paused = true;
-    await stopIntervals();
+    const paidExchange = latestExchange(httpDiagnostics.getRecent(url), true);
+    const requestId = paidExchange?.requestId ?? preflight.requestId ?? null;
+    const paymentEventId = await findRecentPaymentEvent({
+      endpoint: service.endpoint,
+      payer: agentAccount.address,
+      amountUsdc: result.formattedAmount,
+      since: paymentStartedAt,
+    });
+    const responsePreview = previewJson(result.data);
+    paidPreviews.push({
+      service: service.name,
+      response: responsePreview,
+    });
 
-    while (inFlight > 0) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
+    updateLocalStep(runLog, stepIndex, {
+      status: "paid",
+      requestId,
+      paymentEventId,
+    });
+    await writeRunLog(runFilePath, runLog);
+    await updateAgentStep(step?.id ?? null, {
+      status: "paid",
+      request_id: requestId,
+      payment_event_id: paymentEventId,
+      response_preview: responsePreview,
+      raw: safeRaw({
+        amount: result.formattedAmount,
+        transaction: result.transaction,
+        status: result.status,
+        paymentResponse: paidExchange?.paymentResponse,
+      }),
+    });
+    await updateAgentRun(runLog.supabaseRunId, {
+      spent_usdc: runLog.spentUsdc,
+    });
 
-    console.log(`\nSpent ${totalSpent.toFixed(6)} / ${spendingLimit.toFixed(6)} USDC (limit reached)`);
-
-    const additional = await promptForAllowance(totalSpent);
-    spendingLimit += additional;
-    console.log(`New limit: ${spendingLimit.toFixed(6)} USDC (total spent so far: ${totalSpent.toFixed(6)} USDC)`);
-
-    paused = false;
-    startPaymentLoop();
-  }
-
-  function startPaymentLoop() {
-    balanceInterval = setInterval(() => {
-      void checkAndRedeposit();
-    }, 30_000);
-
-    paymentInterval = setInterval(() => {
-      if (paused || shutdownStarted) return;
-      if (inFlight >= maxInFlight) return;
-
-      const sequence = index + 1;
-      const ep = endpoints[index % endpoints.length];
-      index++;
-      inFlight++;
-
-      const start = Date.now();
-      withRetry(
-        () => gateway.pay(ep.url, { method: ep.method, body: ep.body }),
-        {
-          retries: fetchRetries,
-          timeoutMs: fetchTimeoutMs,
-          label: `Paid API request #${sequence} ${ep.method} ${ep.url}`,
-        },
-      )
-        .then((result) => {
-          inFlight--;
-          const ms = Date.now() - start;
-          const amount = parseFloat(result.formattedAmount);
-          totalSpent += amount;
-
-          const limitInfo = spendingLimit !== null
-            ? ` [spent: ${totalSpent.toFixed(6)}/${spendingLimit.toFixed(6)} USDC]`
-            : "";
-          console.log(
-            `#${sequence} ${ep.method} ${ep.url.split("/").pop()} -> ${result.formattedAmount} USDC (${ms}ms) [in-flight: ${inFlight}]${limitInfo}`,
-          );
-
-          if (spendingLimit !== null && totalSpent >= spendingLimit) {
-            void handleLimitReached();
-          }
-        })
-        .catch((error) => {
-          inFlight--;
-          const ms = Date.now() - start;
-          console.error(
-            `#${sequence} ${ep.url.split("/").pop()} FAILED (${ms}ms): ${toErrorMessage(error)} [in-flight: ${inFlight}]`,
-          );
-          printPaymentHttpDiagnostics(httpDiagnostics.getRecent(ep.url), runFilePath);
-          void gracefulFailure("Paid API request", error);
-        });
-    }, 1000);
+    console.log(
+      `  ${service.name}: paid ${result.formattedAmount} USDC (spent ${runLog.spentUsdc}/${formatUsdc(args.spendingLimit)} USDC).`,
+    );
   }
 
   try {
-    await preflightProtectedEndpoint();
-    await fundAgentWallet();
-    await depositToGateway();
-    await waitAfterDepositIfConfigured();
+    runLog.status = "discovering";
+    await writeRunLog(runFilePath, runLog);
+    console.log("\nDiscovering services from /api/store/services...");
+    const services = await fetchServiceRegistry(baseUrl, fetchRetries, fetchTimeoutMs);
+    console.log(`Discovered ${services.length} services.`);
+
+    runLog.status = "planning";
+    await writeRunLog(runFilePath, runLog);
+    const decisions = planPurchases(args.task, args.spendingLimit, services);
+    const selectedCount = decisions.filter((decision) => decision.decision === "selected").length;
+    const skippedCount = decisions.length - selectedCount;
+    console.log(`Planner selected ${selectedCount} service(s), skipped ${skippedCount}.`);
+
+    await updateAgentRun(runLog.supabaseRunId, {
+      raw: {
+        localRunId: runId,
+        walletSource: runLog.walletSource,
+        targetNetwork: TARGET_NETWORK,
+        serviceCount: services.length,
+        selectedCount,
+        skippedCount,
+      },
+    });
+
+    const executableDecisions: ExecutableDecision[] = [];
+    for (const [index, decision] of decisions.entries()) {
+      const stepIndex = index + 1;
+      const { service } = decision;
+      const step = runLog.supabaseRunId
+        ? await createAgentStep({
+            run_id: runLog.supabaseRunId,
+            step_index: stepIndex,
+            service_id: service.id,
+            service_slug: service.slug,
+            service_name: service.name,
+            endpoint: service.endpoint,
+            method: service.method,
+            price_usdc: formatUsdc(service.priceUsd),
+            status: "discovered",
+            reasoning: decision.reasoning,
+            raw: safeRaw({
+              decision: decision.decision,
+              expectedPriceUsd: decision.expectedPriceUsd,
+            }),
+          })
+        : null;
+
+      const status: AgentStepStatus =
+        decision.decision === "selected" ? "selected" : "skipped";
+      runLog.steps.push({
+        stepIndex,
+        serviceSlug: service.slug,
+        serviceName: service.name,
+        status,
+        reasoning: decision.reasoning,
+      });
+      await updateAgentStep(step?.id ?? null, {
+        status,
+        raw: safeRaw({
+          decision: decision.decision,
+          expectedPriceUsd: decision.expectedPriceUsd,
+        }),
+      });
+      executableDecisions.push({ ...decision, step, stepIndex });
+    }
+    await writeRunLog(runFilePath, runLog);
+
+    const selected = executableDecisions.filter(
+      (decision) => decision.decision === "selected",
+    );
+
+    if (selected.length > 0) {
+      console.log(
+        skipDeposit
+          ? "This run will reuse existing Gateway balance and skip the initial deposit."
+          : `This run will deposit ${depositAmount} USDC into Gateway from the ephemeral wallet.`,
+      );
+      await fundAgentWallet();
+      await depositToGateway();
+      await waitAfterDepositIfConfigured();
+    } else {
+      console.log("No services selected for purchase; skipping funding and Gateway deposit.");
+    }
 
     runLog.status = "running";
     await writeRunLog(runFilePath, runLog);
 
-    console.log(`\nTarget: 1 transaction/second across ${endpoints.length} endpoints\n`);
-    startPaymentLoop();
+    const paidPreviews: unknown[] = [];
+    for (const decision of selected) {
+      await executePaidStep(decision, paidPreviews);
+    }
+
+    const paidCount = runLog.steps.filter((step) => step.status === "paid").length;
+    const failedCount = runLog.steps.filter((step) => step.status === "failed").length;
+    const summary = runSummary({
+      selected: selected.length,
+      skipped: skippedCount,
+      paid: paidCount,
+      failed: failedCount,
+      spent: Number(runLog.spentUsdc),
+    });
+    const finalStatus: AgentRunStatus = failedCount > 0 ? "failed" : "completed";
+    runLog.status = finalStatus;
+    runLog.summary = summary;
+    await writeRunLog(runFilePath, runLog);
+    await updateAgentRun(runLog.supabaseRunId, {
+      status: finalStatus,
+      spent_usdc: runLog.spentUsdc,
+      summary,
+      error: failedCount > 0 ? "One or more selected services failed." : null,
+    });
+
+    console.log(`\nAgent run complete. ${summary}`);
+    console.log(`Run file: ${runFilePath}`);
+    if (runLog.supabaseRunId) {
+      console.log(`Timeline: ${baseUrl}/runs/${runLog.supabaseRunId}`);
+    }
   } catch (error) {
-    await gracefulFailure(runLog.depositTxHash ? "Paid API request" : "Agent setup", error);
+    await gracefulFailure("Agent run", error);
+    process.exit(1);
   }
 }
 

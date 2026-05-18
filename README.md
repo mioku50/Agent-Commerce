@@ -99,6 +99,33 @@ Each service detail page under `/store/[slug]` documents the endpoint contract, 
 
 Phase 3 will connect buyer-agent reasoning and purchase timelines to this registry.
 
+## Phase 3 — Buyer Agent Reasoning + Purchase Timeline
+
+The buyer-agent now discovers services from `GET /api/store/services` instead of running a hardcoded endpoint loop.
+
+The default `scripted` planner chooses services from the task and budget, records why each service was selected or skipped, pays selected live endpoints through the existing x402/Gateway flow, and saves a public timeline to Supabase.
+
+Public timeline views:
+
+- `/runs`: recent agent runs
+- `/runs/[id]`: ordered reasoning and purchase timeline for one run
+
+Usage:
+
+```bash
+npm run agent -- --task "Prepare a market context report" --limit 0.05
+```
+
+Reuse an existing funded Gateway balance:
+
+```bash
+AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Prepare a market context report" --limit 0.02
+```
+
+For a full run including Agent Task, Gateway balance must be large enough. Quote + dataset + compute + agent-task costs about `0.0413 USDC`.
+
+Supabase stores the public run timeline, service choices, reasoning, request IDs, and response previews. It does not store private keys, bearer tokens, or full signed payment authorizations. Local `.agent-runs/` logs remain available for debugging and wallet retry flows.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -146,6 +173,8 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - public service discovery endpoint
 - service detail pages
 - light dashboard service-name mapping
+- buyer-agent reasoning timeline
+- public `/runs` pages
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -168,9 +197,13 @@ app/
   page.tsx
   store/
     page.tsx
+  runs/
+    page.tsx
   dashboard/
     page.tsx
   api/
+    agent/
+      runs/
     store/
       quote/
       market/
@@ -196,10 +229,10 @@ supabase/
 
 ## Development Phases
 
-1. **Product Rebrand**: position the app as Arc Agent Commerce / API Store Demo.
-2. **API Store**: expand registry metadata, service discovery, marketplace UI, and service detail pages.
-3. **Buyer Agent Reasoning + Purchase Timeline**: connect the agent to service discovery and record why each paid call was made.
-4. **Seller Creator Mode**: add seller-facing service creation and publishing workflows.
+1. **Product Rebrand**: complete.
+2. **API Store**: complete.
+3. **Buyer Agent Reasoning + Purchase Timeline**: complete / active prototype.
+4. **Seller Creator Mode**: next, add seller-facing service creation and publishing workflows.
 5. **ERC-8004 Agent Identity**: introduce agent identity and reputation primitives.
 6. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
 7. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, and API usage.
@@ -233,6 +266,7 @@ Then open:
 
 - `http://localhost:3000`
 - `http://localhost:3000/store`
+- `http://localhost:3000/runs`
 - `http://localhost:3000/dashboard`
 
 Useful checks:
@@ -246,6 +280,13 @@ npm run build
 
 Copy `.env.example` to `.env.local` when local configuration is needed. Never commit `.env`, `.env.local`, private keys, Circle API keys, entity secrets, wallet secrets, or bearer tokens.
 
+Agent runner examples:
+
+```bash
+npm run agent -- --task "Prepare a market context report" --limit 0.05
+AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Create a small proof of agent commerce" --limit 0.001
+```
+
 ## Status
 
-Early builder prototype. The project now has a marketplace-style API Store, public service discovery, and service detail pages while preserving the upstream x402, Gateway, Supabase, withdrawal, and payment verification layers.
+Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, and buyer-agent reasoning timelines while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.

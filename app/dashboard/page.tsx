@@ -19,7 +19,9 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -49,6 +51,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Copy,
+  ListChecks,
   Loader2,
 } from "lucide-react";
 import { shortenHash } from "@/lib/utils";
@@ -251,12 +254,20 @@ export default function Dashboard() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Seller Dashboard</h1>
-        <p className="text-muted-foreground text-sm">
-          Monitor API revenue, agent purchases, Gateway balance, and withdraw
-          earnings.
-        </p>
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Seller Dashboard</h1>
+          <p className="text-muted-foreground text-sm">
+            Monitor API revenue, agent purchases, Gateway balance, and withdraw
+            earnings.
+          </p>
+        </div>
+        <Button asChild variant="outline" size="sm">
+          <Link href="/runs">
+            <ListChecks />
+            Agent Runs
+          </Link>
+        </Button>
       </div>
 
       <div className="flex items-center gap-3 mb-4">

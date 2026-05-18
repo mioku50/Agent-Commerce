@@ -262,15 +262,20 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
         </div>
 
         <div className="rounded-lg border bg-card p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2">
-              <FileJson className="size-5 text-primary" />
-              <h2 className="text-xl font-semibold">
-                Machine-readable service discovery
-              </h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <FileJson className="size-5 text-primary" />
+                <h2 className="text-xl font-semibold">
+                  Machine-readable service discovery
+                </h2>
+              </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/runs">See agent purchase timelines</Link>
+              </Button>
+              <CopyButton value="/api/store/services" label="Copy URL" />
             </div>
-            <CopyButton value="/api/store/services" label="Copy URL" />
-          </div>
+            </div>
           <p className="mt-4 font-mono text-sm text-primary">
             GET /api/store/services
           </p>
