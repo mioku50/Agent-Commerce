@@ -25,6 +25,7 @@ import { NextRequest, NextResponse } from "next/server";
 const ARC_TESTNET_NETWORK = "eip155:5042002";
 const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
 const ARC_TESTNET_GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
+const GATEWAY_BATCHED_MAX_TIMEOUT_SECONDS = 604_900;
 
 export const sellerAddress = process.env.SELLER_ADDRESS as `0x${string}`;
 
@@ -156,7 +157,7 @@ function buildPaymentRequirements(price: string) {
     asset: ARC_TESTNET_USDC,
     amount: amount.toString(),
     payTo: sellerAddress,
-    maxTimeoutSeconds: 345600,
+    maxTimeoutSeconds: GATEWAY_BATCHED_MAX_TIMEOUT_SECONDS,
     extra: {
       name: "GatewayWalletBatched",
       version: "1",
