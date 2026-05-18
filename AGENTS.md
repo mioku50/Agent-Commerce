@@ -3,7 +3,23 @@
 This repository is building **Arc Agent Commerce / API Store Demo**.
 
 The project is an x402-powered API Store where AI agents can discover paid services, pay with USDC on Arc, and receive API responses instantly.
+## Required MCP usage
 
+Before starting any Arc-specific development task, verify that the Arc Docs MCP server is available.
+
+Arc Docs MCP:
+- name: `arc-docs`
+- URL: `https://docs.arc.io/mcp`
+
+The Arc Docs MCP server must be used for Arc-specific facts, APIs, contract addresses, standards, and developer flows.
+
+Before implementing a phase, run or confirm:
+- `codex mcp list`
+- `codex mcp show arc-docs`
+
+If MCP is not available, stop and report the issue before making Arc-specific implementation decisions.
+
+Use the local `docs.md` only as fallback context, but prefer live Arc Docs MCP when available.
 ## Use these skills when relevant
 
 Before making changes related to Arc, Circle, USDC, Gateway, x402, agent wallets, or payments, use the local Circle/Arc skills from `.agents/skills`.
