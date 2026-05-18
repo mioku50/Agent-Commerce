@@ -23,6 +23,7 @@ import {
   ChartNoAxesCombined,
   LayoutDashboard,
   ListChecks,
+  PlusCircle,
   Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -76,6 +77,12 @@ export default function Home() {
               <Link href="/dashboard">
                 <LayoutDashboard />
                 Open Seller Dashboard
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/seller">
+                <PlusCircle />
+                Create API Service
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">

@@ -45,6 +45,7 @@ export type AgentStepInsert = {
   service_id?: string | null;
   service_slug?: string | null;
   service_name?: string | null;
+  service_source_type?: string | null;
   endpoint?: string | null;
   method?: string | null;
   price_usdc?: string | null;

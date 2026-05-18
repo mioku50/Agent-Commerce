@@ -24,6 +24,7 @@ import {
   ArrowRight,
   Database,
   FileJson,
+  PlusCircle,
   Search,
   ShieldCheck,
 } from "lucide-react";
@@ -39,17 +40,30 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CopyButton } from "@/components/copy-button";
-import type { ApiService, ServiceMethod, ServiceStatus } from "@/lib/services/registry";
+import type {
+  ApiService,
+  ServiceMethod,
+  ServiceSourceType,
+  ServiceStatus,
+} from "@/lib/services/registry";
 
 const statusLabels: Record<ServiceStatus, string> = {
+  draft: "Draft",
   live: "Live",
   mock: "Mock",
   "coming-soon": "Coming soon",
+  disabled: "Disabled",
 };
 
 const methodLabels: Record<ServiceMethod, string> = {
   GET: "GET",
   POST: "POST",
+};
+
+const sourceLabels: Record<ServiceSourceType, string> = {
+  static: "Official sample",
+  seller_mock: "Seller-created",
+  external_placeholder: "External placeholder",
 };
 
 const howItWorks = [
@@ -62,13 +76,19 @@ const howItWorks = [
 type StoreMarketplaceProps = {
   services: readonly ApiService[];
   categories: readonly string[];
+  warning?: string | null;
 };
 
-export function StoreMarketplace({ services, categories }: StoreMarketplaceProps) {
+export function StoreMarketplace({
+  services,
+  categories,
+  warning,
+}: StoreMarketplaceProps) {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [status, setStatus] = useState("all");
   const [method, setMethod] = useState("all");
+  const [source, setSource] = useState("all");
 
   const filteredServices = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -78,6 +98,7 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
         query.length === 0 ||
         service.name.toLowerCase().includes(query) ||
         service.shortDescription.toLowerCase().includes(query) ||
+        service.longDescription.toLowerCase().includes(query) ||
         service.endpoint.toLowerCase().includes(query) ||
         service.category.toLowerCase().includes(query);
 
@@ -85,10 +106,13 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
         matchesSearch &&
         (category === "all" || service.category === category) &&
         (status === "all" || service.status === status) &&
-        (method === "all" || service.method === method)
+        (method === "all" || service.method === method) &&
+        (source === "all" ||
+          (source === "official" && service.sourceType === "static") ||
+          (source === "seller" && service.sourceType !== "static"))
       );
     });
-  }, [category, method, search, services, status]);
+  }, [category, method, search, services, source, status]);
 
   const discoveryPreview = {
     services: services.slice(0, 3).map((service) => ({
@@ -97,6 +121,7 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
       endpoint: service.endpoint,
       price: service.priceLabel,
       status: service.status,
+      sourceType: service.sourceType,
     })),
   };
 
@@ -133,19 +158,32 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
                   <dd className="font-mono text-lg">{services.length}</dd>
                 </div>
                 <div>
-                  <dt className="text-muted-foreground">Live</dt>
+                  <dt className="text-muted-foreground">Seller-created</dt>
                   <dd className="font-mono text-lg">
-                    {services.filter((service) => service.status === "live").length}
+                    {services.filter((service) => service.sourceType !== "static").length}
                   </dd>
                 </div>
               </dl>
+              <div className="mt-4 flex flex-col gap-2">
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/seller">
+                    <PlusCircle />
+                    Become a seller
+                  </Link>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
-        <div className="grid gap-3 rounded-lg border bg-card p-4 md:grid-cols-[1fr_180px_160px_160px]">
+        {warning ? (
+          <p className="mb-4 rounded-lg border bg-card p-3 text-sm text-muted-foreground">
+            {warning}
+          </p>
+        ) : null}
+        <div className="grid gap-3 rounded-lg border bg-card p-4 lg:grid-cols-[1fr_170px_150px_140px_160px]">
           <label className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -177,6 +215,8 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
               <SelectItem value="live">Live</SelectItem>
               <SelectItem value="mock">Mock</SelectItem>
               <SelectItem value="coming-soon">Coming soon</SelectItem>
+              <SelectItem value="draft">Draft</SelectItem>
+              <SelectItem value="disabled">Disabled</SelectItem>
             </SelectContent>
           </Select>
           <Select value={method} onValueChange={setMethod}>
@@ -187,6 +227,16 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
               <SelectItem value="all">All methods</SelectItem>
               <SelectItem value="GET">GET</SelectItem>
               <SelectItem value="POST">POST</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={source} onValueChange={setSource}>
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Source" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All sources</SelectItem>
+              <SelectItem value="official">Official</SelectItem>
+              <SelectItem value="seller">Seller-created</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -203,6 +253,9 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
                 </Badge>
                 <Badge variant={service.status === "coming-soon" ? "outline" : "secondary"}>
                   {service.status === "coming-soon" ? "Coming soon" : "Paid API"}
+                </Badge>
+                <Badge variant={service.sourceType === "static" ? "outline" : "secondary"}>
+                  {sourceLabels[service.sourceType]}
                 </Badge>
               </div>
               <CardTitle className="text-xl">{service.name}</CardTitle>
@@ -241,6 +294,13 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
             </CardContent>
           </Card>
         ))}
+        {filteredServices.length === 0 ? (
+          <Card className="rounded-lg lg:col-span-2">
+            <CardContent className="p-6 text-sm text-muted-foreground">
+              No services match the current filters.
+            </CardContent>
+          </Card>
+        ) : null}
       </section>
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pb-16 sm:px-6 lg:grid-cols-[1fr_1fr]">
@@ -272,6 +332,9 @@ export function StoreMarketplace({ services, categories }: StoreMarketplaceProps
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href="/runs">See agent purchase timelines</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/seller">Create service</Link>
               </Button>
               <CopyButton value="/api/store/services" label="Copy URL" />
             </div>

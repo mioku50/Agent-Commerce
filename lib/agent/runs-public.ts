@@ -27,6 +27,7 @@ export type PublicAgentStep = {
   service_id: string | null;
   service_slug: string | null;
   service_name: string | null;
+  service_source_type: string | null;
   endpoint: string | null;
   method: string | null;
   price_usdc: string | null;
@@ -61,6 +62,7 @@ const stepColumns = [
   "service_id",
   "service_slug",
   "service_name",
+  "service_source_type",
   "endpoint",
   "method",
   "price_usdc",

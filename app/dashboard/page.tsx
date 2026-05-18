@@ -53,6 +53,7 @@ import {
   Copy,
   ListChecks,
   Loader2,
+  PlusCircle,
 } from "lucide-react";
 import { shortenHash } from "@/lib/utils";
 import { usePaymentEvents } from "@/hooks/use-transactions";
@@ -143,7 +144,17 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function getServiceName(endpoint: string) {
-  return getServiceByEndpoint(endpoint)?.name;
+  const staticName = getServiceByEndpoint(endpoint)?.name;
+  if (staticName) return staticName;
+
+  const dynamicMatch = endpoint.match(/^\/api\/store\/services\/([^/]+)\/invoke$/);
+  if (!dynamicMatch) return undefined;
+
+  return dynamicMatch[1]
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
@@ -262,12 +273,20 @@ export default function Dashboard() {
             earnings.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/runs">
-            <ListChecks />
-            Agent Runs
-          </Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/seller">
+              <PlusCircle />
+              Seller Creator
+            </Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/runs">
+              <ListChecks />
+              Agent Runs
+            </Link>
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-3 mb-4">

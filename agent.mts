@@ -34,7 +34,12 @@ import {
   type AgentStepRow,
   type AgentStepStatus,
 } from "./lib/agent/run-persistence.ts";
-import type { ApiService, ServiceMethod, ServiceStatus } from "./lib/services/registry.ts";
+import type {
+  ApiService,
+  ServiceMethod,
+  ServiceSourceType,
+  ServiceStatus,
+} from "./lib/services/registry.ts";
 
 type ServiceDiscoveryResponse = {
   services?: ApiService[];
@@ -251,11 +256,25 @@ function roundUsdc(amount: number) {
 }
 
 function isServiceStatus(value: unknown): value is ServiceStatus {
-  return value === "live" || value === "mock" || value === "coming-soon";
+  return (
+    value === "draft" ||
+    value === "live" ||
+    value === "mock" ||
+    value === "coming-soon" ||
+    value === "disabled"
+  );
 }
 
 function isServiceMethod(value: unknown): value is ServiceMethod {
   return value === "GET" || value === "POST";
+}
+
+function isServiceSourceType(value: unknown): value is ServiceSourceType {
+  return (
+    value === "static" ||
+    value === "seller_mock" ||
+    value === "external_placeholder"
+  );
 }
 
 function isApiService(value: unknown): value is ApiService {
@@ -271,7 +290,8 @@ function isApiService(value: unknown): value is ApiService {
     isServiceMethod(service.method) &&
     typeof service.endpoint === "string" &&
     typeof service.priceUsd === "number" &&
-    isServiceStatus(service.status)
+    isServiceStatus(service.status) &&
+    isServiceSourceType(service.sourceType)
   );
 }
 
@@ -328,7 +348,8 @@ function sortedServices(services: ApiService[]) {
     const normalizedB = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
 
     if (normalizedA !== normalizedB) return normalizedA - normalizedB;
-    return a.priceUsd - b.priceUsd;
+    if (a.priceUsd !== b.priceUsd) return a.priceUsd - b.priceUsd;
+    return a.name.localeCompare(b.name);
   });
 }
 
@@ -336,7 +357,56 @@ function matches(task: string, pattern: RegExp) {
   return pattern.test(task.toLowerCase());
 }
 
+function taskTokens(task: string) {
+  const stopwords = new Set([
+    "with",
+    "using",
+    "from",
+    "only",
+    "when",
+    "useful",
+    "small",
+    "create",
+    "prepare",
+    "agent",
+    "commerce",
+    "proof",
+  ]);
+
+  return task
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 4 && !stopwords.has(token));
+}
+
+function sellerServiceMatchesTask(service: ApiService, task: string) {
+  const normalizedCategory = service.category
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "\\W+");
+  const haystack = [
+    service.name,
+    service.slug,
+    service.category,
+    service.shortDescription,
+    service.longDescription,
+    service.exampleUseCase,
+    service.agentReasoningHint,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  if (normalizedCategory && matches(task, new RegExp(`\\b${normalizedCategory}\\b`))) {
+    return true;
+  }
+
+  return taskTokens(task).some((token) => haystack.includes(token));
+}
+
 function serviceReasonForSelection(service: ApiService, task: string) {
+  if (service.sourceType === "seller_mock") {
+    return `Seller-created mock service matches the task context and is safe for the Phase 4 stored-response MVP: ${task}`;
+  }
+
   if (service.slug === "premium-quote") {
     return "Low-cost proof of payment and useful short context for the task.";
   }
@@ -357,6 +427,14 @@ function serviceReasonForSelection(service: ApiService, task: string) {
 }
 
 function shouldSelectLiveService(service: ApiService, task: string, budget: number) {
+  if (service.sourceType === "seller_mock") {
+    return sellerServiceMatchesTask(service, task);
+  }
+
+  if (service.sourceType === "external_placeholder") {
+    return false;
+  }
+
   if (service.slug === "premium-quote") return true;
   if (service.slug === "market-snapshot") {
     return matches(task, /\b(market|data|context|report|research|snapshot|financial)\b/);
@@ -381,7 +459,16 @@ function planPurchases(task: string, budget: number, services: ApiService[]) {
       return {
         service,
         decision: "skipped",
-        reasoning: "This service is coming soon and does not have a live paid endpoint in Phase 3.",
+        reasoning: "This service is coming soon and does not have a live paid endpoint in Phase 4.",
+        expectedPriceUsd: service.priceUsd,
+      };
+    }
+
+    if (service.sourceType === "external_placeholder") {
+      return {
+        service,
+        decision: "skipped",
+        reasoning: "External fulfillment is not enabled in this MVP, so the buyer-agent will not call this seller-created placeholder.",
         expectedPriceUsd: service.priceUsd,
       };
     }
@@ -391,6 +478,15 @@ function planPurchases(task: string, budget: number, services: ApiService[]) {
         service,
         decision: "skipped",
         reasoning: "This service is not marked live, so the scripted buyer-agent will not spend budget on it.",
+        expectedPriceUsd: service.priceUsd,
+      };
+    }
+
+    if (!service.isPaid) {
+      return {
+        service,
+        decision: "skipped",
+        reasoning: "This listing is not priced as a paid x402 service, so the buyer-agent will not spend Gateway balance on it.",
         expectedPriceUsd: service.priceUsd,
       };
     }
@@ -951,6 +1047,7 @@ async function main() {
             service_id: service.id,
             service_slug: service.slug,
             service_name: service.name,
+            service_source_type: service.sourceType,
             endpoint: service.endpoint,
             method: service.method,
             price_usdc: formatUsdc(service.priceUsd),
@@ -959,6 +1056,7 @@ async function main() {
             raw: safeRaw({
               decision: decision.decision,
               expectedPriceUsd: decision.expectedPriceUsd,
+              sourceType: service.sourceType,
             }),
           })
         : null;
@@ -977,6 +1075,7 @@ async function main() {
         raw: safeRaw({
           decision: decision.decision,
           expectedPriceUsd: decision.expectedPriceUsd,
+          sourceType: service.sourceType,
         }),
       });
       executableDecisions.push({ ...decision, step, stepIndex });

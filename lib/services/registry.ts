@@ -17,7 +17,16 @@
  */
 
 export type ServiceMethod = "GET" | "POST";
-export type ServiceStatus = "live" | "mock" | "coming-soon";
+export type ServiceStatus =
+  | "draft"
+  | "live"
+  | "mock"
+  | "coming-soon"
+  | "disabled";
+export type ServiceSourceType =
+  | "static"
+  | "seller_mock"
+  | "external_placeholder";
 
 export type ApiService = {
   id: string;
@@ -31,6 +40,7 @@ export type ApiService = {
   priceLabel: string;
   priceUsd: number;
   status: ServiceStatus;
+  sourceType: ServiceSourceType;
   isPaid: boolean;
   inputSchema: unknown;
   outputSchema: unknown;
@@ -60,6 +70,7 @@ export const serviceRegistry = [
     priceLabel: "0.001 USDC",
     priceUsd: 0.001,
     status: "live",
+    sourceType: "static",
     isPaid: true,
     inputSchema: emptyInputSchema,
     outputSchema: {
@@ -98,6 +109,7 @@ export const serviceRegistry = [
     priceLabel: "0.01 USDC",
     priceUsd: 0.01,
     status: "live",
+    sourceType: "static",
     isPaid: true,
     inputSchema: emptyInputSchema,
     outputSchema: {
@@ -149,6 +161,7 @@ export const serviceRegistry = [
     priceLabel: "0.0003 USDC",
     priceUsd: 0.0003,
     status: "live",
+    sourceType: "static",
     isPaid: true,
     inputSchema: {
       type: "object",
@@ -209,6 +222,7 @@ export const serviceRegistry = [
     priceLabel: "0.03 USDC",
     priceUsd: 0.03,
     status: "live",
+    sourceType: "static",
     isPaid: true,
     inputSchema: emptyInputSchema,
     outputSchema: {
@@ -249,6 +263,7 @@ export const serviceRegistry = [
     priceLabel: "0.002 USDC",
     priceUsd: 0.002,
     status: "coming-soon",
+    sourceType: "static",
     isPaid: true,
     inputSchema: {
       type: "object",
@@ -304,7 +319,9 @@ export const serviceCategories = Array.from(
 ).sort();
 
 export const serviceStatuses: readonly ServiceStatus[] = [
+  "draft",
   "live",
   "mock",
   "coming-soon",
+  "disabled",
 ];

@@ -97,7 +97,7 @@ The public discovery endpoint `GET /api/store/services` exposes the registry as 
 
 Each service detail page under `/store/[slug]` documents the endpoint contract, example request and response, cURL call, and the fact that unpaid direct calls to live services return HTTP 402 until the x402 payment requirement is satisfied.
 
-Phase 3 will connect buyer-agent reasoning and purchase timelines to this registry.
+Phase 3 connects buyer-agent reasoning and purchase timelines to this registry.
 
 ## Phase 3 — Buyer Agent Reasoning + Purchase Timeline
 
@@ -125,6 +125,28 @@ AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent 
 For a full run including Agent Task, Gateway balance must be large enough. Quote + dataset + compute + agent-task costs about `0.0413 USDC`.
 
 Supabase stores the public run timeline, service choices, reasoning, request IDs, and response previews. It does not store private keys, bearer tokens, or full signed payment authorizations. Local `.agent-runs/` logs remain available for debugging and wallet retry flows.
+
+## Phase 4 — Seller Creator Mode
+
+Builders can now create API service listings from `/seller`. Seller-created services are stored in Supabase, merged into `/store`, and included in the machine-readable `GET /api/store/services` discovery response.
+
+Phase 4 intentionally uses safe MVP fulfillment:
+
+- `seller_mock` services return a protected mock response from stored metadata.
+- `external_placeholder` services can be listed, but external fulfillment is not enabled.
+- the app does not proxy arbitrary external URLs.
+- private keys and signed payment authorizations are not stored in Supabase.
+- the existing x402/Gateway payment core remains unchanged.
+
+Seller flow:
+
+1. Open `/seller`.
+2. Create a service listing.
+3. Mark it `live`.
+4. Open `/store` and inspect the listing.
+5. Run the buyer-agent with a task that matches the listing.
+
+Buyer-agent discovery now includes seller-created services. The scripted planner skips coming-soon, disabled, and external-placeholder listings, and only selects live `seller_mock` services when the task matches the listing metadata and the price fits the remaining budget.
 
 ## Core User Flows
 
@@ -175,6 +197,8 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - light dashboard service-name mapping
 - buyer-agent reasoning timeline
 - public `/runs` pages
+- seller-created service listings
+- safe protected mock services for marketplace expansion
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -184,6 +208,7 @@ Planned architecture:
 
 - **Frontend**: Next.js App Router, TypeScript, API Store UI, seller dashboard.
 - **Service Registry**: typed metadata in `lib/services/registry.ts`.
+- **Seller Services**: Supabase-backed listings in `store_services`, merged with the static registry for public discovery.
 - **API Routes**: x402-protected service endpoints in later phases.
 - **Payments**: x402/nanopayments on Arc using USDC.
 - **Gateway**: balance and withdrawal flows for seller earnings.
@@ -196,6 +221,8 @@ Suggested future structure:
 app/
   page.tsx
   store/
+    page.tsx
+  seller/
     page.tsx
   runs/
     page.tsx
@@ -231,9 +258,9 @@ supabase/
 
 1. **Product Rebrand**: complete.
 2. **API Store**: complete.
-3. **Buyer Agent Reasoning + Purchase Timeline**: complete / active prototype.
-4. **Seller Creator Mode**: next, add seller-facing service creation and publishing workflows.
-5. **ERC-8004 Agent Identity**: introduce agent identity and reputation primitives.
+3. **Buyer Agent Reasoning + Purchase Timeline**: complete.
+4. **Seller Creator Mode**: complete / active prototype.
+5. **ERC-8004 Agent Identity**: next, introduce agent identity and reputation primitives.
 6. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
 7. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, and API usage.
 8. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
@@ -266,6 +293,7 @@ Then open:
 
 - `http://localhost:3000`
 - `http://localhost:3000/store`
+- `http://localhost:3000/seller`
 - `http://localhost:3000/runs`
 - `http://localhost:3000/dashboard`
 

@@ -17,8 +17,13 @@
  */
 
 import { NextResponse } from "next/server";
-import { serviceRegistry } from "@/lib/services/registry";
+import { listAllStoreServices } from "@/lib/services/store-service-persistence";
 
-export function GET() {
-  return NextResponse.json({ services: serviceRegistry });
+export async function GET() {
+  const { services, warning } = await listAllStoreServices();
+
+  return NextResponse.json({
+    services,
+    ...(warning ? { warning } : {}),
+  });
 }

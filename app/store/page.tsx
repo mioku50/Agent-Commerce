@@ -17,7 +17,13 @@
  */
 
 import { StoreMarketplace } from "@/app/store/store-marketplace";
-import { serviceCategories, serviceRegistry } from "@/lib/services/registry";
+import { Card, CardContent } from "@/components/ui/card";
+import {
+  categoriesForServices,
+  listAllStoreServices,
+} from "@/lib/services/store-service-persistence";
+import { connection } from "next/server";
+import { Suspense } from "react";
 
 export const metadata = {
   title: "API Store for AI Agents | Arc Agent Commerce",
@@ -25,11 +31,39 @@ export const metadata = {
     "Discover x402-powered paid APIs that AI agents can buy with USDC on Arc.",
 };
 
-export default function StorePage() {
+async function StoreMarketplaceData() {
+  await connection();
+  const { services, warning } = await listAllStoreServices();
+
   return (
     <StoreMarketplace
-      services={serviceRegistry}
-      categories={serviceCategories}
+      services={services}
+      categories={categoriesForServices(services)}
+      warning={warning}
     />
+  );
+}
+
+function StoreMarketplaceFallback() {
+  return (
+    <main className="min-h-screen bg-background">
+      <section className="border-b bg-secondary/30">
+        <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
+          <Card className="rounded-lg">
+            <CardContent className="p-6 text-sm text-muted-foreground">
+              Loading API Store...
+            </CardContent>
+          </Card>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+export default function StorePage() {
+  return (
+    <Suspense fallback={<StoreMarketplaceFallback />}>
+      <StoreMarketplaceData />
+    </Suspense>
   );
 }

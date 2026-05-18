@@ -24,11 +24,12 @@ import { CopyButton } from "@/components/copy-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  getServiceBySlug,
   serviceRegistry,
   type ApiService,
+  type ServiceSourceType,
   type ServiceStatus,
 } from "@/lib/services/registry";
+import { getStoreServiceBySlug } from "@/lib/services/store-service-persistence";
 
 type ServiceDetailPageProps = {
   params: Promise<{
@@ -37,9 +38,17 @@ type ServiceDetailPageProps = {
 };
 
 const statusLabels: Record<ServiceStatus, string> = {
+  draft: "Draft",
   live: "Live",
   mock: "Mock",
   "coming-soon": "Coming soon",
+  disabled: "Disabled",
+};
+
+const sourceLabels: Record<ServiceSourceType, string> = {
+  static: "Official sample",
+  seller_mock: "Seller-created demo service",
+  external_placeholder: "External placeholder",
 };
 
 function getPublicBaseUrl() {
@@ -80,6 +89,11 @@ function JsonPanel({ title, value }: { title: string; value: unknown }) {
   );
 }
 
+async function getCachedStoreService(slug: string) {
+  "use cache";
+  return getStoreServiceBySlug(slug);
+}
+
 export function generateStaticParams() {
   return serviceRegistry.map((service) => ({ slug: service.slug }));
 }
@@ -88,7 +102,7 @@ export async function generateMetadata({
   params,
 }: ServiceDetailPageProps): Promise<Metadata> {
   const { slug } = await params;
-  const service = getServiceBySlug(slug);
+  const service = await getCachedStoreService(slug);
 
   if (!service) {
     return {
@@ -106,12 +120,15 @@ export default async function ServiceDetailPage({
   params,
 }: ServiceDetailPageProps) {
   const { slug } = await params;
-  const service = getServiceBySlug(slug);
+  const service = await getCachedStoreService(slug);
 
   if (!service) notFound();
 
   const curlExample = buildCurlExample(service);
   const isLive = service.status === "live";
+  const isSellerMock = service.sourceType === "seller_mock";
+  const isExternalPlaceholder = service.sourceType === "external_placeholder";
+  const isCallable = isLive && !isExternalPlaceholder;
 
   return (
     <main className="min-h-screen bg-background">
@@ -133,6 +150,9 @@ export default async function ServiceDetailPage({
                 </Badge>
                 <Badge variant={service.isPaid ? "secondary" : "outline"}>
                   {service.isPaid ? "Paid API" : "Free"}
+                </Badge>
+                <Badge variant={service.sourceType === "static" ? "outline" : "secondary"}>
+                  {sourceLabels[service.sourceType]}
                 </Badge>
               </div>
               <h1 className="text-4xl font-bold tracking-normal text-foreground sm:text-5xl">
@@ -164,7 +184,7 @@ export default async function ServiceDetailPage({
               </dl>
               <div className="mt-5 flex flex-col gap-2">
                 <CopyButton value={service.endpoint} label="Copy endpoint" />
-                {isLive ? (
+                {isCallable ? (
                   <Button asChild variant="outline">
                     <Link href={service.endpoint}>
                       Open endpoint
@@ -173,7 +193,7 @@ export default async function ServiceDetailPage({
                   </Button>
                 ) : (
                   <Button disabled variant="outline">
-                    Planned service
+                    {isExternalPlaceholder ? "External fulfillment disabled" : "Planned service"}
                   </Button>
                 )}
               </div>
@@ -206,16 +226,22 @@ export default async function ServiceDetailPage({
                 cURL example
               </h2>
               <p className="mt-2 text-sm text-muted-foreground">
-                Unpaid direct requests to live services return HTTP 402 until an
-                agent satisfies the x402 payment requirement.
+                {isCallable
+                  ? "Unpaid direct requests to live paid services return HTTP 402 until an agent satisfies the x402 payment requirement."
+                  : "This service is visible for discovery, but paid fulfillment is not enabled."}
               </p>
             </div>
             <CopyButton value={curlExample} label="Copy cURL" />
           </div>
-          {isLive ? (
+          {isCallable ? (
             <pre className="mt-4 overflow-auto rounded-md bg-muted p-4 text-xs leading-5">
               {curlExample}
             </pre>
+          ) : isExternalPlaceholder ? (
+            <p className="mt-4 rounded-md bg-muted p-4 text-sm text-muted-foreground">
+              External fulfillment is not enabled in this MVP. The listing is
+              discoverable, but the app does not proxy arbitrary external APIs.
+            </p>
           ) : (
             <p className="mt-4 rounded-md bg-muted p-4 text-sm text-muted-foreground">
               This service is planned for a future phase.
@@ -223,6 +249,21 @@ export default async function ServiceDetailPage({
           )}
         </section>
       </section>
+
+      {isSellerMock ? (
+        <section className="mx-auto w-full max-w-6xl px-4 pb-8 sm:px-6">
+          <section className="rounded-lg border bg-card p-5">
+            <h2 className="text-sm font-semibold uppercase text-muted-foreground">
+              Seller-created demo service
+            </h2>
+            <p className="mt-3 leading-7 text-muted-foreground">
+              This service uses Phase 4 protected mock fulfillment. The paid
+              response is served from stored seller metadata, so no arbitrary
+              external API proxying is involved.
+            </p>
+          </section>
+        </section>
+      ) : null}
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pb-16 sm:px-6 lg:grid-cols-2">
         <JsonPanel title="Input schema" value={service.inputSchema} />

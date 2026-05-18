@@ -51,6 +51,13 @@ function statusVariant(status: string) {
   return "outline";
 }
 
+function sourceLabel(sourceType: string | null) {
+  if (sourceType === "static") return "Official sample";
+  if (sourceType === "seller_mock") return "Seller-created";
+  if (sourceType === "external_placeholder") return "External placeholder";
+  return null;
+}
+
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
@@ -127,6 +134,15 @@ function TimelineStep({ step }: { step: PublicAgentStep }) {
           <Badge variant="secondary">Step {step.step_index}</Badge>
           <Badge variant={statusVariant(step.status)}>{step.status}</Badge>
           {step.method ? <Badge variant="outline">{step.method}</Badge> : null}
+          {sourceLabel(step.service_source_type) ? (
+            <Badge
+              variant={
+                step.service_source_type === "static" ? "outline" : "secondary"
+              }
+            >
+              {sourceLabel(step.service_source_type)}
+            </Badge>
+          ) : null}
         </div>
         <CardTitle className="text-xl">
           {step.service_name ?? step.service_slug ?? "Unknown service"}
