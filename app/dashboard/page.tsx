@@ -54,6 +54,7 @@ import {
 import { shortenHash } from "@/lib/utils";
 import { usePaymentEvents } from "@/hooks/use-transactions";
 import { useWithdrawals } from "@/hooks/use-withdrawals";
+import { getServiceByEndpoint } from "@/lib/services/registry";
 
 type SortDirection = "default" | "asc" | "desc";
 type SortField = "amount" | "date";
@@ -138,6 +139,10 @@ function StatusBadge({ status }: { status: string }) {
   return <Badge variant={variant}>{status}</Badge>;
 }
 
+function getServiceName(endpoint: string) {
+  return getServiceByEndpoint(endpoint)?.name;
+}
+
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 export default function Dashboard() {
@@ -169,10 +174,16 @@ export default function Dashboard() {
     if (filter) {
       const query = filter.toLowerCase();
       result = result.filter(
-        (ev) =>
-          (ev.gateway_tx ?? "").toLowerCase().includes(query) ||
-          ev.payer.toLowerCase().includes(query) ||
-          ev.endpoint.toLowerCase().includes(query),
+        (ev) => {
+          const serviceName = getServiceName(ev.endpoint);
+
+          return (
+            (ev.gateway_tx ?? "").toLowerCase().includes(query) ||
+            ev.payer.toLowerCase().includes(query) ||
+            ev.endpoint.toLowerCase().includes(query) ||
+            (serviceName ?? "").toLowerCase().includes(query)
+          );
+        },
       );
     }
 
@@ -252,7 +263,7 @@ export default function Dashboard() {
         <Input
           placeholder={
             activeTab === "payments"
-              ? "Filter by tx hash, payer, or endpoint..."
+              ? "Filter by tx hash, payer, service, or endpoint..."
               : "Filter by tx hash, address, chain, or status..."
           }
           className="max-w-xs"
@@ -345,43 +356,52 @@ export default function Dashboard() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedPayments.map((ev) => (
-                    <TableRow key={ev.id}>
-                      <TableCell className="font-mono text-xs">
-                        {ev.gateway_tx ? (
+                  paginatedPayments.map((ev) => {
+                    const serviceName = getServiceName(ev.endpoint);
+
+                    return (
+                      <TableRow key={ev.id}>
+                        <TableCell className="font-mono text-xs">
+                          {ev.gateway_tx ? (
+                            <CopyableCell
+                              value={ev.gateway_tx}
+                              label={shortenHash(ev.gateway_tx, 6)}
+                              href={
+                                ev.gateway_tx.startsWith("0x")
+                                  ? `${EXPLORER_BASE}/tx/${ev.gateway_tx}`
+                                  : undefined
+                              }
+                            />
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
                           <CopyableCell
-                            value={ev.gateway_tx}
-                            label={shortenHash(ev.gateway_tx, 6)}
-                            href={
-                              ev.gateway_tx.startsWith("0x")
-                                ? `${EXPLORER_BASE}/tx/${ev.gateway_tx}`
-                                : undefined
-                            }
+                            value={ev.payer}
+                            label={shortenHash(ev.payer)}
+                            href={`${EXPLORER_BASE}/address/${ev.payer}`}
                           />
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="font-mono text-xs">
-                        <CopyableCell
-                          value={ev.payer}
-                          label={shortenHash(ev.payer)}
-                          href={`${EXPLORER_BASE}/address/${ev.payer}`}
-                        />
-                      </TableCell>
-                      <TableCell className="text-xs">
-                        <code className="bg-muted px-1.5 py-0.5 rounded text-xs">
-                          {ev.endpoint}
-                        </code>
-                      </TableCell>
-                      <TableCell className="text-right font-mono">
-                        ${ev.amount_usdc}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-xs">
-                        {formatDate(ev.created_at)}
-                      </TableCell>
-                    </TableRow>
-                  ))
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <div className="flex flex-col gap-1">
+                            {serviceName ? (
+                              <span className="font-medium">{serviceName}</span>
+                            ) : null}
+                            <code className="w-fit rounded bg-muted px-1.5 py-0.5 text-xs">
+                              <CopyableCell value={ev.endpoint} />
+                            </code>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          ${ev.amount_usdc}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground text-xs">
+                          {formatDate(ev.created_at)}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })
                 )}
               </TableBody>
             </Table>

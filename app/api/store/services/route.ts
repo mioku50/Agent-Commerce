@@ -16,20 +16,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { StoreMarketplace } from "@/app/store/store-marketplace";
-import { serviceCategories, serviceRegistry } from "@/lib/services/registry";
+import { NextResponse } from "next/server";
+import { serviceRegistry } from "@/lib/services/registry";
 
-export const metadata = {
-  title: "API Store for AI Agents | Arc Agent Commerce",
-  description:
-    "Discover x402-powered paid APIs that AI agents can buy with USDC on Arc.",
-};
-
-export default function StorePage() {
-  return (
-    <StoreMarketplace
-      services={serviceRegistry}
-      categories={serviceCategories}
-    />
-  );
+export function GET() {
+  return NextResponse.json({ services: serviceRegistry });
 }

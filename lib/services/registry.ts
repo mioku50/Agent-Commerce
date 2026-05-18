@@ -17,87 +17,294 @@
  */
 
 export type ServiceMethod = "GET" | "POST";
+export type ServiceStatus = "live" | "mock" | "coming-soon";
 
-export type DemoService = {
+export type ApiService = {
   id: string;
+  slug: string;
   name: string;
-  description: string;
+  shortDescription: string;
+  longDescription: string;
   category: string;
   method: ServiceMethod;
   endpoint: string;
   priceLabel: string;
-  status: string;
+  priceUsd: number;
+  status: ServiceStatus;
+  isPaid: boolean;
+  inputSchema: unknown;
+  outputSchema: unknown;
+  exampleRequest: unknown;
+  exampleResponse: unknown;
   exampleUseCase: string;
+  agentReasoningHint: string;
+};
+
+const emptyInputSchema = {
+  type: "object",
+  properties: {},
+  additionalProperties: false,
 };
 
 export const serviceRegistry = [
   {
     id: "premium-quote",
+    slug: "premium-quote",
     name: "Premium Quote",
-    description:
-      "A simple paid response that proves the agent can satisfy an x402 payment requirement and receive protected content.",
-    category: "Premium Content",
+    shortDescription: "A simple paid quote endpoint for testing x402 access.",
+    longDescription:
+      "Premium Quote is the smallest live service in the store. It proves the full agent-commerce loop: discover a paid API, receive an HTTP 402 payment requirement, pay the requested USDC amount through x402 and Circle Gateway, then receive a protected response.",
+    category: "Research",
     method: "GET",
     endpoint: "/api/premium/quote",
     priceLabel: "0.001 USDC",
-    status: "Live x402 sample",
+    priceUsd: 0.001,
+    status: "live",
+    isPaid: true,
+    inputSchema: emptyInputSchema,
+    outputSchema: {
+      type: "object",
+      properties: {
+        quote: { type: "string" },
+        category: { type: "string" },
+        timestamp: { type: "string", format: "date-time" },
+      },
+      required: ["quote", "category", "timestamp"],
+    },
+    exampleRequest: {
+      method: "GET",
+      endpoint: "/api/premium/quote",
+    },
+    exampleResponse: {
+      quote: "The best way to predict the future is to invent it. - Alan Kay",
+      category: "technology",
+      timestamp: "2026-05-18T10:00:00.000Z",
+    },
     exampleUseCase:
-      "An agent buys a concise premium insight before drafting a report.",
+      "An agent buys a concise premium insight before drafting a report or deciding whether a longer research step is worth paying for.",
+    agentReasoningHint:
+      "Use this service when the task needs a low-cost proof of payment, a short premium quote, or a simple end-to-end x402 check.",
   },
   {
     id: "market-snapshot",
+    slug: "market-snapshot",
     name: "Market Snapshot",
-    description:
-      "A mock market data response for testing paid financial signals, token summaries, and lightweight research workflows.",
+    shortDescription: "A paid market dataset for lightweight analysis flows.",
+    longDescription:
+      "Market Snapshot returns a compact dataset that an agent can use as paid context before producing a recommendation, report, or routing decision. It represents the store pattern for data APIs sold by request instead of by subscription.",
     category: "Market Data",
     method: "GET",
     endpoint: "/api/premium/dataset",
     priceLabel: "0.01 USDC",
-    status: "Live x402 sample",
+    priceUsd: 0.01,
+    status: "live",
+    isPaid: true,
+    inputSchema: emptyInputSchema,
+    outputSchema: {
+      type: "object",
+      properties: {
+        dataset: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              id: { type: "number" },
+              metric: { type: "string" },
+              value: { type: "number" },
+              unit: { type: "string" },
+            },
+            required: ["id", "metric", "value", "unit"],
+          },
+        },
+        generated_at: { type: "string", format: "date-time" },
+      },
+      required: ["dataset", "generated_at"],
+    },
+    exampleRequest: {
+      method: "GET",
+      endpoint: "/api/premium/dataset",
+    },
+    exampleResponse: {
+      dataset: [
+        { id: 1, metric: "daily_active_users", value: 14200, unit: "users" },
+        { id: 2, metric: "avg_session_duration", value: 8.4, unit: "minutes" },
+      ],
+      generated_at: "2026-05-18T10:00:00.000Z",
+    },
     exampleUseCase:
-      "An agent checks current market context before choosing the next analysis step.",
+      "An agent purchases a market context snapshot before deciding what to summarize, compare, or escalate to a human operator.",
+    agentReasoningHint:
+      "Use this service when fresh paid data is more valuable than relying on cached or guessed market context.",
   },
   {
     id: "text-analyzer",
+    slug: "text-analyzer",
     name: "Text Analyzer",
-    description:
-      "A paid text utility that accepts content and returns structured analysis metadata for downstream agent tasks.",
-    category: "Analysis",
+    shortDescription: "A paid compute endpoint for analyzing submitted text.",
+    longDescription:
+      "Text Analyzer models a paid compute API. The buyer sends text, pays per request, and receives structured metadata that can feed another agent step, workflow, or dashboard.",
+    category: "Compute",
     method: "POST",
     endpoint: "/api/premium/compute",
     priceLabel: "0.0003 USDC",
-    status: "Live x402 sample",
+    priceUsd: 0.0003,
+    status: "live",
+    isPaid: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        text: {
+          type: "string",
+          description: "Text content to analyze.",
+        },
+      },
+      required: ["text"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        summary: { type: "string" },
+        word_count: { type: "number" },
+        sentence_count: { type: "number" },
+        char_count: { type: "number" },
+        timestamp: { type: "string", format: "date-time" },
+      },
+      required: [
+        "summary",
+        "word_count",
+        "sentence_count",
+        "char_count",
+        "timestamp",
+      ],
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/premium/compute",
+      body: {
+        text: "Agents can buy tiny API calls when the result is worth the price.",
+      },
+    },
+    exampleResponse: {
+      summary: "Input contains 12 words across 1 sentence(s).",
+      word_count: 12,
+      sentence_count: 1,
+      char_count: 68,
+      timestamp: "2026-05-18T10:00:00.000Z",
+    },
     exampleUseCase:
-      "An agent pays to summarize sentiment, entities, and action items from a supplied text block.",
-  },
-  {
-    id: "weather-signal",
-    name: "Weather Signal",
-    description:
-      "A mock location-aware weather signal for testing paid environmental data calls and routing decisions.",
-    category: "Signals",
-    method: "GET",
-    endpoint: "/api/store/weather",
-    priceLabel: "0.002 USDC",
-    status: "Registry only",
-    exampleUseCase:
-      "An agent buys a weather signal before planning a local delivery or travel recommendation.",
+      "An agent pays for a quick text analysis step before saving structured notes into a larger workflow.",
+    agentReasoningHint:
+      "Use this service when the task needs deterministic text metadata and the price is lower than running a heavier model call.",
   },
   {
     id: "agent-task",
+    slug: "agent-task",
     name: "Agent Task",
-    description:
-      "A higher-priced multi-step service that returns a task payload for buyer-agent reasoning and purchase logging demos.",
-    category: "Workflow",
+    shortDescription: "A higher-value paid task endpoint for agent workflows.",
+    longDescription:
+      "Agent Task represents a more expensive service where the response can unlock a multi-step task, puzzle, work order, or higher-value unit of agent work. It is useful for testing purchase reasoning and spending-policy decisions.",
+    category: "Agent Work",
     method: "GET",
     endpoint: "/api/premium/agent-task",
     priceLabel: "0.03 USDC",
-    status: "Live x402 sample",
+    priceUsd: 0.03,
+    status: "live",
+    isPaid: true,
+    inputSchema: emptyInputSchema,
+    outputSchema: {
+      type: "object",
+      properties: {
+        clue: { type: "string" },
+        step: { type: "number" },
+        total_steps: { type: "number" },
+        timestamp: { type: "string", format: "date-time" },
+      },
+      required: ["clue", "step", "total_steps", "timestamp"],
+    },
+    exampleRequest: {
+      method: "GET",
+      endpoint: "/api/premium/agent-task",
+    },
+    exampleResponse: {
+      clue: "Look for the old lighthouse on the western shore. The keeper left a journal.",
+      step: 2,
+      total_steps: 5,
+      timestamp: "2026-05-18T10:00:00.000Z",
+    },
     exampleUseCase:
-      "An agent purchases a task bundle and records why the paid call was necessary.",
+      "An agent buys a task payload only after deciding the expected value justifies a higher per-request price.",
+    agentReasoningHint:
+      "Use this service when the agent has remaining budget and needs a richer paid task response than a simple quote or dataset.",
   },
-] satisfies readonly DemoService[];
+  {
+    id: "weather-signal",
+    slug: "weather-signal",
+    name: "Weather Signal",
+    shortDescription: "A planned paid weather signal for future expansion.",
+    longDescription:
+      "Weather Signal is a coming-soon service that shows how the API Store can expand beyond the current premium sample endpoints. It documents the future service contract without adding a protected route in this phase.",
+    category: "Signals",
+    method: "GET",
+    endpoint: "/api/store/weather-signal",
+    priceLabel: "0.002 USDC",
+    priceUsd: 0.002,
+    status: "coming-soon",
+    isPaid: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        location: {
+          type: "string",
+          description: "City or region for the signal.",
+        },
+      },
+      required: ["location"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        location: { type: "string" },
+        signal: { type: "string" },
+        confidence: { type: "number" },
+        generated_at: { type: "string", format: "date-time" },
+      },
+      required: ["location", "signal", "confidence", "generated_at"],
+    },
+    exampleRequest: {
+      method: "GET",
+      endpoint: "/api/store/weather-signal?location=San%20Francisco",
+    },
+    exampleResponse: {
+      location: "San Francisco",
+      signal: "Mild coastal conditions expected; low weather risk.",
+      confidence: 0.82,
+      generated_at: "2026-05-18T10:00:00.000Z",
+    },
+    exampleUseCase:
+      "An agent checks a paid local signal before planning a delivery, travel recommendation, or field-work schedule.",
+    agentReasoningHint:
+      "Use this planned service when the agent needs location context and can justify paying for a concise external signal.",
+  },
+] satisfies readonly ApiService[];
 
 export function getServiceById(serviceId: string) {
   return serviceRegistry.find((service) => service.id === serviceId);
 }
+
+export function getServiceBySlug(slug: string) {
+  return serviceRegistry.find((service) => service.slug === slug);
+}
+
+export function getServiceByEndpoint(endpoint: string) {
+  return serviceRegistry.find((service) => service.endpoint === endpoint);
+}
+
+export const serviceCategories = Array.from(
+  new Set(serviceRegistry.map((service) => service.category)),
+).sort();
+
+export const serviceStatuses: readonly ServiceStatus[] = [
+  "live",
+  "mock",
+  "coming-soon",
+];

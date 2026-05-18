@@ -84,10 +84,20 @@ The first version is a compact API marketplace for agents. The API Store starts 
 | Premium Quote | `/api/premium/quote` | 0.001 USDC | Simple paid response test |
 | Market Snapshot | `/api/premium/dataset` | 0.01 USDC | Mock market data |
 | Text Analyzer | `/api/premium/compute` | 0.0003 USDC | Analyze submitted text |
-| Weather Signal | `/api/store/weather` | 0.002 USDC | Mock weather insight |
+| Weather Signal | `/api/store/weather-signal` | 0.002 USDC | Planned weather signal |
 | Agent Task | `/api/premium/agent-task` | 0.03 USDC | Multi-step task for a buyer agent |
 
-The current service registry is metadata-first. It maps to existing premium x402 endpoints where safe and leaves store-native routes for later phases. Existing premium endpoints are intentionally retained.
+The service registry is the source of truth for the API Store. It maps live services to existing premium x402 endpoints and includes planned services for future expansion. Existing premium endpoints are intentionally retained.
+
+## Phase 2 — API Store
+
+`/store` is now a marketplace-style UI for agent-buyable APIs. Each service is described in `lib/services/registry.ts` with pricing, method, endpoint, schemas, examples, and an agent reasoning hint.
+
+The public discovery endpoint `GET /api/store/services` exposes the registry as machine-readable JSON so future buyer-agent flows can discover services dynamically.
+
+Each service detail page under `/store/[slug]` documents the endpoint contract, example request and response, cURL call, and the fact that unpaid direct calls to live services return HTTP 402 until the x402 payment requirement is satisfied.
+
+Phase 3 will connect buyer-agent reasoning and purchase timelines to this registry.
 
 ## Core User Flows
 
@@ -126,16 +136,18 @@ A builder should be able to:
 
 ## MVP Scope
 
-This phase focuses on product identity and initial structure:
+The current MVP keeps the payment foundation intact and adds the marketplace layer:
 
 - Arc Agent Commerce naming and metadata
-- README v0
+- README and roadmap
 - landing page
-- metadata-only service registry
-- basic `/store` route
-- light dashboard wording
+- typed service registry
+- API Store marketplace UI
+- public service discovery endpoint
+- service detail pages
+- light dashboard service-name mapping
 
-This phase intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
+This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
 ## Architecture
 
@@ -185,12 +197,13 @@ supabase/
 ## Development Phases
 
 1. **Product Rebrand**: position the app as Arc Agent Commerce / API Store Demo.
-2. **Service Registry**: expand service metadata and add detail pages.
-3. **x402 Store Endpoints**: protect API Store routes with payment requirements.
-4. **Buyer Agent**: add discovery, selection, payment, and reasoning logs.
-5. **Seller Analytics**: deepen dashboard metrics for API revenue and purchases.
-6. **Gateway Operations**: show nanopayments balance and withdrawal status.
-7. **Spending Policy**: enforce per-request and run-level limits for the agent.
+2. **API Store**: expand registry metadata, service discovery, marketplace UI, and service detail pages.
+3. **Buyer Agent Reasoning + Purchase Timeline**: connect the agent to service discovery and record why each paid call was made.
+4. **Seller Creator Mode**: add seller-facing service creation and publishing workflows.
+5. **ERC-8004 Agent Identity**: introduce agent identity and reputation primitives.
+6. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+7. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, and API usage.
+8. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -235,4 +248,4 @@ Copy `.env.example` to `.env.local` when local configuration is needed. Never co
 
 ## Status
 
-Early builder prototype. This phase updates product positioning, adds a basic API Store UI, and introduces a typed service registry while preserving the upstream x402, Gateway, Supabase, withdrawal, and payment verification layers.
+Early builder prototype. The project now has a marketplace-style API Store, public service discovery, and service detail pages while preserving the upstream x402, Gateway, Supabase, withdrawal, and payment verification layers.
