@@ -18,6 +18,7 @@
 
 import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { randomUUID } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 // Arc Testnet contract addresses (from @circle-fin/x402-batching SDK)
@@ -49,8 +50,100 @@ interface PaymentPayload {
   x402Version: number;
   resource?: { url: string; description: string; mimeType: string };
   accepted?: Record<string, unknown>;
-  payload: Record<string, unknown>;
+  payload: {
+    authorization?: {
+      from?: string;
+      to?: string;
+      value?: string;
+      validAfter?: string;
+      validBefore?: string;
+    };
+    signature?: string;
+  } & Record<string, unknown>;
   extensions?: Record<string, unknown>;
+}
+
+type DiagnosticContext = {
+  requestId: string;
+  timestamp: string;
+  endpoint: string;
+  expected: {
+    payTo: string;
+    amount: string;
+    network: string;
+    asset: string;
+    gatewayWallet: string;
+  };
+};
+
+function createDiagnosticContext(endpoint: string, requirements: ReturnType<typeof buildPaymentRequirements>): DiagnosticContext {
+  return {
+    requestId: randomUUID(),
+    timestamp: new Date().toISOString(),
+    endpoint,
+    expected: {
+      payTo: requirements.payTo,
+      amount: requirements.amount,
+      network: requirements.network,
+      asset: requirements.asset,
+      gatewayWallet: ARC_TESTNET_GATEWAY_WALLET,
+    },
+  };
+}
+
+function safePaymentPayloadSummary(paymentPayload: PaymentPayload) {
+  const authorization = paymentPayload.payload.authorization;
+
+  return {
+    x402Version: paymentPayload.x402Version,
+    resourceUrl: paymentPayload.resource?.url,
+    acceptedNetwork: typeof paymentPayload.accepted?.network === "string"
+      ? paymentPayload.accepted.network
+      : undefined,
+    acceptedAmount: typeof paymentPayload.accepted?.amount === "string"
+      ? paymentPayload.accepted.amount
+      : undefined,
+    acceptedPayTo: typeof paymentPayload.accepted?.payTo === "string"
+      ? paymentPayload.accepted.payTo
+      : undefined,
+    payer: authorization?.from,
+    authorizationTo: authorization?.to,
+    authorizationValue: authorization?.value,
+    validAfter: authorization?.validAfter,
+    validBefore: authorization?.validBefore,
+    hasSignature: typeof paymentPayload.payload.signature === "string",
+  };
+}
+
+function sanitizeDiagnosticText(text: string) {
+  return text
+    .replace(/"signature"\s*:\s*"[^"]+"/gi, '"signature":"[redacted]"')
+    .replace(/payment-signature:\s*[^\s]+/gi, "payment-signature: [redacted]")
+    .replace(/bearer\s+[a-z0-9._-]+/gi, "bearer [redacted]")
+    .slice(0, 1200);
+}
+
+function gatewayErrorDetails(error: unknown) {
+  const name = error instanceof Error ? error.name : "UnknownError";
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/Circle Gateway verify failed \((\d+)\):\s*([\s\S]*)/);
+
+  return {
+    name,
+    message: sanitizeDiagnosticText(message),
+    upstreamStatus: match?.[1],
+    upstreamBody: match?.[2] ? sanitizeDiagnosticText(match[2]) : undefined,
+  };
+}
+
+function logVerificationFailure(
+  context: DiagnosticContext,
+  details: Record<string, unknown>,
+) {
+  console.error(
+    "[x402] Payment verification diagnostics",
+    JSON.stringify({ ...context, ...details }),
+  );
 }
 
 function buildPaymentRequirements(price: string) {
@@ -86,11 +179,14 @@ export function withGateway(
   const requirements = buildPaymentRequirements(price);
 
   return async (req: NextRequest) => {
+    const diagnostics = createDiagnosticContext(endpoint, requirements);
     const paymentSignature = req.headers.get("payment-signature");
 
     // No payment — return 402 with Gateway batching payment requirements
     if (!paymentSignature) {
-      console.log(`[x402] 402 Payment Required: ${endpoint}`);
+      console.log(
+        `[x402] 402 Payment Required: ${endpoint} requestId=${diagnostics.requestId}`,
+      );
 
       const paymentRequired = {
         x402Version: 2,
@@ -106,6 +202,7 @@ export function withGateway(
         status: 402,
         headers: {
           "Content-Type": "application/json",
+          "X-Agent-Commerce-Request-Id": diagnostics.requestId,
           "PAYMENT-REQUIRED": Buffer.from(
             JSON.stringify(paymentRequired),
           ).toString("base64"),
@@ -118,19 +215,42 @@ export function withGateway(
       const paymentPayload: PaymentPayload = JSON.parse(
         Buffer.from(paymentSignature, "base64").toString("utf-8"),
       );
+      const paymentSummary = safePaymentPayloadSummary(paymentPayload);
 
-      const verifyResult = await facilitator.verify(
-        paymentPayload,
-        requirements,
-      );
+      let verifyResult;
+      try {
+        verifyResult = await facilitator.verify(
+          paymentPayload,
+          requirements,
+        );
+      } catch (error) {
+        logVerificationFailure(diagnostics, {
+          stage: "verify threw",
+          payment: paymentSummary,
+          error: gatewayErrorDetails(error),
+        });
+        throw error;
+      }
 
       if (!verifyResult.isValid) {
+        logVerificationFailure(diagnostics, {
+          stage: "verify invalid",
+          payer: verifyResult.payer ?? paymentSummary.payer,
+          invalidReason: verifyResult.invalidReason,
+          payment: paymentSummary,
+        });
         return NextResponse.json(
           {
             error: "Payment verification failed",
             reason: verifyResult.invalidReason,
+            requestId: diagnostics.requestId,
           },
-          { status: 402 },
+          {
+            status: 402,
+            headers: {
+              "X-Agent-Commerce-Request-Id": diagnostics.requestId,
+            },
+          },
         );
       }
 
@@ -141,14 +261,20 @@ export function withGateway(
 
       if (!settleResult.success) {
         console.error(
-          `[x402] Settlement failed for ${endpoint}: ${settleResult.errorReason}`,
+          `[x402] Settlement failed for ${endpoint} requestId=${diagnostics.requestId}: ${settleResult.errorReason}`,
         );
         return NextResponse.json(
           {
             error: "Payment settlement failed",
             reason: settleResult.errorReason,
+            requestId: diagnostics.requestId,
           },
-          { status: 402 },
+          {
+            status: 402,
+            headers: {
+              "X-Agent-Commerce-Request-Id": diagnostics.requestId,
+            },
+          },
         );
       }
 
@@ -172,7 +298,7 @@ export function withGateway(
       }
 
       console.log(
-        `[x402] Payment settled: ${endpoint} — ${amountUsdc} USDC from ${payer}`,
+        `[x402] Payment settled: ${endpoint} — ${amountUsdc} USDC from ${payer} requestId=${diagnostics.requestId}`,
       );
 
       // Call the actual route handler
@@ -189,14 +315,26 @@ export function withGateway(
       ).toString("base64");
 
       response.headers.set("PAYMENT-RESPONSE", settleResponseHeader);
+      response.headers.set("X-Agent-Commerce-Request-Id", diagnostics.requestId);
       return response;
     } catch (error) {
       const message =
         error instanceof Error ? error.message : String(error);
-      console.error("[x402] Payment processing error:", message);
+      console.error(
+        "[x402] Payment processing error:",
+        JSON.stringify({
+          ...diagnostics,
+          error: gatewayErrorDetails(error),
+        }),
+      );
       return NextResponse.json(
-        { error: "Payment processing error", message },
-        { status: 500 },
+        { error: "Payment processing error", message, requestId: diagnostics.requestId },
+        {
+          status: 500,
+          headers: {
+            "X-Agent-Commerce-Request-Id": diagnostics.requestId,
+          },
+        },
       );
     }
   };

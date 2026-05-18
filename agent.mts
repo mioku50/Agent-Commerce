@@ -20,6 +20,10 @@ import {
   toErrorMessage,
   withRetry,
 } from "./lib/agent/fetch-with-retry.ts";
+import {
+  installPaymentHttpDiagnostics,
+  printPaymentHttpDiagnostics,
+} from "./lib/agent/payment-http-diagnostics.ts";
 
 type Endpoint = {
   url: string;
@@ -254,6 +258,7 @@ async function main() {
   const fetchRetries = parsePositiveIntegerEnv("AGENT_FETCH_RETRIES", 3);
   const fetchTimeoutMs = parsePositiveIntegerEnv("AGENT_FETCH_TIMEOUT_MS", 30_000);
   const maxInFlight = parseStrictlyPositiveIntegerEnv("AGENT_MAX_IN_FLIGHT", 1);
+  const postDepositWaitMs = parsePositiveIntegerEnv("AGENT_POST_DEPOSIT_WAIT_MS", 0);
   const skipFunding = parseBooleanEnv("AGENT_SKIP_FUNDING");
   const skipDeposit = parseBooleanEnv("AGENT_SKIP_DEPOSIT");
 
@@ -266,6 +271,7 @@ async function main() {
     timeoutMs: fetchTimeoutMs,
     label: "agent HTTP request",
   });
+  const httpDiagnostics = installPaymentHttpDiagnostics(baseUrl);
 
   const endpoints: Endpoint[] = [
     { url: `${baseUrl}/api/premium/quote`, method: "GET" },
@@ -333,6 +339,9 @@ async function main() {
       : `This run will deposit ${depositAmount} USDC into Gateway from the ephemeral wallet.`,
   );
   console.log(`Max in-flight paid requests: ${maxInFlight}`);
+  if (postDepositWaitMs > 0) {
+    console.log(`Post-deposit wait: ${postDepositWaitMs}ms`);
+  }
 
   if (spendingLimit !== null) {
     console.log(`Spending limit: ${spendingLimit} USDC`);
@@ -485,6 +494,15 @@ async function main() {
     }
   }
 
+  async function waitAfterDepositIfConfigured() {
+    if (postDepositWaitMs <= 0) return;
+
+    console.log(
+      `Waiting ${postDepositWaitMs}ms after Gateway deposit before paid API requests...`,
+    );
+    await new Promise((resolve) => setTimeout(resolve, postDepositWaitMs));
+  }
+
   const redepositThreshold = 500_000n;
   const usdcAmount = parseUnits(depositAmount, 6);
 
@@ -598,6 +616,7 @@ async function main() {
           console.error(
             `#${sequence} ${ep.url.split("/").pop()} FAILED (${ms}ms): ${toErrorMessage(error)} [in-flight: ${inFlight}]`,
           );
+          printPaymentHttpDiagnostics(httpDiagnostics.getRecent(ep.url), runFilePath);
           void gracefulFailure("Paid API request", error);
         });
     }, 1000);
@@ -607,6 +626,7 @@ async function main() {
     await preflightProtectedEndpoint();
     await fundAgentWallet();
     await depositToGateway();
+    await waitAfterDepositIfConfigured();
 
     runLog.status = "running";
     await writeRunLog(runFilePath, runLog);
