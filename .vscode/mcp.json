@@ -1,0 +1,8 @@
+{
+  "servers": {
+    "arc-docs": {
+      "type": "http",
+      "url": "https://docs.arc.io/mcp"
+    }
+  }
+}
