@@ -25,6 +25,7 @@ import {
   BadgeCheck,
   Database,
   FileJson,
+  Fuel,
   PlusCircle,
   Search,
   ShieldCheck,
@@ -168,6 +169,12 @@ export function StoreMarketplace({
                   </div>
                 </dl>
                 <div className="mt-4 flex flex-col gap-2">
+                  <Button asChild size="sm">
+                    <Link href="/agent-launch">
+                      <Fuel />
+                      Fund buyer-agent
+                    </Link>
+                  </Button>
                   <Button asChild size="sm" variant="outline">
                     <Link href="/seller">
                       <PlusCircle />
@@ -342,6 +349,12 @@ export function StoreMarketplace({
                 <Link href="/agents">
                   <BadgeCheck />
                   Agent Passports
+                </Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/agent-launch">
+                  <Fuel />
+                  Fund agent
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">

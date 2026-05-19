@@ -19,7 +19,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   AlertTriangle,
   BadgeCheck,
@@ -28,271 +28,50 @@ import {
   RefreshCw,
   Wallet,
 } from "lucide-react";
-import {
-  createPublicClient,
-  formatEther,
-  formatUnits,
-  http,
-  type Address,
-} from "viem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { CopyButton } from "@/components/copy-button";
 import {
+  formatArcBalance,
+  useArcWallet,
+} from "@/components/wallet/use-arc-wallet";
+import {
   ARC_TESTNET_CHAIN_ID,
-  ARC_TESTNET_CHAIN_ID_HEX,
   ARC_TESTNET_FAUCET_URL,
-  ARC_TESTNET_RPC_URL,
-  ARC_TESTNET_USDC_ADDRESS,
   ARC_TESTNET_USDC_DECIMALS,
-  arcTestnetChain,
   getArcExplorerAddressUrl,
 } from "@/lib/wallet/arc";
 import { cn, shortenHash } from "@/lib/utils";
-
-type EthereumProvider = {
-  request<T = unknown>(args: {
-    method: string;
-    params?: unknown[] | Record<string, unknown>;
-  }): Promise<T>;
-  on?(event: "accountsChanged" | "chainChanged", listener: (...args: unknown[]) => void): void;
-  removeListener?(
-    event: "accountsChanged" | "chainChanged",
-    listener: (...args: unknown[]) => void,
-  ): void;
-};
-
-declare global {
-  interface Window {
-    ethereum?: EthereumProvider;
-  }
-}
 
 type ArcWalletWidgetProps = {
   variant?: "card" | "compact";
   className?: string;
 };
 
-const erc20BalanceAbi = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-] as const;
-
-const arcClient = createPublicClient({
-  chain: arcTestnetChain,
-  transport: http(ARC_TESTNET_RPC_URL),
-});
-
-function getProvider() {
-  if (typeof window === "undefined") return null;
-  return window.ethereum ?? null;
-}
-
-function parseChainId(value: string | number | null) {
-  if (value === null) return null;
-  if (typeof value === "number") return value;
-  return Number.parseInt(value, 16);
-}
-
-function formatBalance(value: string | null) {
-  if (!value) return "n/a";
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return value;
-  if (numeric === 0) return "0";
-  if (numeric < 0.0001) return "<0.0001";
-
-  return numeric.toLocaleString("en", {
-    maximumFractionDigits: 4,
-  });
-}
-
-function getErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
-  if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message?: unknown }).message);
-  }
-  return String(error);
-}
-
-function isProviderError(error: unknown, code: number) {
-  if (!error || typeof error !== "object") return false;
-
-  return "code" in error && Number((error as { code?: unknown }).code) === code;
-}
-
 export function ArcWalletWidget({
   variant = "card",
   className,
 }: ArcWalletWidgetProps) {
-  const [address, setAddress] = useState<string | null>(null);
-  const [chainId, setChainId] = useState<number | null>(null);
-  const [nativeBalance, setNativeBalance] = useState<string | null>(null);
-  const [erc20UsdcBalance, setErc20UsdcBalance] = useState<string | null>(null);
-  const [connecting, setConnecting] = useState(false);
-  const [switching, setSwitching] = useState(false);
-  const [loadingBalances, setLoadingBalances] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const providerAvailable = typeof window !== "undefined" && Boolean(window.ethereum);
-  const isArcTestnet = chainId === ARC_TESTNET_CHAIN_ID;
+  const {
+    address,
+    chainId,
+    nativeBalanceWei,
+    erc20UsdcBalance,
+    connecting,
+    switching,
+    loadingBalances,
+    error,
+    providerAvailable,
+    isArcTestnet,
+    connect,
+    switchToArc,
+    loadBalances,
+  } = useArcWallet();
 
   const explorerUrl = useMemo(
     () => (address ? getArcExplorerAddressUrl(address) : null),
     [address],
   );
-
-  const readWalletState = useCallback(async () => {
-    const provider = getProvider();
-    if (!provider) return;
-
-    try {
-      const [accounts, connectedChainId] = await Promise.all([
-        provider.request<string[]>({ method: "eth_accounts" }),
-        provider.request<string>({ method: "eth_chainId" }),
-      ]);
-
-      setAddress(accounts[0] ?? null);
-      setChainId(parseChainId(connectedChainId));
-      setError(null);
-    } catch (caught) {
-      setError(getErrorMessage(caught));
-    }
-  }, []);
-
-  const loadBalances = useCallback(async (walletAddress: string) => {
-    setLoadingBalances(true);
-
-    try {
-      const [native, erc20] = await Promise.all([
-        arcClient.getBalance({ address: walletAddress as Address }),
-        arcClient.readContract({
-          address: ARC_TESTNET_USDC_ADDRESS as Address,
-          abi: erc20BalanceAbi,
-          functionName: "balanceOf",
-          args: [walletAddress as Address],
-        }),
-      ]);
-
-      setNativeBalance(formatEther(native));
-      setErc20UsdcBalance(formatUnits(erc20, ARC_TESTNET_USDC_DECIMALS));
-      setError(null);
-    } catch (caught) {
-      setNativeBalance(null);
-      setErc20UsdcBalance(null);
-      setError(`Could not load Arc balances: ${getErrorMessage(caught)}`);
-    } finally {
-      setLoadingBalances(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void readWalletState();
-  }, [readWalletState]);
-
-  useEffect(() => {
-    if (!address) return;
-    void loadBalances(address);
-  }, [address, loadBalances]);
-
-  useEffect(() => {
-    const provider = getProvider();
-    if (!provider?.on) return;
-
-    const handleAccountsChanged = (accounts: unknown) => {
-      const nextAccounts = Array.isArray(accounts) ? accounts : [];
-      setAddress(typeof nextAccounts[0] === "string" ? nextAccounts[0] : null);
-    };
-    const handleChainChanged = (nextChainId: unknown) => {
-      setChainId(typeof nextChainId === "string" ? parseChainId(nextChainId) : null);
-    };
-
-    provider.on("accountsChanged", handleAccountsChanged);
-    provider.on("chainChanged", handleChainChanged);
-
-    return () => {
-      provider.removeListener?.("accountsChanged", handleAccountsChanged);
-      provider.removeListener?.("chainChanged", handleChainChanged);
-    };
-  }, []);
-
-  const connect = useCallback(async () => {
-    const provider = getProvider();
-    if (!provider) {
-      setError("No injected EVM wallet was detected.");
-      return;
-    }
-
-    setConnecting(true);
-    try {
-      const accounts = await provider.request<string[]>({
-        method: "eth_requestAccounts",
-      });
-      const connectedChainId = await provider.request<string>({
-        method: "eth_chainId",
-      });
-
-      setAddress(accounts[0] ?? null);
-      setChainId(parseChainId(connectedChainId));
-      setError(null);
-    } catch (caught) {
-      setError(getErrorMessage(caught));
-    } finally {
-      setConnecting(false);
-    }
-  }, []);
-
-  const switchToArc = useCallback(async () => {
-    const provider = getProvider();
-    if (!provider) {
-      setError("No injected EVM wallet was detected.");
-      return;
-    }
-
-    setSwitching(true);
-    try {
-      try {
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: ARC_TESTNET_CHAIN_ID_HEX }],
-        });
-      } catch (caught) {
-        if (!isProviderError(caught, 4902)) throw caught;
-
-        await provider.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: ARC_TESTNET_CHAIN_ID_HEX,
-              chainName: "Arc Testnet",
-              nativeCurrency: {
-                name: "USDC",
-                symbol: "USDC",
-                decimals: 18,
-              },
-              rpcUrls: [ARC_TESTNET_RPC_URL],
-              blockExplorerUrls: ["https://testnet.arcscan.app"],
-            },
-          ],
-        });
-
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: ARC_TESTNET_CHAIN_ID_HEX }],
-        });
-      }
-
-      setChainId(ARC_TESTNET_CHAIN_ID);
-      setError(null);
-    } catch (caught) {
-      setError(getErrorMessage(caught));
-    } finally {
-      setSwitching(false);
-    }
-  }, []);
 
   if (variant === "compact") {
     return (
@@ -312,7 +91,7 @@ export function ArcWalletWidget({
             {!isArcTestnet ? (
               <Button type="button" size="sm" variant="outline" onClick={switchToArc}>
                 <Fuel />
-                Switch Arc
+                {switching ? "Switching..." : "Switch Arc"}
               </Button>
             ) : null}
           </>
@@ -339,7 +118,8 @@ export function ArcWalletWidget({
           <h2 className="text-xl font-semibold">Arc Testnet Wallet</h2>
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Connect an EVM wallet to inspect Arc Testnet balances, switch
-            networks, and jump into faucet, explorer, Passport, or receipts.
+            networks, fund the local buyer-agent wallet, and jump into faucet,
+            explorer, Passport, or receipts.
           </p>
         </div>
         {address ? (
@@ -407,7 +187,9 @@ export function ArcWalletWidget({
             <div className="rounded-md border bg-background p-4">
               <dt className="text-sm text-muted-foreground">Native gas balance</dt>
               <dd className="mt-2 font-mono text-2xl font-semibold">
-                {loadingBalances ? "Loading..." : `${formatBalance(nativeBalance)} USDC`}
+                {loadingBalances
+                  ? "Loading..."
+                  : `${formatArcBalance(nativeBalanceWei)} USDC`}
               </dd>
               <p className="mt-2 text-xs text-muted-foreground">
                 Arc gas uses native USDC with 18-decimal accounting.
@@ -416,7 +198,9 @@ export function ArcWalletWidget({
             <div className="rounded-md border bg-background p-4">
               <dt className="text-sm text-muted-foreground">ERC-20 USDC balance</dt>
               <dd className="mt-2 font-mono text-2xl font-semibold">
-                {loadingBalances ? "Loading..." : `${formatBalance(erc20UsdcBalance)} USDC`}
+                {loadingBalances
+                  ? "Loading..."
+                  : `${formatArcBalance(erc20UsdcBalance, ARC_TESTNET_USDC_DECIMALS)} USDC`}
               </dd>
               <p className="mt-2 text-xs text-muted-foreground">
                 Canonical Arc Testnet USDC token uses 6 decimals.
@@ -425,6 +209,12 @@ export function ArcWalletWidget({
           </dl>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Button asChild variant="outline">
+              <Link href="/agent-launch">
+                Fund Agent
+                <Fuel />
+              </Link>
+            </Button>
             <Button asChild variant="outline">
               <Link href={ARC_TESTNET_FAUCET_URL} target="_blank" rel="noreferrer">
                 Open Faucet

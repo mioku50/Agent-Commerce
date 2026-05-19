@@ -22,6 +22,7 @@ import {
   Bot,
   BadgeCheck,
   ChartNoAxesCombined,
+  Fuel,
   LayoutDashboard,
   ListChecks,
   PlusCircle,
@@ -92,6 +93,12 @@ export default function Home() {
               <Link href="/agent-control">
                 <Bot />
                 Agent Control
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/agent-launch">
+                <Fuel />
+                Fund Agent
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
