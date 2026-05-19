@@ -148,6 +148,23 @@ Seller flow:
 
 Buyer-agent discovery now includes seller-created services. The scripted planner skips coming-soon, disabled, and external-placeholder listings, and only selects live `seller_mock` services when the task matches the listing metadata and the price fits the remaining budget.
 
+## Phase 5 — Agent Identity + Reputation Passport
+
+Agent wallets now get public off-chain Agent Passports derived from real run and purchase history.
+
+Public passport views:
+
+- `/agents`: recent buyer-agent wallet profiles
+- `/agents/[wallet]`: one wallet's Agent Passport, usage stats, trust score, recent runs, and reputation events
+- `GET /api/agents`: machine-readable agent profile list
+- `GET /api/agents/[wallet]`: profile detail, recent runs, and reputation events
+
+Each completed buyer-agent run recalculates the wallet profile from `agent_runs` and `agent_purchase_steps`. The profile tracks total runs, completed runs, paid requests, skipped requests, failed requests, total USDC spent, seller-created services used, official services used, and a deterministic demo trust score.
+
+The trust score is intentionally simple for the prototype: completed runs, paid requests, seller-created service usage, and budget-respected runs increase the score; failed requests and failed runs reduce it. Reputation events are written idempotently per wallet/run/status so retries do not duplicate events.
+
+No private keys, payment signatures, bearer tokens, or service role keys are stored in Agent Passport tables. This phase is an off-chain identity and reputation layer; ERC-8004 agent identity remains a future phase.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -199,6 +216,7 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - public `/runs` pages
 - seller-created service listings
 - safe protected mock services for marketplace expansion
+- public Agent Passport profiles and reputation events
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -212,7 +230,7 @@ Planned architecture:
 - **API Routes**: x402-protected service endpoints in later phases.
 - **Payments**: x402/nanopayments on Arc using USDC.
 - **Gateway**: balance and withdrawal flows for seller earnings.
-- **Storage**: Supabase for payment events, purchases, agent runs, and dashboard data.
+- **Storage**: Supabase for payment events, purchases, agent runs, Agent Passports, reputation events, and dashboard data.
 - **Agent**: local buyer-agent script with service selection, x402 payment flow, spending policy, and purchase reasoning log.
 
 Suggested future structure:
@@ -225,6 +243,8 @@ app/
   seller/
     page.tsx
   runs/
+    page.tsx
+  agents/
     page.tsx
   dashboard/
     page.tsx
@@ -260,10 +280,11 @@ supabase/
 2. **API Store**: complete.
 3. **Buyer Agent Reasoning + Purchase Timeline**: complete.
 4. **Seller Creator Mode**: complete / active prototype.
-5. **ERC-8004 Agent Identity**: next, introduce agent identity and reputation primitives.
-6. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-7. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, and API usage.
-8. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
+5. **Agent Identity + Reputation Passport**: complete / active prototype.
+6. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
+7. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+8. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, and reputation.
+9. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -295,6 +316,7 @@ Then open:
 - `http://localhost:3000/store`
 - `http://localhost:3000/seller`
 - `http://localhost:3000/runs`
+- `http://localhost:3000/agents`
 - `http://localhost:3000/dashboard`
 
 Useful checks:
@@ -315,6 +337,8 @@ npm run agent -- --task "Prepare a market context report" --limit 0.05
 AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Create a small proof of agent commerce" --limit 0.001
 ```
 
+After a run completes, open `/agents` or `/agents/<wallet>` to view the public Agent Passport for that buyer-agent wallet.
+
 ## Status
 
-Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, and buyer-agent reasoning timelines while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.
+Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, and public Agent Passports while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.

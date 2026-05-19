@@ -20,7 +20,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { ArrowLeft, ExternalLink } from "lucide-react";
+import { ArrowLeft, BadgeCheck, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -107,7 +107,16 @@ function RunSummary({ run }: { run: PublicAgentRun }) {
           <div>
             <dt className="text-muted-foreground">Wallet</dt>
             <dd className="font-mono">
-              {run.agent_wallet ? shortenHash(run.agent_wallet, 5) : "n/a"}
+              {run.agent_wallet ? (
+                <Link
+                  href={`/agents/${run.agent_wallet}`}
+                  className="text-primary hover:underline"
+                >
+                  {shortenHash(run.agent_wallet, 5)}
+                </Link>
+              ) : (
+                "n/a"
+              )}
             </dd>
           </div>
         </dl>
@@ -234,6 +243,14 @@ async function RunDetail({ params }: RunDetailPageProps) {
               Back to Agent Runs
             </Link>
           </Button>
+          {result.run.agent_wallet ? (
+            <Button asChild variant="outline" className="mb-6 ml-4">
+              <Link href={`/agents/${result.run.agent_wallet}`}>
+                <BadgeCheck />
+                Agent Passport
+              </Link>
+            </Button>
+          ) : null}
           <RunSummary run={result.run} />
         </div>
       </section>

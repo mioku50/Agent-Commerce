@@ -22,6 +22,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
+  BadgeCheck,
   Database,
   FileJson,
   PlusCircle,
@@ -332,6 +333,12 @@ export function StoreMarketplace({
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="outline" size="sm">
                 <Link href="/runs">See agent purchase timelines</Link>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/agents">
+                  <BadgeCheck />
+                  Agent Passports
+                </Link>
               </Button>
               <Button asChild variant="outline" size="sm">
                 <Link href="/seller">Create service</Link>

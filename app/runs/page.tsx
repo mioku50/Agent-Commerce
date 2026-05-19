@@ -19,7 +19,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { ArrowRight, Bot, Store } from "lucide-react";
+import { ArrowRight, BadgeCheck, Bot, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -76,9 +76,16 @@ function RunCard({ run }: { run: PublicAgentRun }) {
           </div>
         </dl>
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="font-mono text-xs text-muted-foreground">
-            {run.agent_wallet ? shortenHash(run.agent_wallet, 6) : "No wallet"}
-          </p>
+          {run.agent_wallet ? (
+            <Link
+              href={`/agents/${run.agent_wallet}`}
+              className="font-mono text-xs text-primary hover:underline"
+            >
+              {shortenHash(run.agent_wallet, 6)}
+            </Link>
+          ) : (
+            <p className="font-mono text-xs text-muted-foreground">No wallet</p>
+          )}
           <Button asChild>
             <Link href={`/runs/${run.id}`}>
               View timeline
@@ -169,6 +176,12 @@ export default function RunsPage() {
             <Link href="/store">
               <Store />
               Open API Store
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/agents">
+              <BadgeCheck />
+              Agent Passports
             </Link>
           </Button>
         </div>

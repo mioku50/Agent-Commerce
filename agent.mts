@@ -34,6 +34,10 @@ import {
   type AgentStepRow,
   type AgentStepStatus,
 } from "./lib/agent/run-persistence.ts";
+import {
+  createOrUpdateAgentProfileByWallet,
+  recalculateAgentProfile,
+} from "./lib/agent/passport-persistence.ts";
 import type {
   ApiService,
   ServiceMethod,
@@ -725,6 +729,7 @@ async function main() {
     },
   });
   runLog.supabaseRunId = supabaseRun?.id ?? null;
+  await createOrUpdateAgentProfileByWallet(agentAccount.address);
   await writeRunLog(runFilePath, runLog);
 
   console.log(`Run file: ${runFilePath}`);
@@ -748,6 +753,9 @@ async function main() {
       summary: runLog.summary,
       error: toErrorMessage(error),
     });
+    await recalculateAgentProfile(agentAccount.address, {
+      runId: runLog.supabaseRunId,
+    });
 
     console.error("\nAgent runner stopped gracefully.");
     if (runLog.depositTxHash) {
@@ -769,6 +777,9 @@ async function main() {
         status: "stopped",
         spent_usdc: runLog.spentUsdc,
         summary: runLog.summary,
+      });
+      await recalculateAgentProfile(agentAccount.address, {
+        runId: runLog.supabaseRunId,
       });
       console.log(`\nAgent stopped. Run file: ${runFilePath}`);
       process.exit(0);
@@ -1126,11 +1137,18 @@ async function main() {
       summary,
       error: failedCount > 0 ? "One or more selected services failed." : null,
     });
+    const passport = await recalculateAgentProfile(agentAccount.address, {
+      runId: runLog.supabaseRunId,
+    });
 
     console.log(`\nAgent run complete. ${summary}`);
     console.log(`Run file: ${runFilePath}`);
     if (runLog.supabaseRunId) {
       console.log(`Timeline: ${baseUrl}/runs/${runLog.supabaseRunId}`);
+    }
+    if (passport) {
+      console.log(`Agent Passport: ${baseUrl}/agents/${agentAccount.address}`);
+      console.log(`Demo trust score: ${passport.trust_score}/100`);
     }
   } catch (error) {
     await gracefulFailure("Agent run", error);

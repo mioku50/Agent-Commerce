@@ -20,6 +20,7 @@ import Link from "next/link";
 import {
   BookOpen,
   Bot,
+  BadgeCheck,
   ChartNoAxesCombined,
   LayoutDashboard,
   ListChecks,
@@ -92,6 +93,12 @@ export default function Home() {
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
+              <Link href="/agents">
+                <BadgeCheck />
+                Agent Passports
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
               <Link href="https://github.com/mioku50/Agent-Commerce#readme">
                 <BookOpen />
                 View README
@@ -144,8 +151,9 @@ export default function Home() {
           </h2>
           <p className="mt-4 leading-7 text-muted-foreground">
             Phase 1 keeps the product surface focused: a clear landing page,
-            a metadata-backed API Store, and a seller dashboard that preserves
-            the existing x402, Gateway, and Supabase payment foundation.
+            a metadata-backed API Store, buyer-agent timelines, public Agent
+            Passports, and a seller dashboard that preserves the existing x402,
+            Gateway, and Supabase payment foundation.
           </p>
         </div>
         <div className="mt-8 grid gap-4 md:grid-cols-3">
