@@ -45,3 +45,4 @@ next-env.d.ts
 .agent-runs/
 arc-agent-commerce@0.1.0
 node
+load-test-env.sh
