@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { Bot, Fuel, ListChecks, Store } from "lucide-react";
+import { Bot, Fuel, ListChecks, Sparkles, Store } from "lucide-react";
 import { AgentControlClient } from "@/app/agent-control/agent-control-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -55,6 +55,12 @@ export default function AgentControlPage() {
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
+            <Button asChild variant="outline">
+              <Link href="/demo">
+                <Sparkles />
+                Guided Demo
+              </Link>
+            </Button>
             <Button asChild variant="outline">
               <Link href="/agent-launch">
                 <Fuel />

@@ -32,6 +32,7 @@ import {
   LogOut,
   PlusCircle,
   ReceiptText,
+  Sparkles,
   Store,
   type LucideIcon,
 } from "lucide-react";
@@ -46,6 +47,7 @@ type GlobalNavClientProps = {
 
 const publicLinks = [
   { href: "/", label: "Home", icon: House },
+  { href: "/demo", label: "Guided Demo", icon: Sparkles },
   { href: "/store", label: "API Store", icon: Store },
   { href: "/agent-control", label: "Agent Control", icon: Bot },
   { href: "/agent-launch", label: "Agent Launch", icon: Fuel },

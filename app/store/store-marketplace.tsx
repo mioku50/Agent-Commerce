@@ -29,6 +29,7 @@ import {
   PlusCircle,
   Search,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -169,6 +170,12 @@ export function StoreMarketplace({
                   </div>
                 </dl>
                 <div className="mt-4 flex flex-col gap-2">
+                  <Button asChild size="sm">
+                    <Link href="/demo">
+                      <Sparkles />
+                      Start guided demo
+                    </Link>
+                  </Button>
                   <Button asChild size="sm">
                     <Link href="/agent-launch">
                       <Fuel />
@@ -342,6 +349,12 @@ export function StoreMarketplace({
                 </h2>
               </div>
             <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/demo">
+                  <Sparkles />
+                  Guided demo
+                </Link>
+              </Button>
               <Button asChild variant="outline" size="sm">
                 <Link href="/runs">See agent purchase timelines</Link>
               </Button>

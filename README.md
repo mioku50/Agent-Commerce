@@ -235,6 +235,82 @@ Each receipt links together the buyer-agent wallet, Agent Passport, service purc
 
 Receipts are an audit-trail projection over public metadata in `agent_purchase_steps`, `agent_runs`, `payment_events`, and `store_services`. They do not store private keys, payment signatures, bearer tokens, Circle secrets, or service role keys. The existing x402/Gateway verification and settlement core remains unchanged.
 
+## Phase 9 — UI Polish and Global Navigation
+
+The app now has a consistent top navigation bar, shared cream/off-white and blue-accent styling, and cleaner page structure across the public and seller surfaces.
+
+Polished surfaces include:
+
+- landing page
+- `/store` and service detail pages
+- `/agent-control`
+- `/runs` and run details
+- `/agents` and Agent Passports
+- `/receipts` and receipt details
+- `/seller`, `/seller/analytics`, and seller service forms
+- `/login`
+
+Seller auth remains email/password. The login page is positioned as the protected seller entrypoint, while public pages remain publicly readable.
+
+## Phase 10 — Wallet Connect and Arc Token UX
+
+Browser wallet support now lets users connect an injected EVM wallet, inspect the connected address and current network, switch/add Arc Testnet, and view Arc Testnet balances.
+
+Wallet UX features:
+
+- Arc Testnet chain config in `lib/wallet/arc.ts`
+- connect wallet button and connected wallet badge
+- network status and switch-to-Arc action
+- native gas USDC balance
+- ERC-20 USDC balance
+- quick links to Circle faucet, Arc explorer, Agent Passport, and related receipts
+
+This phase is read/display/navigation focused. It does not move private keys into the browser, does not replace the CLI buyer-agent payment flow, and does not modify x402/Gateway settlement logic.
+
+## Phase 11 — Wallet-Funded Agent Launch
+
+`/agent-launch` adds a safe funding bridge between a user's browser wallet and the existing local buyer-agent CLI flow.
+
+The page lets a user:
+
+- connect an Arc Testnet wallet
+- inspect source wallet native gas and ERC-20 USDC balances
+- enter or prefill a buyer-agent wallet destination from `NEXT_PUBLIC_DEMO_BUYER_ADDRESS`
+- send native gas USDC to the buyer-agent wallet
+- send ERC-20 USDC to the buyer-agent wallet
+- inspect transaction status, tx hash, and explorer links
+- copy a local `npm run agent` command after funding
+- jump to Agent Control, receipts, and Agent Passport pages
+
+Browser funding actions require user wallet confirmation and only run on Arc Testnet. The browser never receives private keys and never runs paid API purchases. x402 signing, Gateway payment behavior, and service calls remain in the local CLI buyer-agent flow.
+
+## Phase 12 — Demo Story / Guided Showcase
+
+`/demo` turns the technical surfaces into a two-minute guided product story.
+
+The guided demo uses one real scenario:
+
+> An AI agent analyzes the tone and sentiment of a short builder update by discovering paid APIs, selecting useful services, paying with USDC on Arc through x402/Gateway, and producing public receipts and Agent Passport updates.
+
+The page walks through:
+
+1. browsing the API Store
+2. planning a buyer-agent run
+3. funding the buyer-agent wallet
+4. running the local CLI agent
+5. inspecting the public timeline
+6. inspecting commerce receipts
+7. inspecting the Agent Passport
+8. inspecting seller analytics
+
+It also shows a copyable demo command:
+
+```bash
+AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
+```
+
+Live proof cards link to the latest successful run, latest receipt, main Agent Passport, and seller analytics when data is available. If no live data is available, the page shows a helpful empty state instead of failing.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -291,6 +367,10 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - seller analytics for paid calls, estimated revenue, buyer wallets, and request IDs
 - buyer-agent control center for dry-run planning and command generation
 - public commerce receipts for paid x402 API purchases
+- global navigation and polished demo styling
+- browser wallet connect and Arc Testnet balance visibility
+- wallet-funded agent launch for funding the local buyer-agent wallet
+- guided demo story with live proof cards
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -299,6 +379,7 @@ This scope intentionally avoids deep changes to payment verification, Gateway ba
 Planned architecture:
 
 - **Frontend**: Next.js App Router, TypeScript, API Store UI, seller dashboard.
+- **Demo Story**: guided `/demo` page linking the full proof loop.
 - **Service Registry**: typed metadata in `lib/services/registry.ts`.
 - **Seller Services**: Supabase-backed listings in `store_services`, merged with the static registry for public discovery.
 - **API Routes**: x402-protected service endpoints in later phases.
@@ -306,6 +387,7 @@ Planned architecture:
 - **Gateway**: balance and withdrawal flows for seller earnings.
 - **Storage**: Supabase for payment events, purchases, agent runs, Agent Passports, reputation events, and dashboard data.
 - **Receipts**: public audit trail derived from paid purchase steps, run metadata, service metadata, and matched payment events.
+- **Wallet UX**: browser wallet connect, Arc Testnet balance display, and explicit user-confirmed testnet funding actions.
 - **Agent**: local buyer-agent script with service selection, x402 payment flow, spending policy, and purchase reasoning log.
 
 Suggested future structure:
@@ -313,7 +395,11 @@ Suggested future structure:
 ```txt
 app/
   page.tsx
+  demo/
+    page.tsx
   agent-control/
+    page.tsx
+  agent-launch/
     page.tsx
   store/
     page.tsx
@@ -367,10 +453,14 @@ supabase/
 6. **Seller Analytics + Revenue Dashboard**: complete / active prototype.
 7. **Buyer Agent Control Center**: complete / active prototype.
 8. **Public Commerce Receipts / Audit Trail**: complete / active prototype.
-9. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
-10. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-11. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
-12. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
+9. **UI Polish and Global Navigation**: complete / active prototype.
+10. **Wallet Connect and Arc Token UX**: complete / active prototype.
+11. **Wallet-Funded Agent Launch**: complete / active prototype.
+12. **Demo Story / Guided Showcase**: complete / active prototype.
+13. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
+14. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+15. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
+16. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -399,7 +489,9 @@ npm run dev
 Then open:
 
 - `http://localhost:3000`
+- `http://localhost:3000/demo`
 - `http://localhost:3000/agent-control`
+- `http://localhost:3000/agent-launch`
 - `http://localhost:3000/store`
 - `http://localhost:3000/seller`
 - `http://localhost:3000/seller/analytics`
@@ -426,8 +518,14 @@ npm run agent -- --task "Prepare a market context report" --limit 0.05
 AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Create a small proof of agent commerce" --limit 0.001
 ```
 
-After a run completes, open `/agents` or `/agents/<wallet>` to view the public Agent Passport for that buyer-agent wallet. Open `/receipts` or `/receipts/<paid-step-id>` to inspect shareable commerce receipts for paid API purchases.
+For the guided sentiment/tone demo:
+
+```bash
+AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
+```
+
+After a run completes, open `/demo` for the guided proof path, `/runs` for the public timeline, `/agents` or `/agents/<wallet>` for the Agent Passport, and `/receipts` or `/receipts/<paid-step-id>` for shareable commerce receipts.
 
 ## Status
 
-Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, seller analytics, and public commerce receipts while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.
+Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, seller analytics, public commerce receipts, browser wallet visibility/funding UX, and a guided demo story while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.

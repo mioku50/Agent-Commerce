@@ -27,6 +27,7 @@ import {
   ListChecks,
   PlusCircle,
   ReceiptText,
+  Sparkles,
   Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -72,12 +73,18 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button asChild size="lg">
+              <Link href="/demo">
+                <Sparkles />
+                Start guided demo
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="secondary">
               <Link href="/store">
                 <Store />
                 Open API Store
               </Link>
             </Button>
-            <Button asChild size="lg" variant="secondary">
+            <Button asChild size="lg" variant="outline">
               <Link href="/dashboard">
                 <LayoutDashboard />
                 Open Seller Dashboard
@@ -162,6 +169,24 @@ export default function Home() {
             </div>
           </div>
           <ArcWalletWidget />
+        </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
+        <div className="grid gap-4 md:grid-cols-3">
+          {[
+            ["1", "Agent discovers APIs", "The API Store exposes paid services, prices, schemas, and machine-readable discovery metadata."],
+            ["2", "Agent pays with USDC on Arc", "The local buyer-agent uses the existing x402/Gateway flow to satisfy HTTP 402 payment requirements."],
+            ["3", "Proof updates publicly", "Run timelines, commerce receipts, Agent Passports, and seller analytics make the purchase auditable."],
+          ].map(([step, title, body]) => (
+            <article className="rounded-lg border bg-card p-5 shadow-sm" key={title}>
+              <span className="flex size-8 items-center justify-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground">
+                {step}
+              </span>
+              <h2 className="mt-4 text-lg font-semibold">{title}</h2>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">{body}</p>
+            </article>
+          ))}
         </div>
       </section>
 

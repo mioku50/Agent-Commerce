@@ -19,7 +19,14 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { ArrowRight, BadgeCheck, Bot, ReceiptText, Store } from "lucide-react";
+import {
+  ArrowRight,
+  BadgeCheck,
+  Bot,
+  ReceiptText,
+  Sparkles,
+  Store,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -172,6 +179,12 @@ export default function RunsPage() {
               timeline.
             </p>
           </div>
+          <Button asChild variant="outline">
+            <Link href="/demo">
+              <Sparkles />
+              Guided Demo
+            </Link>
+          </Button>
           <Button asChild variant="outline">
             <Link href="/agent-control">
               <Bot />

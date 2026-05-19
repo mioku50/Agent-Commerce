@@ -26,6 +26,7 @@ import {
   FileSearch,
   ListChecks,
   ReceiptText,
+  Sparkles,
   Store,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -252,6 +253,12 @@ export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) 
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
+            <Button asChild variant="outline">
+              <Link href="/demo">
+                <Sparkles />
+                Guided Demo
+              </Link>
+            </Button>
             <Button asChild variant="outline">
               <Link href="/agent-control">
                 <Bot />
