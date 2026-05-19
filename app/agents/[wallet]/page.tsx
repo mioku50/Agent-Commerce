@@ -26,6 +26,7 @@ import {
   BadgeCheck,
   Clock,
   ListChecks,
+  ReceiptText,
   ShieldCheck,
 } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
@@ -39,6 +40,10 @@ import {
   type PublicAgentProfile,
   type PublicAgentReputationEvent,
 } from "@/lib/agent/passport-persistence";
+import {
+  fetchReceiptsByAgentWallet,
+  type CommerceReceipt,
+} from "@/lib/commerce/receipts";
 import { shortenHash } from "@/lib/utils";
 
 type AgentPassportPageProps = {
@@ -226,7 +231,65 @@ function EventsPanel({ events }: { events: PublicAgentReputationEvent[] }) {
   );
 }
 
-function PassportContent({ detail }: { detail: AgentPassportDetail }) {
+function ReceiptsPanel({ receipts }: { receipts: CommerceReceipt[] }) {
+  return (
+    <Card className="rounded-lg shadow-sm">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-xl">
+          <ReceiptText className="size-5" />
+          Recent receipts
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3">
+        {receipts.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No paid commerce receipts are linked to this wallet yet.
+          </p>
+        ) : (
+          receipts.map((receipt) => (
+            <div key={receipt.id} className="rounded-lg border p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="default">x402 paid</Badge>
+                  <Badge
+                    variant={
+                      receipt.serviceSourceType === "seller_mock"
+                        ? "secondary"
+                        : "outline"
+                    }
+                  >
+                    {receipt.sourceLabel}
+                  </Badge>
+                </div>
+                <span className="font-mono text-xs text-muted-foreground">
+                  {receipt.amountUsdc} USDC
+                </span>
+              </div>
+              <p className="mt-3 font-medium">{receipt.serviceName}</p>
+              <p className="mt-1 break-all font-mono text-xs text-muted-foreground">
+                {receipt.endpoint ?? "n/a"}
+              </p>
+              <Button asChild variant="outline" size="sm" className="mt-3">
+                <Link href={`/receipts/${receipt.id}`}>
+                  Open receipt
+                  <ArrowRight />
+                </Link>
+              </Button>
+            </div>
+          ))
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function PassportContent({
+  detail,
+  receipts,
+}: {
+  detail: AgentPassportDetail;
+  receipts: CommerceReceipt[];
+}) {
   const { profile } = detail;
 
   return (
@@ -284,6 +347,7 @@ function PassportContent({ detail }: { detail: AgentPassportDetail }) {
           <RunsPanel runs={detail.recentRuns} />
           <EventsPanel events={detail.recentEvents} />
         </div>
+        <ReceiptsPanel receipts={receipts} />
       </section>
     </>
   );
@@ -292,11 +356,14 @@ function PassportContent({ detail }: { detail: AgentPassportDetail }) {
 async function AgentPassport({ params }: AgentPassportPageProps) {
   await connection();
   const { wallet } = await params;
-  const detail = await fetchAgentPassport(wallet).catch(() => null);
+  const [detail, receipts] = await Promise.all([
+    fetchAgentPassport(wallet).catch(() => null),
+    fetchReceiptsByAgentWallet(wallet, 6).catch(() => [] as CommerceReceipt[]),
+  ]);
 
   if (!detail) notFound();
 
-  return <PassportContent detail={detail} />;
+  return <PassportContent detail={detail} receipts={receipts} />;
 }
 
 function AgentPassportFallback() {

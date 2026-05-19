@@ -25,6 +25,7 @@ import {
   LayoutDashboard,
   ListChecks,
   PlusCircle,
+  ReceiptText,
   Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,12 @@ export default function Home() {
               <Link href="/agents">
                 <BadgeCheck />
                 Agent Passports
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/receipts">
+                <ReceiptText />
+                Commerce Receipts
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">

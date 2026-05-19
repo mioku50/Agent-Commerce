@@ -20,7 +20,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { ArrowLeft, BadgeCheck, ExternalLink } from "lucide-react";
+import { ArrowLeft, BadgeCheck, ExternalLink, ReceiptText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -226,6 +226,17 @@ function TimelineStep({ step }: { step: PublicAgentStep }) {
           </div>
           <JsonPreview value={step.response_preview} />
         </div>
+
+        {step.status === "paid" ? (
+          <div className="border-t pt-4">
+            <Button asChild variant="outline">
+              <Link href={`/receipts/${step.id}`}>
+                <ReceiptText />
+                Public receipt
+              </Link>
+            </Button>
+          </div>
+        ) : null}
       </CardContent>
     </Card>
   );

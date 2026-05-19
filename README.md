@@ -213,6 +213,21 @@ AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze the sentiment and tone of
 
 `agent.mts` and `/api/agent/plan` now share the same scripted planner helper, so CLI runs and web dry-runs make consistent service-selection decisions.
 
+## Phase 8 — Public Commerce Receipts / Audit Trail
+
+Paid agent purchases now produce public commerce receipts derived from existing run-step and payment metadata.
+
+Receipt views:
+
+- `/receipts`: recent paid API purchase receipts
+- `/receipts/[id]`: one shareable receipt for a paid purchase step
+- `GET /api/receipts`: machine-readable recent receipts
+- `GET /api/receipts/[id]`: one receipt as JSON
+
+Each receipt links together the buyer-agent wallet, Agent Passport, service purchased, official or seller-created source type, method, endpoint, price paid, request ID, run timeline, matched payment event when available, timestamp, and safe response preview.
+
+Receipts are an audit-trail projection over public metadata in `agent_purchase_steps`, `agent_runs`, `payment_events`, and `store_services`. They do not store private keys, payment signatures, bearer tokens, Circle secrets, or service role keys. The existing x402/Gateway verification and settlement core remains unchanged.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -268,6 +283,7 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - public Agent Passport profiles and reputation events
 - seller analytics for paid calls, estimated revenue, buyer wallets, and request IDs
 - buyer-agent control center for dry-run planning and command generation
+- public commerce receipts for paid x402 API purchases
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -282,6 +298,7 @@ Planned architecture:
 - **Payments**: x402/nanopayments on Arc using USDC.
 - **Gateway**: balance and withdrawal flows for seller earnings.
 - **Storage**: Supabase for payment events, purchases, agent runs, Agent Passports, reputation events, and dashboard data.
+- **Receipts**: public audit trail derived from paid purchase steps, run metadata, service metadata, and matched payment events.
 - **Agent**: local buyer-agent script with service selection, x402 payment flow, spending policy, and purchase reasoning log.
 
 Suggested future structure:
@@ -301,12 +318,15 @@ app/
     page.tsx
   agents/
     page.tsx
+  receipts/
+    page.tsx
   dashboard/
     page.tsx
   api/
     agent/
       plan/
       runs/
+    receipts/
     store/
       quote/
       market/
@@ -339,10 +359,11 @@ supabase/
 5. **Agent Identity + Reputation Passport**: complete / active prototype.
 6. **Seller Analytics + Revenue Dashboard**: complete / active prototype.
 7. **Buyer Agent Control Center**: complete / active prototype.
-8. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
-9. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-10. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, and reputation.
-11. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
+8. **Public Commerce Receipts / Audit Trail**: complete / active prototype.
+9. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
+10. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+11. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
+12. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -377,6 +398,7 @@ Then open:
 - `http://localhost:3000/seller/analytics`
 - `http://localhost:3000/runs`
 - `http://localhost:3000/agents`
+- `http://localhost:3000/receipts`
 - `http://localhost:3000/dashboard`
 
 Useful checks:
@@ -397,8 +419,8 @@ npm run agent -- --task "Prepare a market context report" --limit 0.05
 AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Create a small proof of agent commerce" --limit 0.001
 ```
 
-After a run completes, open `/agents` or `/agents/<wallet>` to view the public Agent Passport for that buyer-agent wallet.
+After a run completes, open `/agents` or `/agents/<wallet>` to view the public Agent Passport for that buyer-agent wallet. Open `/receipts` or `/receipts/<paid-step-id>` to inspect shareable commerce receipts for paid API purchases.
 
 ## Status
 
-Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, and seller analytics while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.
+Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, seller analytics, and public commerce receipts while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.

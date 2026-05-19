@@ -171,12 +171,13 @@ function RecentPurchasesTable({
               <TableHead>Payment event</TableHead>
               <TableHead>Revenue</TableHead>
               <TableHead>Run</TableHead>
+              <TableHead>Receipt</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {purchases.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-muted-foreground">
+                <TableCell colSpan={8} className="text-muted-foreground">
                   No paid purchases recorded yet.
                 </TableCell>
               </TableRow>
@@ -239,6 +240,15 @@ function RecentPurchasesTable({
                       >
                         Timeline
                         <ArrowRight size={14} />
+                      </Link>
+                    </TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/receipts/${purchase.stepId}`}
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                      >
+                        Receipt
+                        <ReceiptText size={14} />
                       </Link>
                     </TableCell>
                   </TableRow>
@@ -440,6 +450,12 @@ export default function SellerAnalyticsPage() {
               <Link href="/dashboard">
                 <ChartNoAxesCombined />
                 Seller Dashboard
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/receipts">
+                <ReceiptText />
+                Receipts
               </Link>
             </Button>
             <Button asChild variant="outline">

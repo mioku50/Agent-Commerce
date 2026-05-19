@@ -19,7 +19,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { ArrowRight, BadgeCheck, Bot, Store } from "lucide-react";
+import { ArrowRight, BadgeCheck, Bot, ReceiptText, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -188,6 +188,12 @@ export default function RunsPage() {
             <Link href="/agents">
               <BadgeCheck />
               Agent Passports
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/receipts">
+              <ReceiptText />
+              Receipts
             </Link>
           </Button>
         </div>

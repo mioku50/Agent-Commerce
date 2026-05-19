@@ -23,6 +23,7 @@ import {
   ArrowRight,
   BadgeCheck,
   Bot,
+  FileSearch,
   ListChecks,
   ReceiptText,
   Store,
@@ -31,85 +32,116 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  listAgentProfiles,
-  type PublicAgentProfile,
-} from "@/lib/agent/passport-persistence";
+  fetchRecentReceipts,
+  type CommerceReceipt,
+} from "@/lib/commerce/receipts";
 import { shortenHash } from "@/lib/utils";
 
 export const metadata = {
-  title: "Agent Passports | Arc Agent Commerce",
-  description: "Public buyer-agent identity and reputation passports.",
+  title: "Commerce Receipts | Arc Agent Commerce",
+  description: "Public audit trail for paid x402 API purchases.",
 };
 
-function formatDate(value: string | null) {
-  if (!value) return "n/a";
-
+function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
 }
 
-function ProfileCard({ profile }: { profile: PublicAgentProfile }) {
+function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
   return (
     <Card className="rounded-lg shadow-sm">
       <CardHeader>
         <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">Agent Passport</Badge>
-          <Badge variant={profile.trust_score >= 60 ? "default" : "outline"}>
-            Trust {profile.trust_score}/100
+          <Badge variant="default">x402 paid</Badge>
+          <Badge
+            variant={
+              receipt.serviceSourceType === "seller_mock" ? "secondary" : "outline"
+            }
+          >
+            {receipt.sourceLabel}
+          </Badge>
+          <Badge variant={receipt.paymentEvent ? "default" : "outline"}>
+            {receipt.paymentEventStatusLabel}
           </Badge>
         </div>
-        <CardTitle className="break-all font-mono text-xl">
-          {shortenHash(profile.wallet, 8)}
-        </CardTitle>
+        <CardTitle className="text-xl">{receipt.serviceName}</CardTitle>
         <p className="text-sm text-muted-foreground">
-          Last run: {formatDate(profile.last_run_at)}
+          {formatDate(receipt.createdAt)}
         </p>
       </CardHeader>
       <CardContent className="grid gap-5">
-        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <dt className="text-muted-foreground">Runs</dt>
-            <dd className="font-mono">{profile.total_runs}</dd>
+            <dt className="text-muted-foreground">Amount</dt>
+            <dd className="font-mono">{receipt.amountUsdc} USDC</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Paid</dt>
-            <dd className="font-mono">{profile.paid_requests}</dd>
+            <dt className="text-muted-foreground">Method</dt>
+            <dd className="font-mono">{receipt.method ?? "n/a"}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Seller APIs</dt>
-            <dd className="font-mono">{profile.seller_created_services_used}</dd>
+            <dt className="text-muted-foreground">Request ID</dt>
+            <dd className="font-mono">
+              {receipt.requestId ? shortenHash(receipt.requestId, 6) : "n/a"}
+            </dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Spent</dt>
-            <dd className="font-mono">{profile.total_usdc_spent} USDC</dd>
+            <dt className="text-muted-foreground">Buyer agent</dt>
+            <dd className="font-mono">
+              {receipt.buyerWallet ? shortenHash(receipt.buyerWallet, 5) : "n/a"}
+            </dd>
           </div>
         </dl>
-        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-xs text-muted-foreground">
-            Reputation is derived from public run and purchase-step history.
+        {receipt.endpoint ? (
+          <p className="break-all rounded-md bg-muted p-3 font-mono text-xs text-muted-foreground">
+            {receipt.endpoint}
           </p>
+        ) : null}
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:flex-wrap">
           <Button asChild>
-            <Link href={`/agents/${profile.wallet}`}>
-              View passport
+            <Link href={`/receipts/${receipt.id}`}>
+              Open receipt
               <ArrowRight />
             </Link>
           </Button>
+          <Button asChild variant="outline">
+            <Link href={receipt.links.run}>
+              Run timeline
+              <ListChecks />
+            </Link>
+          </Button>
+          {receipt.links.agent ? (
+            <Button asChild variant="outline">
+              <Link href={receipt.links.agent}>
+                Agent Passport
+                <BadgeCheck />
+              </Link>
+            </Button>
+          ) : null}
+          {receipt.links.service ? (
+            <Button asChild variant="outline">
+              <Link href={receipt.links.service}>
+                Service
+                <Store />
+              </Link>
+            </Button>
+          ) : null}
         </div>
       </CardContent>
     </Card>
   );
 }
 
-async function AgentsList() {
+async function ReceiptList() {
   await connection();
 
-  let profiles: PublicAgentProfile[] = [];
+  let receipts: CommerceReceipt[] = [];
   let error: string | null = null;
 
   try {
-    profiles = await listAgentProfiles(30);
+    receipts = await fetchRecentReceipts({ limit: 30 });
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
   }
@@ -119,63 +151,63 @@ async function AgentsList() {
       {error ? (
         <Card className="rounded-lg">
           <CardContent className="p-6">
-            <p className="font-medium">Agent passports are not available yet.</p>
+            <p className="font-medium">Commerce receipts are not available yet.</p>
             <p className="mt-2 text-sm text-muted-foreground">{error}</p>
           </CardContent>
         </Card>
-      ) : profiles.length === 0 ? (
+      ) : receipts.length === 0 ? (
         <Card className="rounded-lg">
           <CardContent className="flex flex-col items-start gap-4 p-6">
             <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <Bot size={20} />
+              <FileSearch size={20} />
             </div>
             <div>
-              <p className="font-medium">No agent passports yet.</p>
+              <p className="font-medium">No paid commerce receipts yet.</p>
               <p className="mt-2 text-sm text-muted-foreground">
-                Run the buyer-agent after applying the Phase 5 migration to create
-                the first public wallet passport.
+                Run a buyer-agent purchase through the API Store to create the
+                first public receipt.
               </p>
             </div>
           </CardContent>
         </Card>
       ) : (
-        profiles.map((profile) => (
-          <ProfileCard key={profile.wallet} profile={profile} />
+        receipts.map((receipt) => (
+          <ReceiptCard key={receipt.id} receipt={receipt} />
         ))
       )}
     </section>
   );
 }
 
-function AgentsFallback() {
+function ReceiptsFallback() {
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6">
       <Card className="rounded-lg">
         <CardContent className="p-6 text-sm text-muted-foreground">
-          Loading agent passports...
+          Loading commerce receipts...
         </CardContent>
       </Card>
     </section>
   );
 }
 
-export default function AgentsPage() {
+export default function ReceiptsPage() {
   return (
     <main className="min-h-screen bg-background">
       <section className="border-b bg-secondary/30">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-12 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">Agent Identity</Badge>
-              <Badge variant="outline">Reputation Passport</Badge>
+              <Badge variant="secondary">Public audit trail</Badge>
+              <Badge variant="outline">Commerce receipts</Badge>
             </div>
             <h1 className="text-4xl font-bold tracking-normal text-foreground sm:text-5xl">
-              Agent Passports
+              Commerce Receipts
             </h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-              Public buyer-agent profiles derived from real API Store runs,
-              paid x402 requests, seller-created service usage, and budget
-              discipline.
+              Shareable receipts for paid agent API purchases, linking buyer
+              wallets, Agent Passports, services, request IDs, run timelines,
+              and matched payment events where available.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -188,19 +220,13 @@ export default function AgentsPage() {
             <Button asChild variant="outline">
               <Link href="/runs">
                 <ListChecks />
-                View Runs
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/receipts">
-                <ReceiptText />
-                Receipts
+                Agent Runs
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/store">
                 <Store />
-                Open Store
+                API Store
               </Link>
             </Button>
           </div>
@@ -209,14 +235,14 @@ export default function AgentsPage() {
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8 sm:px-6 md:grid-cols-3">
         {[
-          ["Trust score", "Deterministic demo score from activity"],
-          ["Usage stats", "Runs, paid requests, skipped and failed calls"],
-          ["Service mix", "Official sample and seller-created APIs used"],
+          ["x402 paid", "Only successful paid purchase steps become receipts"],
+          ["Agent-linked", "Every receipt links to a buyer wallet and Passport"],
+          ["Payment-aware", "Matched payment events are shown without signatures"],
         ].map(([title, body]) => (
           <Card key={title} className="rounded-lg">
             <CardHeader>
               <div className="mb-3 flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                <BadgeCheck size={20} />
+                <ReceiptText size={20} />
               </div>
               <CardTitle className="text-lg">{title}</CardTitle>
             </CardHeader>
@@ -227,8 +253,8 @@ export default function AgentsPage() {
         ))}
       </section>
 
-      <Suspense fallback={<AgentsFallback />}>
-        <AgentsList />
+      <Suspense fallback={<ReceiptsFallback />}>
+        <ReceiptList />
       </Suspense>
     </main>
   );
