@@ -43,3 +43,5 @@ next-env.d.ts
 *.zip
 *.zip:Zone.Identifier
 .agent-runs/
+arc-agent-commerce@0.1.0
+node
