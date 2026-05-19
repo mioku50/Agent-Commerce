@@ -173,6 +173,12 @@ export default function RunsPage() {
             </p>
           </div>
           <Button asChild variant="outline">
+            <Link href="/agent-control">
+              <Bot />
+              Agent Control
+            </Link>
+          </Button>
+          <Button asChild variant="outline">
             <Link href="/store">
               <Store />
               Open API Store

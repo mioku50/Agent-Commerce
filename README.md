@@ -188,6 +188,31 @@ Payment event linking is best-effort and non-blocking. New runs try to store `pa
 
 No private keys, signed payment authorizations, Circle secrets, or service role keys are exposed. The x402/Gateway verification and settlement core remains unchanged.
 
+## Phase 7 — Buyer Agent Control Center
+
+`/agent-control` adds a safe web planning surface for configuring a buyer-agent run before executing the local CLI agent.
+
+Control Center features:
+
+- task input
+- budget in USDC
+- preferred category filters
+- max service price guardrail
+- seller-created service toggle
+- official sample service toggle
+- dry-run / local-command mode
+- copyable local command
+
+The planning API `POST /api/agent/plan` fetches the same API Store services that the CLI agent discovers, applies the selected policy, and returns selected/skipped services with deterministic reasoning and estimated spend.
+
+No paid request happens in the browser. The route does not receive or store private keys, does not move funds, does not deposit into Gateway, and does not call protected x402 endpoints. Live payments still run through:
+
+```bash
+AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze the sentiment and tone of an Arc Agent Commerce demo" --limit 0.005
+```
+
+`agent.mts` and `/api/agent/plan` now share the same scripted planner helper, so CLI runs and web dry-runs make consistent service-selection decisions.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -201,6 +226,7 @@ The buyer agent should eventually be able to:
 - receive the protected API response
 - log what it bought and why
 - stop when a spending policy is reached
+- dry-run a task and budget in `/agent-control` before running the local CLI
 
 ### Seller Flow
 
@@ -241,6 +267,7 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - safe protected mock services for marketplace expansion
 - public Agent Passport profiles and reputation events
 - seller analytics for paid calls, estimated revenue, buyer wallets, and request IDs
+- buyer-agent control center for dry-run planning and command generation
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -262,6 +289,8 @@ Suggested future structure:
 ```txt
 app/
   page.tsx
+  agent-control/
+    page.tsx
   store/
     page.tsx
   seller/
@@ -276,6 +305,7 @@ app/
     page.tsx
   api/
     agent/
+      plan/
       runs/
     store/
       quote/
@@ -308,10 +338,11 @@ supabase/
 4. **Seller Creator Mode**: complete / active prototype.
 5. **Agent Identity + Reputation Passport**: complete / active prototype.
 6. **Seller Analytics + Revenue Dashboard**: complete / active prototype.
-7. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
-8. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-9. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, and reputation.
-10. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
+7. **Buyer Agent Control Center**: complete / active prototype.
+8. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
+9. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+10. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, and reputation.
+11. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -340,6 +371,7 @@ npm run dev
 Then open:
 
 - `http://localhost:3000`
+- `http://localhost:3000/agent-control`
 - `http://localhost:3000/store`
 - `http://localhost:3000/seller`
 - `http://localhost:3000/seller/analytics`

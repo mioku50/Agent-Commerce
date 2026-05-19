@@ -173,6 +173,12 @@ export default function AgentsPage() {
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button asChild variant="outline">
+              <Link href="/agent-control">
+                <Bot />
+                Agent Control
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
               <Link href="/runs">
                 <ListChecks />
                 View Runs

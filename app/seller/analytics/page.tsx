@@ -431,6 +431,12 @@ export default function SellerAnalyticsPage() {
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button asChild variant="outline">
+              <Link href="/agent-control">
+                <Bot />
+                Agent Control
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
               <Link href="/dashboard">
                 <ChartNoAxesCombined />
                 Seller Dashboard

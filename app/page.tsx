@@ -87,6 +87,12 @@ export default function Home() {
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
+              <Link href="/agent-control">
+                <Bot />
+                Agent Control
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
               <Link href="/runs">
                 <ListChecks />
                 View Agent Runs

@@ -38,6 +38,12 @@ import {
   createOrUpdateAgentProfileByWallet,
   recalculateAgentProfile,
 } from "./lib/agent/passport-persistence.ts";
+import {
+  DEFAULT_AGENT_BUDGET_USDC,
+  DEFAULT_AGENT_TASK,
+  planAgentPurchases,
+  type AgentPlanDecision,
+} from "./lib/agent/planner.ts";
 import type {
   ApiService,
   ServiceMethod,
@@ -109,14 +115,7 @@ type RunLog = {
   }>;
 };
 
-type ServiceDecision = {
-  service: ApiService;
-  decision: "selected" | "skipped";
-  reasoning: string;
-  expectedPriceUsd: number;
-};
-
-type ExecutableDecision = ServiceDecision & {
+type ExecutableDecision = AgentPlanDecision & {
   step: AgentStepRow | null;
   stepIndex: number;
 };
@@ -133,20 +132,11 @@ const ARC_TESTNET_RPC =
 const TARGET_NETWORK = "Arc Testnet (chain ID 5042002)";
 const GAS_FUND_AMOUNT = parseEther("0.01");
 const RUN_DIR = ".agent-runs";
-const DEFAULT_TASK =
-  "Explore the API Store and buy the minimum useful services to produce a short agent commerce proof.";
-const DEFAULT_BUDGET_USDC = 0.0113;
-const PURCHASE_ORDER = [
-  "premium-quote",
-  "market-snapshot",
-  "text-analyzer",
-  "agent-task",
-] as const;
 
 function parseArgs(): CliArgs {
   const args = process.argv.slice(2);
   let spendingLimit: number | null = null;
-  let task = DEFAULT_TASK;
+  let task = DEFAULT_AGENT_TASK;
   let mode = "scripted";
 
   for (let i = 0; i < args.length; i++) {
@@ -175,7 +165,7 @@ function parseArgs(): CliArgs {
 
   return {
     task,
-    spendingLimit: spendingLimit ?? DEFAULT_BUDGET_USDC,
+    spendingLimit: spendingLimit ?? DEFAULT_AGENT_BUDGET_USDC,
     mode,
   };
 }
@@ -342,186 +332,6 @@ async function withNonceRetry<T>(fn: () => Promise<T>, label: string): Promise<T
     }
   }
   throw new Error("unreachable");
-}
-
-function sortedServices(services: ApiService[]) {
-  return [...services].sort((a, b) => {
-    const aIndex = PURCHASE_ORDER.indexOf(a.slug as (typeof PURCHASE_ORDER)[number]);
-    const bIndex = PURCHASE_ORDER.indexOf(b.slug as (typeof PURCHASE_ORDER)[number]);
-    const normalizedA = aIndex === -1 ? Number.MAX_SAFE_INTEGER : aIndex;
-    const normalizedB = bIndex === -1 ? Number.MAX_SAFE_INTEGER : bIndex;
-
-    if (normalizedA !== normalizedB) return normalizedA - normalizedB;
-    if (a.priceUsd !== b.priceUsd) return a.priceUsd - b.priceUsd;
-    return a.name.localeCompare(b.name);
-  });
-}
-
-function matches(task: string, pattern: RegExp) {
-  return pattern.test(task.toLowerCase());
-}
-
-function taskTokens(task: string) {
-  const stopwords = new Set([
-    "with",
-    "using",
-    "from",
-    "only",
-    "when",
-    "useful",
-    "small",
-    "create",
-    "prepare",
-    "agent",
-    "commerce",
-    "proof",
-  ]);
-
-  return task
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((token) => token.length >= 4 && !stopwords.has(token));
-}
-
-function sellerServiceMatchesTask(service: ApiService, task: string) {
-  const normalizedCategory = service.category
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "\\W+");
-  const haystack = [
-    service.name,
-    service.slug,
-    service.category,
-    service.shortDescription,
-    service.longDescription,
-    service.exampleUseCase,
-    service.agentReasoningHint,
-  ]
-    .join(" ")
-    .toLowerCase();
-
-  if (normalizedCategory && matches(task, new RegExp(`\\b${normalizedCategory}\\b`))) {
-    return true;
-  }
-
-  return taskTokens(task).some((token) => haystack.includes(token));
-}
-
-function serviceReasonForSelection(service: ApiService, task: string) {
-  if (service.sourceType === "seller_mock") {
-    return `Seller-created mock service matches the task context and is safe for the Phase 4 stored-response MVP: ${task}`;
-  }
-
-  if (service.slug === "premium-quote") {
-    return "Low-cost proof of payment and useful short context for the task.";
-  }
-
-  if (service.slug === "market-snapshot") {
-    return "The task asks for market, data, context, research, or report material, and this service provides paid market data at a reasonable cost.";
-  }
-
-  if (service.slug === "text-analyzer") {
-    return "The task involves analysis, summary, text, or report generation, so a paid compute step can analyze the generated context.";
-  }
-
-  if (service.slug === "agent-task") {
-    return "The task justifies a higher-value multi-step agent task, and the remaining budget can cover it.";
-  }
-
-  return `The service appears useful for this task: ${task}`;
-}
-
-function shouldSelectLiveService(service: ApiService, task: string, budget: number) {
-  if (service.sourceType === "seller_mock") {
-    return sellerServiceMatchesTask(service, task);
-  }
-
-  if (service.sourceType === "external_placeholder") {
-    return false;
-  }
-
-  if (service.slug === "premium-quote") return true;
-  if (service.slug === "market-snapshot") {
-    return matches(task, /\b(market|data|context|report|research|snapshot|financial)\b/);
-  }
-  if (service.slug === "text-analyzer") {
-    return matches(task, /\b(text|summary|summarize|analysis|analyze|report|draft|write)\b/);
-  }
-  if (service.slug === "agent-task") {
-    return (
-      budget >= 0.0413 &&
-      matches(task, /\b(agent task|task|multi[- ]step|puzzle|work order)\b/)
-    );
-  }
-  return false;
-}
-
-function planPurchases(task: string, budget: number, services: ApiService[]) {
-  let remaining = budget;
-
-  return sortedServices(services).map((service): ServiceDecision => {
-    if (service.status === "coming-soon") {
-      return {
-        service,
-        decision: "skipped",
-        reasoning: "This service is coming soon and does not have a live paid endpoint in Phase 4.",
-        expectedPriceUsd: service.priceUsd,
-      };
-    }
-
-    if (service.sourceType === "external_placeholder") {
-      return {
-        service,
-        decision: "skipped",
-        reasoning: "External fulfillment is not enabled in this MVP, so the buyer-agent will not call this seller-created placeholder.",
-        expectedPriceUsd: service.priceUsd,
-      };
-    }
-
-    if (service.status !== "live") {
-      return {
-        service,
-        decision: "skipped",
-        reasoning: "This service is not marked live, so the scripted buyer-agent will not spend budget on it.",
-        expectedPriceUsd: service.priceUsd,
-      };
-    }
-
-    if (!service.isPaid) {
-      return {
-        service,
-        decision: "skipped",
-        reasoning: "This listing is not priced as a paid x402 service, so the buyer-agent will not spend Gateway balance on it.",
-        expectedPriceUsd: service.priceUsd,
-      };
-    }
-
-    if (!shouldSelectLiveService(service, task, budget)) {
-      return {
-        service,
-        decision: "skipped",
-        reasoning: "The scripted policy did not find enough task relevance to justify this paid call.",
-        expectedPriceUsd: service.priceUsd,
-      };
-    }
-
-    if (service.priceUsd > remaining + 0.0000001) {
-      return {
-        service,
-        decision: "skipped",
-        reasoning: `Skipped because ${service.priceLabel} exceeds the remaining budget of ${formatUsdc(remaining)} USDC.`,
-        expectedPriceUsd: service.priceUsd,
-      };
-    }
-
-    remaining = roundUsdc(remaining - service.priceUsd);
-
-    return {
-      service,
-      decision: "selected",
-      reasoning: serviceReasonForSelection(service, task),
-      expectedPriceUsd: service.priceUsd,
-    };
-  });
 }
 
 function serviceUrl(baseUrl: string, service: ApiService) {
@@ -1031,9 +841,14 @@ async function main() {
 
     runLog.status = "planning";
     await writeRunLog(runFilePath, runLog);
-    const decisions = planPurchases(args.task, args.spendingLimit, services);
-    const selectedCount = decisions.filter((decision) => decision.decision === "selected").length;
-    const skippedCount = decisions.length - selectedCount;
+    const plan = planAgentPurchases({
+      task: args.task,
+      budgetUsdc: args.spendingLimit,
+      services,
+    });
+    const decisions = plan.decisions;
+    const selectedCount = plan.selected.length;
+    const skippedCount = plan.skipped.length;
     console.log(`Planner selected ${selectedCount} service(s), skipped ${skippedCount}.`);
 
     await updateAgentRun(runLog.supabaseRunId, {
@@ -1044,6 +859,8 @@ async function main() {
         serviceCount: services.length,
         selectedCount,
         skippedCount,
+        estimatedSpendUsdc: plan.estimatedSpendUsdc,
+        planWarnings: plan.warnings,
       },
     });
 
