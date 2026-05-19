@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChartNoAxesCombined } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SellerServiceForm } from "@/app/seller/services/service-form";
@@ -28,7 +28,26 @@ async function EditSellerService({ params }: EditSellerServicePageProps) {
 
   if (!row) notFound();
 
-  return <SellerServiceForm initialService={rowToSellerService(row)} />;
+  const service = rowToSellerService(row);
+
+  return (
+    <div className="grid gap-4">
+      <div className="flex flex-wrap gap-2">
+        <Button asChild variant="outline">
+          <Link href="/seller/analytics">
+            <ChartNoAxesCombined />
+            View seller analytics
+          </Link>
+        </Button>
+        <Button asChild variant="outline">
+          <Link href={`/api/seller/services/${service.id}/analytics`}>
+            Service analytics JSON
+          </Link>
+        </Button>
+      </div>
+      <SellerServiceForm initialService={service} />
+    </div>
+  );
 }
 
 function EditSellerServiceFallback() {

@@ -35,8 +35,19 @@ export type PublicAgentStep = {
   reasoning: string | null;
   request_id: string | null;
   payment_event_id: string | null;
+  matched_payment_event_id?: string | null;
+  matched_gateway_tx?: string | null;
   response_preview: unknown;
   error: string | null;
+};
+
+type PublicPaymentEvent = {
+  id: string;
+  created_at: string;
+  endpoint: string;
+  payer: string;
+  amount_usdc: string;
+  gateway_tx: string | null;
 };
 
 const runColumns = [
@@ -72,6 +83,15 @@ const stepColumns = [
   "payment_event_id",
   "response_preview",
   "error",
+].join(",");
+
+const paymentEventColumns = [
+  "id",
+  "created_at",
+  "endpoint",
+  "payer",
+  "amount_usdc",
+  "gateway_tx",
 ].join(",");
 
 let supabase: SupabaseClient | null = null;
@@ -126,6 +146,48 @@ function attachCounts(
       failed_count: 0,
     }),
   }));
+}
+
+function toNumber(value: string | null | undefined) {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizedAmount(value: string | null | undefined) {
+  return Math.round(toNumber(value) * 1_000_000) / 1_000_000;
+}
+
+function matchPaymentEventsToSteps(run: PublicAgentRun, steps: PublicAgentStep[], events: PublicPaymentEvent[]) {
+  if (!run.agent_wallet || events.length === 0) return steps;
+
+  const usedEventIds = new Set<string>();
+
+  return steps.map((step) => {
+    if (step.status !== "paid" || step.payment_event_id || !step.endpoint) {
+      return step;
+    }
+
+    const expectedAmount = normalizedAmount(step.price_usdc);
+    const matchedEvent = events.find((event) => {
+      if (usedEventIds.has(event.id)) return false;
+
+      return (
+        event.endpoint === step.endpoint &&
+        event.payer.toLowerCase() === run.agent_wallet?.toLowerCase() &&
+        Math.abs(normalizedAmount(event.amount_usdc) - expectedAmount) < 0.000001
+      );
+    });
+
+    if (!matchedEvent) return step;
+
+    usedEventIds.add(matchedEvent.id);
+
+    return {
+      ...step,
+      matched_payment_event_id: matchedEvent.id,
+      matched_gateway_tx: matchedEvent.gateway_tx,
+    };
+  });
 }
 
 export async function fetchRecentAgentRuns(limit = 20) {
@@ -185,8 +247,38 @@ export async function fetchAgentRunDetail(runId: string) {
     })),
   )[0];
 
+  const paidEndpoints = Array.from(
+    new Set(
+      typedSteps
+        .filter((step) => step.status === "paid" && step.endpoint)
+        .map((step) => step.endpoint as string),
+    ),
+  );
+  let enrichedSteps = typedSteps;
+
+  if (counted.agent_wallet && paidEndpoints.length > 0) {
+    const from = new Date(new Date(counted.created_at).getTime() - 5 * 60 * 1000);
+    const to = new Date(new Date(counted.updated_at).getTime() + 10 * 60 * 1000);
+    const { data: paymentEvents, error: paymentEventsError } = await supabaseClient
+      .from("payment_events")
+      .select(paymentEventColumns)
+      .in("endpoint", paidEndpoints)
+      .ilike("payer", counted.agent_wallet)
+      .gte("created_at", from.toISOString())
+      .lte("created_at", to.toISOString())
+      .order("created_at", { ascending: true });
+
+    if (!paymentEventsError) {
+      enrichedSteps = matchPaymentEventsToSteps(
+        counted,
+        typedSteps,
+        (paymentEvents ?? []) as unknown as PublicPaymentEvent[],
+      );
+    }
+  }
+
   return {
     run: counted,
-    steps: typedSteps,
+    steps: enrichedSteps,
   };
 }

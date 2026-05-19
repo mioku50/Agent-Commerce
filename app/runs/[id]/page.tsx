@@ -136,6 +136,8 @@ function RunSummary({ run }: { run: PublicAgentRun }) {
 }
 
 function TimelineStep({ step }: { step: PublicAgentStep }) {
+  const paymentEventId = step.payment_event_id ?? step.matched_payment_event_id ?? null;
+
   return (
     <Card className="rounded-lg shadow-sm">
       <CardHeader>
@@ -177,17 +179,20 @@ function TimelineStep({ step }: { step: PublicAgentStep }) {
           <div>
             <dt className="text-muted-foreground">Payment event</dt>
             <dd>
-              {step.payment_event_id ? (
+              {paymentEventId ? (
                 <Link
                   href="/dashboard"
                   className="inline-flex items-center gap-1 text-primary hover:underline"
                 >
-                  {shortenHash(step.payment_event_id, 6)}
+                  {shortenHash(paymentEventId, 6)}
                   <ExternalLink size={12} />
                 </Link>
               ) : (
                 <span className="text-muted-foreground">n/a</span>
               )}
+              {!step.payment_event_id && step.matched_payment_event_id ? (
+                <span className="ml-2 text-xs text-muted-foreground">matched</span>
+              ) : null}
             </dd>
           </div>
         </dl>

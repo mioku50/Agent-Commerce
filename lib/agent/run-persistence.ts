@@ -253,13 +253,12 @@ export async function findRecentPaymentEvent(input: {
 
   const { data, error } = await client
     .from("payment_events")
-    .select("id")
+    .select("id,amount_usdc")
     .eq("endpoint", input.endpoint)
-    .eq("payer", input.payer)
-    .eq("amount_usdc", input.amountUsdc)
+    .ilike("payer", input.payer)
     .gte("created_at", input.since.toISOString())
     .order("created_at", { ascending: false })
-    .limit(1);
+    .limit(10);
 
   if (error) {
     console.warn(
@@ -268,5 +267,15 @@ export async function findRecentPaymentEvent(input: {
     return null;
   }
 
-  return (data?.[0]?.id as string | undefined) ?? null;
+  const expectedAmount = Number(input.amountUsdc);
+  const matched = data?.find((event) => {
+    const actualAmount = Number(event.amount_usdc);
+    return (
+      Number.isFinite(expectedAmount) &&
+      Number.isFinite(actualAmount) &&
+      Math.abs(actualAmount - expectedAmount) < 0.000001
+    );
+  });
+
+  return (matched?.id as string | undefined) ?? null;
 }

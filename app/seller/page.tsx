@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { ArrowRight, PlusCircle, Store } from "lucide-react";
+import { ArrowRight, ChartNoAxesCombined, PlusCircle, Store } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -60,6 +60,11 @@ function ServiceCard({ service }: { service: SellerStoreService }) {
             <Link href={`/seller/services/${service.id}`}>
               Edit listing
               <ArrowRight />
+            </Link>
+          </Button>
+          <Button asChild variant="outline" className="flex-1">
+            <Link href={`/api/seller/services/${service.id}/analytics`}>
+              Analytics JSON
             </Link>
           </Button>
           <Button asChild variant="outline" className="flex-1">
@@ -153,6 +158,12 @@ export default function SellerPage() {
                 <Link href="/seller/services/new">
                   <PlusCircle />
                   Create API Service
+                </Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/seller/analytics">
+                  <ChartNoAxesCombined />
+                  View analytics
                 </Link>
               </Button>
               <Button asChild variant="outline">

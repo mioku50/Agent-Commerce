@@ -506,6 +506,31 @@ export async function listAgentProfiles(limit = 30) {
   return (data ?? []) as unknown as PublicAgentProfile[];
 }
 
+async function fetchFallbackPassport(
+  client: SupabaseClient,
+  wallet: string,
+): Promise<AgentPassportDetail | null> {
+  const runs = await fetchRunStatsForWallet(client, wallet);
+  if (runs.length === 0) return null;
+
+  const steps = await fetchStepStatsForRuns(
+    client,
+    runs.map((run) => run.id),
+  );
+  const payload = profilePayloadFromStats(wallet, runs, steps);
+  const now = new Date().toISOString();
+
+  return {
+    profile: {
+      ...payload,
+      created_at: payload.first_seen_at ?? now,
+      updated_at: now,
+    },
+    recentRuns: runs.slice(0, 10),
+    recentEvents: [],
+  };
+}
+
 export async function fetchAgentPassport(wallet: string) {
   const client = getPublicSupabase();
   const normalizedWallet = normalizeAgentWallet(wallet);
@@ -517,10 +542,12 @@ export async function fetchAgentPassport(wallet: string) {
     .maybeSingle();
 
   if (error) {
-    if (isMissingPassportTableError(error.message)) return null;
+    if (isMissingPassportTableError(error.message)) {
+      return fetchFallbackPassport(client, normalizedWallet);
+    }
     throw new Error(error.message);
   }
-  if (!profile) return null;
+  if (!profile) return fetchFallbackPassport(client, normalizedWallet);
 
   const { data: recentRuns, error: runsError } = await client
     .from("agent_runs")
@@ -538,7 +565,9 @@ export async function fetchAgentPassport(wallet: string) {
     .order("created_at", { ascending: false })
     .limit(20);
 
-  if (eventsError) throw new Error(eventsError.message);
+  if (eventsError && !isMissingPassportTableError(eventsError.message)) {
+    throw new Error(eventsError.message);
+  }
 
   return {
     profile: profile as unknown as PublicAgentProfile,
