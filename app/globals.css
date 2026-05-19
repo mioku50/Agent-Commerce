@@ -20,30 +20,30 @@
 @import "tw-animate-css";
 
 :root {
-  --background: 0 0% 100%;
-  --foreground: 255 16.47% 33.33%;
+  --background: 45 50% 96.86%;
+  --foreground: 222 37% 20%;
   --card: 0 0% 100%;
-  --card-foreground: 255 16.47% 33.33%;
+  --card-foreground: 222 37% 20%;
   --popover: 0 0% 100%;
-  --popover-foreground: 255 16.47% 33.33%;
-  --primary: 204.62 100% 38.24%;
+  --popover-foreground: 222 37% 20%;
+  --primary: 210 100% 38%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 210 100% 97.25%;
-  --secondary-foreground: 204.62 100% 38.24%;
-  --muted: 252 20% 95.1%;
-  --muted-foreground: 253.33 11.79% 44.9%;
-  --accent: 258 100% 96.08%;
-  --accent-foreground: 255 25.53% 18.43%;
+  --secondary: 211 100% 96%;
+  --secondary-foreground: 210 100% 31%;
+  --muted: 42 37% 91%;
+  --muted-foreground: 222 16% 43%;
+  --accent: 210 100% 94%;
+  --accent-foreground: 210 100% 30%;
   --destructive: 353.92 83.15% 65.1%;
   --destructive-foreground: 0 0% 100%;
-  --border: 253.33 16.36% 89.22%;
-  --input: 253.33 16.36% 89.22%;
-  --ring: 204.1 100% 55.1%;
-  --chart-1: 204.1 100% 55.1%;
-  --chart-2: 259.15 100% 72.35%;
-  --chart-3: 150.98 75.41% 47.84%;
-  --chart-4: 21.9 100% 73.14%;
-  --chart-5: 294.95 88.43% 76.27%;
+  --border: 40 26% 84%;
+  --input: 40 26% 84%;
+  --ring: 210 100% 45%;
+  --chart-1: 210 100% 45%;
+  --chart-2: 189 88% 38%;
+  --chart-3: 154 66% 38%;
+  --chart-4: 38 92% 50%;
+  --chart-5: 260 74% 62%;
   --radius: 0.5rem;
 }
 
@@ -83,5 +83,9 @@
   }
   body {
     @apply bg-background text-foreground;
+    background-image:
+      linear-gradient(180deg, hsl(45 60% 98%) 0%, hsl(var(--background)) 220px),
+      radial-gradient(circle at top left, hsl(210 100% 94% / 0.65), transparent 34rem);
+    background-attachment: fixed;
   }
 }

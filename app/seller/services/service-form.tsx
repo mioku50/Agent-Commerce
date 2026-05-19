@@ -27,7 +27,7 @@ type SellerServiceFormProps = {
 };
 
 const textareaClassName =
-  "flex min-h-28 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-xs transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50";
+  "flex min-h-28 w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-sm shadow-primary/5 transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50";
 
 type JsonField =
   | "inputSchema"

@@ -16,21 +16,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { TopBarGatewayControls } from "@/components/dashboard/top-bar-gateway-controls";
+import { cookies } from "next/headers";
+import { GlobalNavClient } from "@/components/global-nav-client";
 
-export default function DashboardLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <section className="border-b bg-secondary/30">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-end gap-3 px-4 py-3 sm:px-6">
-          <TopBarGatewayControls />
-        </div>
-      </section>
-      <main className="mx-auto w-full max-w-7xl flex-1 p-4 sm:p-6">{children}</main>
-    </div>
-  );
+export async function GlobalNav() {
+  const cookieStore = await cookies();
+  const loggedIn = cookieStore.get("session")?.value === "authenticated";
+
+  return <GlobalNavClient loggedIn={loggedIn} />;
 }

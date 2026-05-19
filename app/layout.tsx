@@ -18,6 +18,7 @@
 
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { GlobalNav } from "@/components/global-nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
 import "./globals.css";
@@ -47,7 +48,10 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.className} antialiased`}>
-        <TooltipProvider>{children}</TooltipProvider>
+        <TooltipProvider>
+          <GlobalNav />
+          {children}
+        </TooltipProvider>
         <Toaster richColors position="bottom-right" />
       </body>
     </html>
