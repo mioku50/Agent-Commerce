@@ -798,6 +798,7 @@ async function main() {
       payer: agentAccount.address,
       amountUsdc: result.formattedAmount,
       since: paymentStartedAt,
+      requestId,
     });
     const responsePreview = previewJson(result.data);
     paidPreviews.push({

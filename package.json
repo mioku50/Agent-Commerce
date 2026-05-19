@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "generate-wallets": "node --experimental-transform-types --no-warnings generate-wallets.mts",
     "agent": "node --experimental-transform-types --no-warnings --env-file=.env.local agent.mts",
-    "gateway:balance": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/gateway-balance.mts"
+    "gateway:balance": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/gateway-balance.mts",
+    "agents:rebuild": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/rebuild-agent-passports.mts"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "^2.0.4",

@@ -96,6 +96,120 @@ const paymentEventColumns = [
 
 let supabase: SupabaseClient | null = null;
 
+function publicErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    return cause
+      ? `${error.name}: ${error.message}; cause: ${publicErrorMessage(cause)}`
+      : `${error.name}: ${error.message}`;
+  }
+
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const parts = [
+      record.name ? `name=${String(record.name)}` : null,
+      record.code ? `code=${String(record.code)}` : null,
+      record.status ? `status=${String(record.status)}` : null,
+      record.message ? `message=${String(record.message)}` : null,
+    ].filter(Boolean);
+
+    if (parts.length > 0) return parts.join("; ");
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown object error";
+    }
+  }
+
+  return String(error);
+}
+
+function publicErrorTokens(error: unknown, tokens: string[] = []): string[] {
+  if (!error || tokens.length > 20) return tokens;
+
+  if (error instanceof Error) {
+    tokens.push(error.name, error.message);
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause) publicErrorTokens(cause, tokens);
+  } else if (typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    for (const key of ["name", "code", "status", "message"]) {
+      if (record[key]) tokens.push(String(record[key]));
+    }
+    if (record.cause) publicErrorTokens(record.cause, tokens);
+  } else {
+    tokens.push(String(error));
+  }
+
+  return tokens;
+}
+
+function isTransientPublicSupabaseError(error: unknown) {
+  const haystack = publicErrorTokens(error).join(" ").toLowerCase();
+  return [
+    "etimedout",
+    "econnreset",
+    "terminated",
+    "fetch failed",
+    "socket hang up",
+    "headers timeout",
+    "body timeout",
+    "timed out",
+    "timeout",
+    "aborted",
+    "502",
+    "503",
+    "504",
+  ].some((token) => haystack.includes(token));
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function publicSupabaseFetchWithRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) {
+  const retries = 3;
+  const timeoutMs = 30_000;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort(new Error(`Supabase public request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    try {
+      const response = await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+
+      if ([502, 503, 504].includes(response.status)) {
+        await response.body?.cancel();
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+
+      return response;
+    } catch (error) {
+      const canRetry = attempt < retries && isTransientPublicSupabaseError(error);
+      if (!canRetry) throw error;
+
+      const delayMs = 1_000 * 2 ** attempt;
+      console.warn(
+        `[public-supabase] Request failed on attempt ${attempt + 1}/${retries + 1}: ${publicErrorMessage(error)}. Retrying in ${delayMs}ms...`,
+      );
+      await sleep(delayMs);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw new Error(`Supabase public request failed after ${retries + 1} attempts`);
+}
+
 export function createPublicSupabase() {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
@@ -108,6 +222,9 @@ export function createPublicSupabase() {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
+    },
+    global: {
+      fetch: publicSupabaseFetchWithRetry,
     },
   });
 

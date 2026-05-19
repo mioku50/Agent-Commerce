@@ -76,9 +76,133 @@ const AGENT_STEP_STATUS_RANK: Record<AgentStepStatus, number> = {
 
 let supabase: SupabaseClient | null = null;
 
-function safeErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
+function safeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    const causeMessage = cause ? `; cause: ${safeErrorMessage(cause)}` : "";
+    return `${error.name}: ${error.message}${causeMessage}`;
+  }
+
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const parts = [
+      record.name ? `name=${String(record.name)}` : null,
+      record.code ? `code=${String(record.code)}` : null,
+      record.status ? `status=${String(record.status)}` : null,
+      record.message ? `message=${String(record.message)}` : null,
+      record.details ? `details=${String(record.details)}` : null,
+      record.hint ? `hint=${String(record.hint)}` : null,
+      record.cause ? `cause=${safeErrorMessage(record.cause)}` : null,
+    ].filter(Boolean);
+
+    if (parts.length > 0) return parts.join("; ");
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown object error";
+    }
+  }
+
   return String(error);
+}
+
+function getErrorTokens(error: unknown, tokens: string[] = []): string[] {
+  if (!error || tokens.length > 20) return tokens;
+
+  if (error instanceof Error) {
+    tokens.push(error.name, error.message);
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause) getErrorTokens(cause, tokens);
+  } else if (typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    for (const key of ["name", "code", "status", "message", "details"]) {
+      if (record[key]) tokens.push(String(record[key]));
+    }
+    if (record.cause) getErrorTokens(record.cause, tokens);
+  } else {
+    tokens.push(String(error));
+  }
+
+  return tokens;
+}
+
+function isTransientPersistenceError(error: unknown) {
+  const haystack = getErrorTokens(error).join(" ").toLowerCase();
+  return [
+    "etimedout",
+    "econnreset",
+    "terminated",
+    "fetch failed",
+    "socket hang up",
+    "headers timeout",
+    "body timeout",
+    "timed out",
+    "timeout",
+    "aborted",
+    "502",
+    "503",
+    "504",
+  ].some((token) => haystack.includes(token));
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelay(attempt: number) {
+  return 1_000 * 2 ** attempt;
+}
+
+async function supabaseFetchWithRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) {
+  const retries = 3;
+  const timeoutMs = 30_000;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort(new Error(`Supabase request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    try {
+      const response = await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+
+      if ([502, 503, 504].includes(response.status)) {
+        await response.body?.cancel();
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+
+      return response;
+    } catch (error) {
+      const canRetry = attempt < retries && isTransientPersistenceError(error);
+      if (!canRetry) throw error;
+
+      const delayMs = retryDelay(attempt);
+      console.warn(
+        `[agent-run-persistence] Supabase request failed on attempt ${attempt + 1}/${retries + 1}: ${safeErrorMessage(error)}. Retrying in ${delayMs}ms...`,
+      );
+      await sleep(delayMs);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw new Error(`Supabase request failed after ${retries + 1} attempts`);
+}
+
+function contextSuffix(context: Record<string, string | null | undefined>) {
+  const rendered = Object.entries(context)
+    .filter(([, value]) => value)
+    .map(([key, value]) => `${key}=${value}`)
+    .join(" ");
+
+  return rendered ? ` (${rendered})` : "";
 }
 
 function isJsonRecord(value: unknown): value is JsonRecord {
@@ -148,6 +272,9 @@ function getServiceSupabase() {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
+    },
+    global: {
+      fetch: supabaseFetchWithRetry,
     },
   });
 
@@ -247,9 +374,16 @@ export async function findRecentPaymentEvent(input: {
   payer: string;
   amountUsdc: string;
   since: Date;
+  requestId?: string | null;
 }) {
   const client = getServiceSupabase();
   if (!client) return null;
+  const context = {
+    endpoint: input.endpoint,
+    payer: input.payer,
+    amount: input.amountUsdc,
+    requestId: input.requestId ?? null,
+  };
 
   const { data, error } = await client
     .from("payment_events")
@@ -262,7 +396,7 @@ export async function findRecentPaymentEvent(input: {
 
   if (error) {
     console.warn(
-      `[agent-run-persistence] Failed to match payment event: ${safeErrorMessage(error)}`,
+      `[agent-run-persistence] Failed to match payment event${contextSuffix(context)}: ${safeErrorMessage(error)}`,
     );
     return null;
   }

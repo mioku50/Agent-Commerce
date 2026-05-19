@@ -165,6 +165,13 @@ The trust score is intentionally simple for the prototype: completed runs, paid 
 
 No private keys, payment signatures, bearer tokens, or service role keys are stored in Agent Passport tables. This phase is an off-chain identity and reputation layer; ERC-8004 agent identity remains a future phase.
 
+Recovery command: if a post-run Agent Passport update fails because Supabase or the network times out, rebuild profiles from historical run data:
+
+```bash
+npm run agents:rebuild
+npm run agents:rebuild -- --wallet 0x...
+```
+
 ## Phase 6 — Seller Analytics + Revenue Dashboard
 
 Sellers now have a public/demo analytics surface for seeing how API Store services perform.

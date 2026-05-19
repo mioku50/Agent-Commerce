@@ -67,6 +67,14 @@ type ReputationEventInput = {
   raw?: JsonRecord | null;
 };
 
+export type AgentPassportRebuildResult = {
+  wallet: string;
+  runs: number;
+  steps: number;
+  reputationEvents: number;
+  profile: PublicAgentProfile;
+};
+
 export type AgentPassportDetail = {
   profile: PublicAgentProfile;
   recentRuns: AgentPassportRun[];
@@ -120,9 +128,160 @@ const runColumns = [
 let serviceSupabase: SupabaseClient | null = null;
 let publicSupabase: SupabaseClient | null = null;
 
-function safeErrorMessage(error: unknown) {
-  if (error instanceof Error) return error.message;
+function safeErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = (error as Error & { cause?: unknown }).cause;
+    const causeMessage = cause ? `; cause: ${safeErrorMessage(cause)}` : "";
+    return `${error.name}: ${error.message}${causeMessage}`;
+  }
+
+  if (error && typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    const parts = [
+      record.name ? `name=${String(record.name)}` : null,
+      record.code ? `code=${String(record.code)}` : null,
+      record.status ? `status=${String(record.status)}` : null,
+      record.message ? `message=${String(record.message)}` : null,
+      record.details ? `details=${String(record.details)}` : null,
+      record.hint ? `hint=${String(record.hint)}` : null,
+      record.cause ? `cause=${safeErrorMessage(record.cause)}` : null,
+    ].filter(Boolean);
+
+    if (parts.length > 0) return parts.join("; ");
+
+    try {
+      return JSON.stringify(error);
+    } catch {
+      return "Unknown object error";
+    }
+  }
+
   return String(error);
+}
+
+function getErrorTokens(error: unknown, tokens: string[] = []): string[] {
+  if (!error || tokens.length > 20) return tokens;
+
+  if (error instanceof Error) {
+    tokens.push(error.name, error.message);
+    const cause = (error as Error & { cause?: unknown }).cause;
+    if (cause) getErrorTokens(cause, tokens);
+  } else if (typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    for (const key of ["name", "code", "status", "message", "details"]) {
+      if (record[key]) tokens.push(String(record[key]));
+    }
+    if (record.cause) getErrorTokens(record.cause, tokens);
+  } else {
+    tokens.push(String(error));
+  }
+
+  return tokens;
+}
+
+function isTransientPersistenceError(error: unknown) {
+  const haystack = getErrorTokens(error).join(" ").toLowerCase();
+  return [
+    "etimedout",
+    "econnreset",
+    "terminated",
+    "fetch failed",
+    "socket hang up",
+    "headers timeout",
+    "body timeout",
+    "timed out",
+    "timeout",
+    "aborted",
+    "502",
+    "503",
+    "504",
+  ].some((token) => haystack.includes(token));
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelay(attempt: number) {
+  return 1_000 * 2 ** attempt;
+}
+
+async function supabaseFetchWithRetry(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+) {
+  const retries = 3;
+  const timeoutMs = 30_000;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => {
+      controller.abort(new Error(`Supabase request timed out after ${timeoutMs}ms`));
+    }, timeoutMs);
+
+    try {
+      const response = await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+
+      if ([502, 503, 504].includes(response.status)) {
+        await response.body?.cancel();
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+
+      return response;
+    } catch (error) {
+      const canRetry = attempt < retries && isTransientPersistenceError(error);
+      if (!canRetry) throw error;
+
+      const delayMs = retryDelay(attempt);
+      console.warn(
+        `[agent-passport] Supabase request failed on attempt ${attempt + 1}/${retries + 1}: ${safeErrorMessage(error)}. Retrying in ${delayMs}ms...`,
+      );
+      await sleep(delayMs);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  throw new Error(`Supabase request failed after ${retries + 1} attempts`);
+}
+
+function contextSuffix(context?: Record<string, string | number | null | undefined>) {
+  if (!context) return "";
+
+  const rendered = Object.entries(context)
+    .filter(([, value]) => value !== null && value !== undefined && value !== "")
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join(" ");
+
+  return rendered ? ` (${rendered})` : "";
+}
+
+async function withPassportRetry<T>(
+  label: string,
+  operation: () => Promise<T>,
+  context?: Record<string, string | number | null | undefined>,
+) {
+  const retries = 3;
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      const canRetry = attempt < retries && isTransientPersistenceError(error);
+      if (!canRetry) throw error;
+
+      const delayMs = retryDelay(attempt);
+      console.warn(
+        `[agent-passport] ${label} failed on attempt ${attempt + 1}/${retries + 1}${contextSuffix(context)}: ${safeErrorMessage(error)}. Retrying in ${delayMs}ms...`,
+      );
+      await sleep(delayMs);
+    }
+  }
+
+  throw new Error(`${label} failed after ${retries + 1} attempts`);
 }
 
 function isMissingPassportTableError(message: string) {
@@ -148,6 +307,9 @@ function getServiceSupabase() {
       persistSession: false,
       autoRefreshToken: false,
     },
+    global: {
+      fetch: supabaseFetchWithRetry,
+    },
   });
 
   return serviceSupabase;
@@ -165,6 +327,9 @@ function getPublicSupabase() {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
+    },
+    global: {
+      fetch: supabaseFetchWithRetry,
     },
   });
 
@@ -246,6 +411,36 @@ async function fetchStepStatsForRuns(client: SupabaseClient, runIds: string[]) {
   }
 
   return (data ?? []) as unknown as AgentStepStatsRow[];
+}
+
+async function fetchWalletsWithRuns(client: SupabaseClient, wallet?: string | null) {
+  if (wallet) return [normalizeAgentWallet(wallet)];
+
+  const rows = await withPassportRetry(
+    "agent wallet scan",
+    async () => {
+      const { data, error } = await client
+        .from("agent_runs")
+        .select("agent_wallet")
+        .not("agent_wallet", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(5_000);
+
+      if (error) throw error;
+
+      return (data ?? []) as Array<{ agent_wallet: string | null }>;
+    },
+    {},
+  );
+
+  return Array.from(
+    new Set(
+      rows
+        .map((row) => row.agent_wallet)
+        .filter(Boolean)
+        .map((value) => normalizeAgentWallet(value as string)),
+    ),
+  );
 }
 
 function profilePayloadFromStats(
@@ -360,23 +555,64 @@ function eventForRun(
   };
 }
 
+async function calculateAndUpsertProfile(client: SupabaseClient, normalizedWallet: string) {
+  return withPassportRetry(
+    "profile stats recalculation",
+    async () => {
+      const runs = await fetchRunStatsForWallet(client, normalizedWallet);
+      const steps = await fetchStepStatsForRuns(
+        client,
+        runs.map((run) => run.id),
+      );
+      const payload = profilePayloadFromStats(normalizedWallet, runs, steps);
+
+      const { data, error } = await client
+        .from("agent_profiles")
+        .upsert(payload, { onConflict: "wallet" })
+        .select(profileColumns)
+        .single();
+
+      if (error) throw error;
+
+      return {
+        profile: data as unknown as PublicAgentProfile,
+        runs,
+        steps,
+      };
+    },
+    { wallet: normalizedWallet },
+  );
+}
+
 export async function createOrUpdateAgentProfileByWallet(wallet: string) {
   const client = getServiceSupabase();
   if (!client) return null;
 
   const normalizedWallet = normalizeAgentWallet(wallet);
-  const { data, error } = await client
-    .from("agent_profiles")
-    .upsert({ wallet: normalizedWallet }, { onConflict: "wallet" })
-    .select(profileColumns)
-    .single();
+  try {
+    const data = await withPassportRetry(
+      "profile upsert",
+      async () => {
+        const { data: profile, error } = await client
+          .from("agent_profiles")
+          .upsert({ wallet: normalizedWallet }, { onConflict: "wallet" })
+          .select(profileColumns)
+          .single();
 
-  if (error) {
-    console.warn(`[agent-passport] Failed to create profile: ${error.message}`);
+        if (error) throw error;
+
+        return profile;
+      },
+      { wallet: normalizedWallet },
+    );
+
+    return data as unknown as PublicAgentProfile;
+  } catch (error) {
+    console.warn(
+      `[agent-passport] Failed to create profile${contextSuffix({ wallet: normalizedWallet })}: ${safeErrorMessage(error)}`,
+    );
     return null;
   }
-
-  return data as unknown as PublicAgentProfile;
 }
 
 export async function writeReputationEvent(input: ReputationEventInput) {
@@ -393,51 +629,81 @@ export async function writeReputationEvent(input: ReputationEventInput) {
     raw: input.raw ?? null,
   };
 
-  if (payload.run_id) {
-    const { data: existing, error: lookupError } = await client
-      .from("agent_reputation_events")
-      .select("id")
-      .eq("wallet", payload.wallet)
-      .eq("run_id", payload.run_id)
-      .eq("event_type", payload.event_type)
-      .maybeSingle();
+  const context = {
+    wallet: payload.wallet,
+    runId: payload.run_id,
+    eventType: payload.event_type,
+  };
 
-    if (lookupError) {
-      console.warn(
-        `[agent-passport] Failed to check existing reputation event: ${lookupError.message}`,
-      );
-      return null;
-    }
+  try {
+    const data = await withPassportRetry(
+      "reputation event upsert",
+      async () => {
+      if (payload.run_id) {
+        const { data: existingEvents, error: lookupError } = await client
+          .from("agent_reputation_events")
+          .select("id,event_type")
+          .eq("wallet", payload.wallet)
+          .eq("run_id", payload.run_id)
+          .order("created_at", { ascending: true });
 
-    if (existing?.id) {
-      const { data, error } = await client
-        .from("agent_reputation_events")
-        .update(payload)
-        .eq("id", existing.id)
-        .select(eventColumns)
-        .single();
+        if (lookupError) throw lookupError;
 
-      if (error) {
-        console.warn(`[agent-passport] Failed to update reputation event: ${error.message}`);
-        return null;
+        const existing = existingEvents?.[0] as
+          | { id: string; event_type: string }
+          | undefined;
+
+        if (existing?.id) {
+          const { data: updated, error: updateError } = await client
+            .from("agent_reputation_events")
+            .update(payload)
+            .eq("id", existing.id)
+            .select(eventColumns)
+            .single();
+
+          if (updateError) throw updateError;
+
+          const duplicateIds = (existingEvents ?? [])
+            .slice(1)
+            .map((event) => (event as { id: string }).id);
+
+          if (duplicateIds.length > 0) {
+            const { error: deleteError } = await client
+              .from("agent_reputation_events")
+              .delete()
+              .in("id", duplicateIds);
+
+            if (deleteError) {
+              console.warn(
+                `[agent-passport] Failed to remove duplicate reputation events${contextSuffix(context)}: ${safeErrorMessage(deleteError)}`,
+              );
+            }
+          }
+
+          return updated;
+        }
       }
 
-      return data as unknown as PublicAgentReputationEvent;
-    }
-  }
+        const { data: inserted, error: insertError } = await client
+          .from("agent_reputation_events")
+          .insert(payload)
+          .select(eventColumns)
+          .single();
 
-  const { data, error } = await client
-    .from("agent_reputation_events")
-    .insert(payload)
-    .select(eventColumns)
-    .single();
+        if (insertError) throw insertError;
 
-  if (error) {
-    console.warn(`[agent-passport] Failed to write reputation event: ${error.message}`);
+        return inserted;
+      },
+      context,
+    );
+
+    return data as unknown as PublicAgentReputationEvent;
+  } catch (error) {
+    console.warn(
+      `[agent-passport] Failed to write reputation event${contextSuffix(context)}: ${safeErrorMessage(error)}`,
+    );
     return null;
   }
-
-  return data as unknown as PublicAgentReputationEvent;
 }
 
 export async function recalculateAgentProfile(
@@ -452,39 +718,71 @@ export async function recalculateAgentProfile(
   const normalizedWallet = normalizeAgentWallet(wallet);
 
   try {
-    const runs = await fetchRunStatsForWallet(client, normalizedWallet);
-    const steps = await fetchStepStatsForRuns(
-      client,
-      runs.map((run) => run.id),
-    );
-    const payload = profilePayloadFromStats(normalizedWallet, runs, steps);
-
-    const { data, error } = await client
-      .from("agent_profiles")
-      .upsert(payload, { onConflict: "wallet" })
-      .select(profileColumns)
-      .single();
-
-    if (error) {
-      console.warn(`[agent-passport] Failed to update profile: ${error.message}`);
-      return null;
-    }
+    const result = await calculateAndUpsertProfile(client, normalizedWallet);
 
     if (options.runId) {
-      const run = runs.find((item) => item.id === options.runId);
+      const run = result.runs.find((item) => item.id === options.runId);
       if (run) {
-        const runSteps = steps.filter((step) => step.run_id === run.id);
+        const runSteps = result.steps.filter((step) => step.run_id === run.id);
         await writeReputationEvent(eventForRun(normalizedWallet, run, runSteps));
       }
     }
 
-    return data as unknown as PublicAgentProfile;
+    return result.profile;
   } catch (error) {
     console.warn(
-      `[agent-passport] Failed to recalculate profile: ${safeErrorMessage(error)}`,
+      `[agent-passport] Failed to recalculate profile${contextSuffix({ wallet: normalizedWallet, runId: options.runId })}: ${safeErrorMessage(error)}`,
     );
     return null;
   }
+}
+
+export async function rebuildAgentPassportForWallet(wallet: string) {
+  const client = getServiceSupabase();
+  if (!client) return null;
+
+  const normalizedWallet = normalizeAgentWallet(wallet);
+
+  try {
+    const result = await calculateAndUpsertProfile(client, normalizedWallet);
+    let reputationEvents = 0;
+
+    for (const run of result.runs) {
+      const runSteps = result.steps.filter((step) => step.run_id === run.id);
+      const event = await writeReputationEvent(
+        eventForRun(normalizedWallet, run, runSteps),
+      );
+      if (event) reputationEvents++;
+    }
+
+    return {
+      wallet: normalizedWallet,
+      runs: result.runs.length,
+      steps: result.steps.length,
+      reputationEvents,
+      profile: result.profile,
+    } satisfies AgentPassportRebuildResult;
+  } catch (error) {
+    console.warn(
+      `[agent-passport] Failed to rebuild profile${contextSuffix({ wallet: normalizedWallet })}: ${safeErrorMessage(error)}`,
+    );
+    return null;
+  }
+}
+
+export async function rebuildAgentPassports(options: { wallet?: string | null } = {}) {
+  const client = getServiceSupabase();
+  if (!client) return [] as AgentPassportRebuildResult[];
+
+  const wallets = await fetchWalletsWithRuns(client, options.wallet);
+  const results: AgentPassportRebuildResult[] = [];
+
+  for (const wallet of wallets) {
+    const result = await rebuildAgentPassportForWallet(wallet);
+    if (result) results.push(result);
+  }
+
+  return results;
 }
 
 export async function listAgentProfiles(limit = 30) {
