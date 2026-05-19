@@ -31,6 +31,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
 import {
   fetchRecentReceipts,
   type CommerceReceipt,
@@ -40,6 +41,13 @@ import { shortenHash } from "@/lib/utils";
 export const metadata = {
   title: "Commerce Receipts | Arc Agent Commerce",
   description: "Public audit trail for paid x402 API purchases.",
+};
+
+type ReceiptsPageProps = {
+  searchParams?: Promise<{
+    wallet?: string;
+    serviceSlug?: string;
+  }>;
 };
 
 function formatDate(value: string) {
@@ -134,20 +142,49 @@ function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
   );
 }
 
-async function ReceiptList() {
+async function ReceiptList({
+  wallet,
+  serviceSlug,
+}: {
+  wallet?: string | null;
+  serviceSlug?: string | null;
+}) {
   await connection();
 
   let receipts: CommerceReceipt[] = [];
   let error: string | null = null;
 
   try {
-    receipts = await fetchRecentReceipts({ limit: 30 });
+    receipts = await fetchRecentReceipts({ limit: 30, wallet, serviceSlug });
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
   }
 
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6">
+      {wallet || serviceSlug ? (
+        <Card className="rounded-lg">
+          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">
+              Showing receipts
+              {wallet ? (
+                <>
+                  {" "}for wallet <span className="font-mono text-foreground">{wallet}</span>
+                </>
+              ) : null}
+              {serviceSlug ? (
+                <>
+                  {" "}for service <span className="font-mono text-foreground">{serviceSlug}</span>
+                </>
+              ) : null}
+              .
+            </p>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/receipts">Clear filters</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
       {error ? (
         <Card className="rounded-lg">
           <CardContent className="p-6">
@@ -191,7 +228,11 @@ function ReceiptsFallback() {
   );
 }
 
-export default function ReceiptsPage() {
+export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) {
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const wallet = resolvedSearchParams.wallet ?? null;
+  const serviceSlug = resolvedSearchParams.serviceSlug ?? null;
+
   return (
     <main className="min-h-screen bg-background">
       <section className="border-b bg-secondary/30">
@@ -233,6 +274,10 @@ export default function ReceiptsPage() {
         </div>
       </section>
 
+      <section className="mx-auto w-full max-w-6xl px-4 pt-8 sm:px-6">
+        <ArcWalletWidget />
+      </section>
+
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8 sm:px-6 md:grid-cols-3">
         {[
           ["x402 paid", "Only successful paid purchase steps become receipts"],
@@ -254,7 +299,7 @@ export default function ReceiptsPage() {
       </section>
 
       <Suspense fallback={<ReceiptsFallback />}>
-        <ReceiptList />
+        <ReceiptList wallet={wallet} serviceSlug={serviceSlug} />
       </Suspense>
     </main>
   );

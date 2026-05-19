@@ -41,6 +41,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CopyButton } from "@/components/copy-button";
+import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
 import type {
   ApiService,
   ServiceMethod,
@@ -148,31 +149,34 @@ export function StoreMarketplace({
                 required USDC amount through x402 and Circle Gateway.
               </p>
             </div>
-            <div className="rounded-lg border bg-background p-4">
-              <div className="flex items-center gap-2 text-sm font-semibold">
-                <ShieldCheck className="size-4 text-primary" />
-                Live marketplace layer
-              </div>
-              <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div>
-                  <dt className="text-muted-foreground">Services</dt>
-                  <dd className="font-mono text-lg">{services.length}</dd>
+            <div className="grid gap-4">
+              <div className="rounded-lg border bg-background p-4">
+                <div className="flex items-center gap-2 text-sm font-semibold">
+                  <ShieldCheck className="size-4 text-primary" />
+                  Live marketplace layer
                 </div>
-                <div>
-                  <dt className="text-muted-foreground">Seller-created</dt>
-                  <dd className="font-mono text-lg">
-                    {services.filter((service) => service.sourceType !== "static").length}
-                  </dd>
+                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <dt className="text-muted-foreground">Services</dt>
+                    <dd className="font-mono text-lg">{services.length}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-muted-foreground">Seller-created</dt>
+                    <dd className="font-mono text-lg">
+                      {services.filter((service) => service.sourceType !== "static").length}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-4 flex flex-col gap-2">
+                  <Button asChild size="sm" variant="outline">
+                    <Link href="/seller">
+                      <PlusCircle />
+                      Become a seller
+                    </Link>
+                  </Button>
                 </div>
-              </dl>
-              <div className="mt-4 flex flex-col gap-2">
-                <Button asChild size="sm" variant="outline">
-                  <Link href="/seller">
-                    <PlusCircle />
-                    Become a seller
-                  </Link>
-                </Button>
               </div>
+              <ArcWalletWidget />
             </div>
           </div>
         </div>

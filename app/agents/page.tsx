@@ -30,6 +30,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
 import {
   listAgentProfiles,
   type PublicAgentProfile,
@@ -205,6 +206,10 @@ export default function AgentsPage() {
             </Button>
           </div>
         </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-6xl px-4 pt-8 sm:px-6">
+        <ArcWalletWidget />
       </section>
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8 sm:px-6 md:grid-cols-3">

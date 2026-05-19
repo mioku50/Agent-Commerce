@@ -29,6 +29,7 @@ import {
   Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
 
 const features = [
   {
@@ -120,37 +121,40 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
-          <div className="flex items-center justify-between border-b px-5 py-4">
-            <span className="text-sm font-semibold">API Store preview</span>
-            <span className="rounded-md bg-secondary px-2.5 py-1 text-xs font-semibold text-secondary-foreground">
-              Arc Testnet
-            </span>
-          </div>
-          <div className="divide-y">
-            {[
-              ["Premium Quote", "0.001 USDC", "GET"],
-              ["Market Snapshot", "0.01 USDC", "GET"],
-              ["Agent Task", "0.03 USDC", "GET"],
-            ].map(([name, price, method]) => (
-              <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-5" key={name}>
-                <div>
-                  <p className="font-semibold text-foreground">{name}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    x402 payment required
-                  </p>
+        <div className="grid gap-4">
+          <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+            <div className="flex items-center justify-between border-b px-5 py-4">
+              <span className="text-sm font-semibold">API Store preview</span>
+              <span className="rounded-md bg-secondary px-2.5 py-1 text-xs font-semibold text-secondary-foreground">
+                Arc Testnet
+              </span>
+            </div>
+            <div className="divide-y">
+              {[
+                ["Premium Quote", "0.001 USDC", "GET"],
+                ["Market Snapshot", "0.01 USDC", "GET"],
+                ["Agent Task", "0.03 USDC", "GET"],
+              ].map(([name, price, method]) => (
+                <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-5" key={name}>
+                  <div>
+                    <p className="font-semibold text-foreground">{name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      x402 payment required
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-mono text-sm font-semibold text-primary">{price}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{method}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-mono text-sm font-semibold text-primary">{price}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{method}</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
+            <div className="grid gap-3 border-t bg-muted/35 px-5 py-4 text-sm text-muted-foreground sm:grid-cols-2">
+              <span>Gateway balance visible to sellers</span>
+              <span>Agent purchases tracked in Supabase</span>
+            </div>
           </div>
-          <div className="grid gap-3 border-t bg-muted/35 px-5 py-4 text-sm text-muted-foreground sm:grid-cols-2">
-            <span>Gateway balance visible to sellers</span>
-            <span>Agent purchases tracked in Supabase</span>
-          </div>
+          <ArcWalletWidget />
         </div>
       </section>
 

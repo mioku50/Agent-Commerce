@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { logout } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
 import { cn } from "@/lib/utils";
 
 type GlobalNavClientProps = {
@@ -111,6 +112,7 @@ export function GlobalNavClient({ loggedIn }: GlobalNavClientProps) {
           </Link>
 
           <div className="flex items-center gap-2 lg:hidden">
+            <ArcWalletWidget variant="compact" />
             {loggedIn ? (
               <form action={logout}>
                 <Button type="submit" variant="outline" size="sm">
@@ -136,6 +138,9 @@ export function GlobalNavClient({ loggedIn }: GlobalNavClientProps) {
         </nav>
 
         <div className="flex flex-col gap-2 border-t pt-3 lg:flex-row lg:items-center lg:border-t-0 lg:pt-0">
+          <div className="hidden lg:block">
+            <ArcWalletWidget variant="compact" />
+          </div>
           {loggedIn ? (
             <>
               <nav
