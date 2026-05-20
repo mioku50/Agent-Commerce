@@ -38,21 +38,9 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
-  fetchRecentAgentRuns,
-  type PublicAgentRun,
-} from "@/lib/agent/runs-public";
-import {
-  listAgentProfiles,
-  type PublicAgentProfile,
-} from "@/lib/agent/passport-persistence";
-import {
-  fetchRecentReceipts,
-  type CommerceReceipt,
-} from "@/lib/commerce/receipts";
-import {
-  listAllStoreServices,
-} from "@/lib/services/store-service-persistence";
-import type { ApiService } from "@/lib/services/registry";
+  getDefaultProductionUrl,
+  getReviewHealthStatus,
+} from "@/lib/review/status";
 import { shortenHash } from "@/lib/utils";
 
 export const metadata = {
@@ -61,17 +49,10 @@ export const metadata = {
     "Arc Agent Commerce public review pack with demo links, health status, technical proof, and testnet notes.",
 };
 
-const productionUrl = getProductionUrl();
+const productionUrl = getDefaultProductionUrl();
 const demoTask = "Analyze tone and sentiment for a short builder update";
 const demoCommand = `AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "${demoTask}" --limit 0.005`;
-
-type ReviewData = {
-  latestRun: PublicAgentRun | null;
-  latestReceipt: CommerceReceipt | null;
-  mainProfile: PublicAgentProfile | null;
-  services: ApiService[];
-  warnings: string[];
-};
+const reviewSmokeCommand = "npm run review:smoke";
 
 const reviewChecklist = [
   {
@@ -122,63 +103,8 @@ const testnetNotes = [
   "Occasional Supabase, Gateway, or network timeouts are handled with retry/backoff or safe empty states.",
 ];
 
-function getProductionUrl() {
-  const publicUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ??
-    process.env.NEXT_PUBLIC_APP_URL ??
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
-
-  return (publicUrl ?? "https://agent-commerce-six.vercel.app").replace(/\/$/, "");
-}
-
 function absoluteUrl(path: string) {
   return `${productionUrl}${path}`;
-}
-
-function resultWarning(label: string, result: PromiseSettledResult<unknown>) {
-  if (result.status === "fulfilled") return null;
-  const reason = result.reason instanceof Error ? result.reason.message : String(result.reason);
-  return `${label}: ${reason}`;
-}
-
-async function getReviewData(): Promise<ReviewData> {
-  await connection();
-
-  const [runsResult, receiptsResult, profilesResult, servicesResult] =
-    await Promise.allSettled([
-      fetchRecentAgentRuns(30),
-      fetchRecentReceipts({ limit: 1 }),
-      listAgentProfiles(1),
-      listAllStoreServices(),
-    ]);
-
-  const runs =
-    runsResult.status === "fulfilled" ? runsResult.value : ([] as PublicAgentRun[]);
-  const receipts =
-    receiptsResult.status === "fulfilled" ? receiptsResult.value : ([] as CommerceReceipt[]);
-  const profiles =
-    profilesResult.status === "fulfilled" ? profilesResult.value : ([] as PublicAgentProfile[]);
-  const services =
-    servicesResult.status === "fulfilled" ? servicesResult.value.services : ([] as ApiService[]);
-
-  const warnings = [
-    resultWarning("Runs", runsResult),
-    resultWarning("Receipts", receiptsResult),
-    resultWarning("Agent Passports", profilesResult),
-    resultWarning("API Store services", servicesResult),
-  ].filter(Boolean) as string[];
-
-  return {
-    latestRun:
-      runs.find((run) => run.status === "completed" && (run.paid_count ?? 0) > 0) ??
-      runs.find((run) => run.status === "completed") ??
-      runs[0] ??
-      null,
-    latestReceipt: receipts[0] ?? null,
-    mainProfile: profiles[0] ?? null,
-    services,
-    warnings,
-  };
 }
 
 function StatusCard({
@@ -251,10 +177,8 @@ function LinkCard({
 }
 
 export default async function ReviewPage() {
-  const data = await getReviewData();
-  const liveSellerServices = data.services.filter(
-    (service) => service.sourceType !== "static" && service.status === "live",
-  );
+  await connection();
+  const data = await getReviewHealthStatus(productionUrl);
   const latestRunHref = data.latestRun ? `/runs/${data.latestRun.id}` : "/runs";
   const latestReceiptHref = data.latestReceipt
     ? `/receipts/${data.latestReceipt.id}`
@@ -337,7 +261,7 @@ export default async function ReviewPage() {
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatusCard
             title="Latest successful run"
-            ok={Boolean(data.latestRun)}
+            ok={data.checks.latestSuccessfulRunExists}
             detail={
               data.latestRun
                 ? `${data.latestRun.status}; spent ${data.latestRun.spent_usdc} USDC`
@@ -355,19 +279,45 @@ export default async function ReviewPage() {
           />
           <StatusCard
             title="Seller-created live service"
-            ok={liveSellerServices.length > 0}
+            ok={data.checks.sellerCreatedLiveServiceExists}
             detail={
-              liveSellerServices.length > 0
-                ? `${liveSellerServices.length} live seller-created service(s) in discovery.`
+              data.checks.sellerCreatedLiveServiceExists
+                ? `${data.checks.sellerCreatedLiveServiceCount} live seller-created service(s) in discovery.`
                 : "No live seller-created service is visible to the public store."
             }
           />
           <StatusCard
             title="API Store services"
-            ok={data.services.length > 0}
-            detail={`${data.services.length} public service(s) available. Disabled smoke-test services are hidden from public discovery.`}
+            ok={data.checks.apiStoreServiceCount > 0}
+            detail={`${data.checks.apiStoreServiceCount} public service(s) available. Disabled smoke-test services are hidden from public discovery.`}
           />
         </section>
+
+        <Card className="rounded-lg shadow-sm">
+          <CardHeader>
+            <CardTitle>Run local review smoke</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <p className="text-sm leading-6 text-muted-foreground">
+                This command checks the public pages, JSON endpoints, unpaid
+                HTTP 402 behavior, and the decoded x402 payment challenge.
+              </p>
+              <div className="mt-3 rounded-md border bg-muted/40 p-4">
+                <code className="break-all font-mono text-sm">{reviewSmokeCommand}</code>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row md:flex-col">
+              <CopyButton value={reviewSmokeCommand} label="Copy command" />
+              <Button asChild variant="outline">
+                <Link href="/api/review/status">
+                  Status JSON
+                  <ExternalLink />
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="rounded-lg shadow-sm">
           <CardHeader>
@@ -450,6 +400,12 @@ export default async function ReviewPage() {
             href="/seller/analytics"
             detail="Protected seller analytics surface; redirects to login without session."
             icon={ChartNoAxesCombined}
+          />
+          <LinkCard
+            title="Review Status API"
+            href="/api/review/status"
+            detail="Public read-only health JSON for automated smoke checks."
+            icon={ShieldCheck}
           />
         </section>
 

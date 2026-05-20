@@ -354,6 +354,25 @@ It includes:
 
 The page is public and read-only. It does not move funds, does not run paid browser purchases, does not expose private keys, and does not modify x402/Gateway payment verification or settlement.
 
+## Phase 14 — Production QA and Review Smoke Toolkit
+
+The project now includes a lightweight production QA toolkit for reviewer confidence.
+
+Run:
+
+```bash
+npm run review:smoke
+```
+
+The script checks the configured `BASE_URL` or defaults to the production deployment. It verifies public pages, service discovery JSON, receipt JSON, unpaid `/api/premium/quote` HTTP 402 behavior, the `payment-required` header, and decoded x402 challenge details for Arc Testnet:
+
+- network: `eip155:5042002`
+- asset: `0x3600000000000000000000000000000000000000`
+
+It prints a reviewer-friendly summary with passed checks, failed checks, production URL, latest run URL, latest receipt URL, and main Agent Passport URL.
+
+The public read-only endpoint `GET /api/review/status` exposes high-level health data used by `/review` and the smoke script: latest successful run, latest receipt, seller-created live service availability, API Store service count, receipt count, and proof links.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -415,6 +434,7 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - wallet-funded agent launch for funding the local buyer-agent wallet
 - guided demo story with live proof cards
 - reviewer-ready public submission pack with health/status checks
+- production review smoke script and `/api/review/status`
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -425,6 +445,7 @@ Planned architecture:
 - **Frontend**: Next.js App Router, TypeScript, API Store UI, seller dashboard.
 - **Demo Story**: guided `/demo` page linking the full proof loop.
 - **Review Pack**: `/review` page with production links, health checks, proof links, and reviewer notes.
+- **QA Toolkit**: `npm run review:smoke` plus `/api/review/status` for production health checks.
 - **Service Registry**: typed metadata in `lib/services/registry.ts`.
 - **Seller Services**: Supabase-backed listings in `store_services`, merged with the static registry for public discovery.
 - **API Routes**: x402-protected service endpoints in later phases.
@@ -505,10 +526,11 @@ supabase/
 11. **Wallet-Funded Agent Launch**: complete / active prototype.
 12. **Demo Story / Guided Showcase**: complete / active prototype.
 13. **Reviewer Readiness / Public Submission Pack**: complete / active prototype.
-14. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
-15. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-16. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
-17. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
+14. **Production QA and Review Smoke Toolkit**: complete / active prototype.
+15. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
+16. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+17. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
+18. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -554,6 +576,7 @@ Useful checks:
 ```bash
 npm run lint
 npm run build
+npm run review:smoke
 ```
 
 ## Environment
@@ -577,4 +600,4 @@ After a run completes, open `/review` for reviewer-ready proof links, `/demo` fo
 
 ## Status
 
-Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, seller analytics, public commerce receipts, browser wallet visibility/funding UX, a guided demo story, and a reviewer-ready submission pack while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.
+Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, seller analytics, public commerce receipts, browser wallet visibility/funding UX, a guided demo story, a reviewer-ready submission pack, and production smoke tooling while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.
