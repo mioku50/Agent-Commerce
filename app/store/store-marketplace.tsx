@@ -23,6 +23,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   BadgeCheck,
+  ClipboardCheck,
   Database,
   FileJson,
   Fuel,
@@ -170,6 +171,12 @@ export function StoreMarketplace({
                   </div>
                 </dl>
                 <div className="mt-4 flex flex-col gap-2">
+                  <Button asChild size="sm">
+                    <Link href="/review">
+                      <ClipboardCheck />
+                      Review Pack
+                    </Link>
+                  </Button>
                   <Button asChild size="sm">
                     <Link href="/demo">
                       <Sparkles />
@@ -349,6 +356,12 @@ export function StoreMarketplace({
                 </h2>
               </div>
             <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline" size="sm">
+                <Link href="/review">
+                  <ClipboardCheck />
+                  Review pack
+                </Link>
+              </Button>
               <Button asChild variant="outline" size="sm">
                 <Link href="/demo">
                   <Sparkles />

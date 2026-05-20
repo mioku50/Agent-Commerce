@@ -24,6 +24,7 @@ import {
   BadgeCheck,
   Bot,
   ChartNoAxesCombined,
+  ClipboardCheck,
   Fuel,
   House,
   LayoutDashboard,
@@ -47,6 +48,7 @@ type GlobalNavClientProps = {
 
 const publicLinks = [
   { href: "/", label: "Home", icon: House },
+  { href: "/review", label: "Review Pack", icon: ClipboardCheck },
   { href: "/demo", label: "Guided Demo", icon: Sparkles },
   { href: "/store", label: "API Store", icon: Store },
   { href: "/agent-control", label: "Agent Control", icon: Bot },

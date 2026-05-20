@@ -23,6 +23,7 @@ import {
   BadgeCheck,
   Bot,
   ChartNoAxesCombined,
+  ClipboardCheck,
   ClipboardList,
   ExternalLink,
   Fuel,
@@ -335,6 +336,12 @@ export default async function DemoPage() {
               receipts plus Agent Passport updates.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Button asChild size="lg">
+                <Link href="/review">
+                  Review Pack
+                  <ClipboardCheck />
+                </Link>
+              </Button>
               <Button asChild size="lg">
                 <Link href="/agent-control">
                   Plan the run

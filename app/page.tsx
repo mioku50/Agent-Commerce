@@ -22,6 +22,7 @@ import {
   Bot,
   BadgeCheck,
   ChartNoAxesCombined,
+  ClipboardCheck,
   Fuel,
   LayoutDashboard,
   ListChecks,
@@ -73,12 +74,18 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button asChild size="lg">
+              <Link href="/review">
+                <ClipboardCheck />
+                Review Pack
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="secondary">
               <Link href="/demo">
                 <Sparkles />
                 Start guided demo
               </Link>
             </Button>
-            <Button asChild size="lg" variant="secondary">
+            <Button asChild size="lg" variant="outline">
               <Link href="/store">
                 <Store />
                 Open API Store
