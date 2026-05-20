@@ -28,6 +28,7 @@ import {
   FileJson,
   Fuel,
   PlusCircle,
+  Rocket,
   Search,
   ShieldCheck,
   Sparkles,
@@ -181,6 +182,12 @@ export function StoreMarketplace({
                     <Link href="/demo">
                       <Sparkles />
                       Start guided demo
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm">
+                    <Link href="/launch">
+                      <Rocket />
+                      Launch Pack
                     </Link>
                   </Button>
                   <Button asChild size="sm">

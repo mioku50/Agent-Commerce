@@ -29,6 +29,7 @@ import {
   Fuel,
   ListChecks,
   ReceiptText,
+  Rocket,
   ShieldCheck,
   Store,
   XCircle,
@@ -213,6 +214,12 @@ export default async function ReviewPage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
+                <Link href="/launch">
+                  Launch Pack
+                  <Rocket />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
                 <Link href="/store">
                   API Store
                   <Store />
@@ -346,6 +353,12 @@ export default async function ReviewPage() {
             href="/demo"
             detail="Narrative two-minute walkthrough."
             icon={ClipboardCheck}
+          />
+          <LinkCard
+            title="Launch Pack"
+            href="/launch"
+            detail="Submission copy, X thread outline, and recording checklist."
+            icon={Rocket}
           />
           <LinkCard
             title="API Store"

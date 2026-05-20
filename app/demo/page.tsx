@@ -29,6 +29,7 @@ import {
   Fuel,
   ListChecks,
   ReceiptText,
+  Rocket,
   ShieldCheck,
   Sparkles,
   Store,
@@ -340,6 +341,12 @@ export default async function DemoPage() {
                 <Link href="/review">
                   Review Pack
                   <ClipboardCheck />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="secondary">
+                <Link href="/launch">
+                  Launch Pack
+                  <Rocket />
                 </Link>
               </Button>
               <Button asChild size="lg">

@@ -28,6 +28,7 @@ import {
   ListChecks,
   PlusCircle,
   ReceiptText,
+  Rocket,
   Sparkles,
   Store,
 } from "lucide-react";
@@ -83,6 +84,12 @@ export default function Home() {
               <Link href="/demo">
                 <Sparkles />
                 Start guided demo
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/launch">
+                <Rocket />
+                Launch Pack
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">

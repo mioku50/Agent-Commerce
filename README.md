@@ -12,24 +12,53 @@ Live links:
 
 - Production: https://agent-commerce-six.vercel.app
 - Review Pack: https://agent-commerce-six.vercel.app/review
+- Launch Pack: https://agent-commerce-six.vercel.app/launch
 - Guided Demo: https://agent-commerce-six.vercel.app/demo
 - API Store: https://agent-commerce-six.vercel.app/store
 - Agent Control: https://agent-commerce-six.vercel.app/agent-control
+- Agent Launch: https://agent-commerce-six.vercel.app/agent-launch
 - Receipts: https://agent-commerce-six.vercel.app/receipts
 
 How to review in 2 minutes:
 
 1. Open `/review` for health/status, proof links, and reviewer notes.
-2. Open `/demo` for the guided story and copy the demo command.
-3. Open `/store` to confirm this is a marketplace, not just one protected endpoint.
-4. Open the latest run, receipt, Agent Passport, and seller analytics links from `/review`.
-5. Verify unpaid protection with `curl -i https://agent-commerce-six.vercel.app/api/premium/quote` and expect HTTP 402.
+2. Open `/launch` for submission copy, X thread outline, and recording checklist.
+3. Open `/demo` for the guided story and copy the demo command.
+4. Open `/store` to confirm this is a marketplace, not just one protected endpoint.
+5. Open the latest run, receipt, Agent Passport, and seller analytics links from `/review`.
+6. Verify unpaid protection with `curl -i https://agent-commerce-six.vercel.app/api/premium/quote` and expect HTTP 402.
+7. Run `npm run review:smoke` to verify public pages, JSON endpoints, and the decoded x402 challenge.
 
 Latest demo command:
 
 ```bash
 AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
 ```
+
+What makes this different from `arc-nanopayments`:
+
+- API marketplace instead of one protected endpoint.
+- Buyer-agent planner with task, budget, selected/skipped reasoning, and public timeline.
+- Seller-created safe mock services that expand the marketplace without an arbitrary proxy.
+- Wallet-funded agent launch for Arc Testnet users while x402 signing remains local.
+- Public commerce receipts, Agent Passports, and seller analytics as audit surfaces.
+- Production smoke tooling for reviewer confidence.
+
+Current testnet limitations:
+
+- Arc Testnet only.
+- Browser wallet support is limited to connect, balance display, network switching, and funding.
+- Browser pages never receive private keys and do not run x402 paid purchases.
+- The CLI buyer-agent still owns x402 signing, Gateway payment, and protected API calls.
+- Seller-created external API proxying is intentionally disabled; Phase 4 uses safe mock fulfillment.
+
+Next possible extensions:
+
+- ERC-8004 Agent Identity primitives.
+- ERC-8183 job / escrow style service workflows.
+- Real seller auth, seller-owned settlement configuration, and production service publishing.
+- Safer external fulfillment adapters with allowlists, schema enforcement, and execution logs.
+- A public proof dashboard that aggregates receipts, passports, service revenue, and payment events.
 
 ## Vision
 
@@ -373,6 +402,31 @@ It prints a reviewer-friendly summary with passed checks, failed checks, product
 
 The public read-only endpoint `GET /api/review/status` exposes high-level health data used by `/review` and the smoke script: latest successful run, latest receipt, seller-created live service availability, API Store service count, receipt count, and proof links.
 
+## Phase 15 — Final Launch / Submission Content Pack
+
+`/launch` is the final launch-ready submission page for public sharing and Arc/Circle/community review.
+
+It includes screenshot-friendly sections for:
+
+- product pitch
+- key features
+- live demo links
+- technical proof
+- reviewer checklist
+- latest proof links
+- submission copy for Arc House / Discord
+- X thread outline
+- demo recording checklist
+
+The page also includes copyable commands for the sentiment/tone demo and production smoke script:
+
+```bash
+AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
+npm run review:smoke
+```
+
+This phase is content/UI only. It does not add payment flows, does not move private keys into the browser, and does not modify x402/Gateway verification or settlement.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -435,6 +489,7 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - guided demo story with live proof cards
 - reviewer-ready public submission pack with health/status checks
 - production review smoke script and `/api/review/status`
+- launch submission pack with copy, proof links, and recording checklist
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -445,6 +500,7 @@ Planned architecture:
 - **Frontend**: Next.js App Router, TypeScript, API Store UI, seller dashboard.
 - **Demo Story**: guided `/demo` page linking the full proof loop.
 - **Review Pack**: `/review` page with production links, health checks, proof links, and reviewer notes.
+- **Launch Pack**: `/launch` page with submission copy, X thread outline, live demo links, and recording checklist.
 - **QA Toolkit**: `npm run review:smoke` plus `/api/review/status` for production health checks.
 - **Service Registry**: typed metadata in `lib/services/registry.ts`.
 - **Seller Services**: Supabase-backed listings in `store_services`, merged with the static registry for public discovery.
@@ -462,6 +518,8 @@ Suggested future structure:
 app/
   page.tsx
   review/
+    page.tsx
+  launch/
     page.tsx
   demo/
     page.tsx
@@ -527,10 +585,11 @@ supabase/
 12. **Demo Story / Guided Showcase**: complete / active prototype.
 13. **Reviewer Readiness / Public Submission Pack**: complete / active prototype.
 14. **Production QA and Review Smoke Toolkit**: complete / active prototype.
-15. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
-16. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-17. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
-18. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
+15. **Final Launch / Submission Content Pack**: complete / active prototype.
+16. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
+17. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+18. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
+19. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -560,6 +619,7 @@ Then open:
 
 - `http://localhost:3000`
 - `http://localhost:3000/review`
+- `http://localhost:3000/launch`
 - `http://localhost:3000/demo`
 - `http://localhost:3000/agent-control`
 - `http://localhost:3000/agent-launch`

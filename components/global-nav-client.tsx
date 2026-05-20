@@ -31,6 +31,7 @@ import {
   ListChecks,
   LogIn,
   LogOut,
+  Rocket,
   PlusCircle,
   ReceiptText,
   Sparkles,
@@ -49,6 +50,7 @@ type GlobalNavClientProps = {
 const publicLinks = [
   { href: "/", label: "Home", icon: House },
   { href: "/review", label: "Review Pack", icon: ClipboardCheck },
+  { href: "/launch", label: "Launch Pack", icon: Rocket },
   { href: "/demo", label: "Guided Demo", icon: Sparkles },
   { href: "/store", label: "API Store", icon: Store },
   { href: "/agent-control", label: "Agent Control", icon: Bot },
