@@ -348,8 +348,8 @@ export function AgentLaunchClient() {
     !address || !isArcTestnet || !destinationIsValid || transactionInFlight;
 
   return (
-    <div className="grid gap-6">
-      <div className="grid gap-4 lg:grid-cols-[1fr_0.78fr]">
+    <div className="grid gap-8 px-8 py-12">
+      <div className="grid gap-6 lg:grid-cols-[1fr_0.78fr]">
         <Card className="rounded-lg shadow-sm">
           <CardHeader>
             <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -409,7 +409,7 @@ export function AgentLaunchClient() {
             <dl className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md border bg-background p-4">
                 <dt className="text-sm text-muted-foreground">Native gas USDC</dt>
-                <dd className="mt-2 font-mono text-2xl font-semibold">
+                <dd className="mt-2 font-mono text-xl font-bold tracking-tight text-foreground">
                   {loadingBalances
                     ? "Loading..."
                     : `${formatArcBalance(nativeBalanceWei)} USDC`}
@@ -417,7 +417,7 @@ export function AgentLaunchClient() {
               </div>
               <div className="rounded-md border bg-background p-4">
                 <dt className="text-sm text-muted-foreground">ERC-20 USDC</dt>
-                <dd className="mt-2 font-mono text-2xl font-semibold">
+                <dd className="mt-2 font-mono text-xl font-bold tracking-tight text-foreground">
                   {loadingBalances
                     ? "Loading..."
                     : `${formatArcBalance(erc20UsdcBalance, ARC_TESTNET_USDC_DECIMALS)} USDC`}
@@ -483,7 +483,7 @@ export function AgentLaunchClient() {
             <dl className="grid gap-3 sm:grid-cols-2">
               <div className="rounded-md border bg-background p-4">
                 <dt className="text-sm text-muted-foreground">Buyer native</dt>
-                <dd className="mt-2 font-mono text-xl font-semibold">
+                <dd className="mt-2 font-mono text-lg font-bold tracking-tight text-foreground">
                   {buyerBalanceLoading
                     ? "Loading..."
                     : `${formatArcBalance(buyerNativeBalance)} USDC`}
@@ -491,7 +491,7 @@ export function AgentLaunchClient() {
               </div>
               <div className="rounded-md border bg-background p-4">
                 <dt className="text-sm text-muted-foreground">Buyer ERC-20</dt>
-                <dd className="mt-2 font-mono text-xl font-semibold">
+                <dd className="mt-2 font-mono text-lg font-bold tracking-tight text-foreground">
                   {buyerBalanceLoading
                     ? "Loading..."
                     : `${formatArcBalance(buyerErc20Balance, ARC_TESTNET_USDC_DECIMALS)} USDC`}

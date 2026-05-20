@@ -24,6 +24,7 @@ import {
   BadgeCheck,
   Bot,
   ChartNoAxesCombined,
+  ChevronDown,
   ClipboardCheck,
   Fuel,
   House,
@@ -31,15 +32,21 @@ import {
   ListChecks,
   LogIn,
   LogOut,
-  Rocket,
   PlusCircle,
   ReceiptText,
+  Rocket,
   Sparkles,
   Store,
   type LucideIcon,
 } from "lucide-react";
 import { logout } from "@/app/actions";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
 import { cn } from "@/lib/utils";
 
@@ -47,7 +54,7 @@ type GlobalNavClientProps = {
   loggedIn: boolean;
 };
 
-const publicLinks = [
+const primaryLinks = [
   { href: "/", label: "Home", icon: House },
   { href: "/review", label: "Review Pack", icon: ClipboardCheck },
   { href: "/launch", label: "Launch Pack", icon: Rocket },
@@ -55,6 +62,9 @@ const publicLinks = [
   { href: "/store", label: "API Store", icon: Store },
   { href: "/agent-control", label: "Agent Control", icon: Bot },
   { href: "/agent-launch", label: "Agent Launch", icon: Fuel },
+];
+
+const activityLinks = [
   { href: "/runs", label: "Agent Runs", icon: ListChecks },
   { href: "/agents", label: "Agent Passports", icon: BadgeCheck },
   { href: "/receipts", label: "Receipts", icon: ReceiptText },
@@ -103,9 +113,9 @@ export function GlobalNavClient({ loggedIn }: GlobalNavClientProps) {
 
   return (
     <header className="sticky top-0 z-40 border-b bg-background/90 backdrop-blur supports-[backdrop-filter]:bg-background/78">
-      <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+      <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <Link href="/" className="flex items-center gap-3">
+          <Link href="/" className="flex shrink-0 items-center gap-3">
             <span className="flex size-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm">
               AC
             </span>
@@ -119,47 +129,79 @@ export function GlobalNavClient({ loggedIn }: GlobalNavClientProps) {
             </span>
           </Link>
 
-          <div className="flex items-center gap-2 lg:hidden">
+          <div className="flex items-center gap-2 xl:hidden">
             <ArcWalletWidget variant="compact" />
             {loggedIn ? (
               <form action={logout}>
                 <Button type="submit" variant="outline" size="sm">
                   <LogOut />
-                  Logout
+                  <span className="sr-only sm:not-sr-only sm:ml-2">Logout</span>
                 </Button>
               </form>
             ) : (
               <Button asChild size="sm">
                 <Link href="/login">
                   <LogIn />
-                  Seller Login
+                  <span className="sr-only sm:not-sr-only sm:ml-2">Seller Login</span>
                 </Link>
               </Button>
             )}
           </div>
         </div>
 
-        <nav className="flex gap-2 overflow-x-auto pb-1 lg:pb-0" aria-label="Public navigation">
-          {publicLinks.map((link) => (
+        <nav
+          className="flex flex-wrap items-center gap-1 xl:flex-nowrap"
+          aria-label="Public navigation"
+        >
+          {primaryLinks.map((link) => (
             <NavLink key={link.href} {...link} pathname={pathname} />
           ))}
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="ghost"
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-primary/10 hover:text-primary",
+                  activityLinks.some((link) => isActive(pathname, link.href)) &&
+                    "bg-primary/10 text-primary",
+                )}
+              >
+                Activity
+                <ChevronDown className="size-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-48">
+              {activityLinks.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <DropdownMenuItem key={link.href} asChild>
+                    <Link href={link.href} className="flex cursor-pointer items-center gap-2">
+                      <Icon className="size-4 text-muted-foreground" />
+                      {link.label}
+                    </Link>
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </nav>
 
-        <div className="flex flex-col gap-2 border-t pt-3 lg:flex-row lg:items-center lg:border-t-0 lg:pt-0">
-          <div className="hidden lg:block">
+        <div className="flex flex-col gap-2 border-t pt-3 xl:flex-row xl:items-center xl:border-t-0 xl:pt-0">
+          <div className="hidden xl:block">
             <ArcWalletWidget variant="compact" />
           </div>
           {loggedIn ? (
             <>
               <nav
-                className="flex gap-2 overflow-x-auto pb-1 lg:pb-0"
+                className="flex flex-wrap items-center gap-1"
                 aria-label="Seller navigation"
               >
                 {sellerLinks.map((link) => (
                   <NavLink key={link.href} {...link} pathname={pathname} />
                 ))}
               </nav>
-              <form action={logout} className="hidden lg:block">
+              <form action={logout} className="hidden xl:block">
                 <Button type="submit" variant="outline" size="sm">
                   <LogOut />
                   Logout
@@ -167,7 +209,7 @@ export function GlobalNavClient({ loggedIn }: GlobalNavClientProps) {
               </form>
             </>
           ) : (
-            <Button asChild size="sm" className="hidden lg:inline-flex">
+            <Button asChild size="sm" className="hidden xl:inline-flex">
               <Link href="/login">
                 <LogIn />
                 Seller Login

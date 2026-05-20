@@ -1,0 +1,145 @@
+/**
+ * Copyright 2026 Circle Internet Group, Inc.  All rights reserved.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { ArrowRight, Bot } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { PublicAgentRun } from "@/lib/agent/runs-public";
+import { shortenHash } from "@/lib/utils";
+
+function statusVariant(status: string) {
+  if (status === "completed") return "default";
+  if (status === "failed") return "destructive";
+  if (status === "running") return "secondary";
+  return "outline";
+}
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function RunCard({ run }: { run: PublicAgentRun }) {
+  return (
+    <Card className="rounded-lg shadow-sm">
+      <CardHeader>
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
+          <Badge variant="secondary">{run.mode}</Badge>
+        </div>
+        <CardTitle className="line-clamp-2 text-xl">{run.task}</CardTitle>
+        <p className="text-sm text-muted-foreground">{formatDate(run.created_at)}</p>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <div>
+            <dt className="text-muted-foreground">Budget</dt>
+            <dd className="font-mono">{run.budget_usdc} USDC</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Spent</dt>
+            <dd className="font-mono">{run.spent_usdc} USDC</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Paid</dt>
+            <dd className="font-mono">{run.paid_count ?? 0}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Steps</dt>
+            <dd className="font-mono">{run.step_count ?? 0}</dd>
+          </div>
+        </dl>
+        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+          {run.agent_wallet ? (
+            <Link
+              href={`/agents/${run.agent_wallet}`}
+              className="font-mono text-xs text-primary hover:underline"
+            >
+              {shortenHash(run.agent_wallet, 6)}
+            </Link>
+          ) : (
+            <p className="font-mono text-xs text-muted-foreground">No wallet</p>
+          )}
+          <Button asChild>
+            <Link href={`/runs/${run.id}`}>
+              View timeline
+              <ArrowRight />
+            </Link>
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+export function RunsListClient({ initialRuns, error }: { initialRuns: PublicAgentRun[], error: string | null }) {
+  const [filter, setFilter] = useState("successful");
+
+  const filteredRuns = filter === "successful"
+    ? initialRuns.filter(r => r.status === "completed")
+    : initialRuns;
+
+  return (
+    <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6">
+      <div className="mb-4">
+        <Tabs value={filter} onValueChange={setFilter} className="w-full max-w-sm">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="successful">Successful Proofs</TabsTrigger>
+            <TabsTrigger value="all">Show All</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {error ? (
+        <Card className="rounded-lg">
+          <CardContent className="p-6">
+            <p className="font-medium">Agent runs are not available yet.</p>
+            <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+          </CardContent>
+        </Card>
+      ) : filteredRuns.length === 0 ? (
+        <Card className="rounded-lg">
+          <CardContent className="flex flex-col items-start gap-4 p-6">
+            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+              <Bot size={20} />
+            </div>
+            <div>
+              <p className="font-medium">
+                {filter === "successful" ? "No successful agent runs yet." : "No agent runs yet."}
+              </p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Run `npm run agent -- --task &quot;Prepare a market context
+                report&quot; --limit 0.05` after applying the Phase 3 migration.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ) : (
+        filteredRuns.map((run) => <RunCard key={run.id} run={run} />)
+      )}
+    </section>
+  );
+}

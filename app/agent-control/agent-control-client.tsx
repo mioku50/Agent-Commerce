@@ -206,7 +206,7 @@ export function AgentControlClient({ categories }: AgentControlClientProps) {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[420px_1fr]">
+    <div className="grid gap-8 px-8 py-12 lg:grid-cols-[420px_1fr]">
       <Card className="rounded-lg shadow-sm">
         <CardHeader>
           <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -345,7 +345,7 @@ export function AgentControlClient({ categories }: AgentControlClientProps) {
               <Card className="rounded-lg">
                 <CardContent className="p-5">
                   <p className="text-sm text-muted-foreground">Selected</p>
-                  <p className="mt-2 font-mono text-3xl font-semibold">
+                  <p className="mt-2 font-mono text-2xl font-bold tracking-tight text-foreground">
                     {plan.selected.length}
                   </p>
                 </CardContent>
@@ -353,7 +353,7 @@ export function AgentControlClient({ categories }: AgentControlClientProps) {
               <Card className="rounded-lg">
                 <CardContent className="p-5">
                   <p className="text-sm text-muted-foreground">Estimated spend</p>
-                  <p className="mt-2 font-mono text-3xl font-semibold">
+                  <p className="mt-2 font-mono text-2xl font-bold tracking-tight text-foreground">
                     {formatUsdc(plan.estimatedSpendUsdc)}
                   </p>
                 </CardContent>
@@ -361,7 +361,7 @@ export function AgentControlClient({ categories }: AgentControlClientProps) {
               <Card className="rounded-lg">
                 <CardContent className="p-5">
                   <p className="text-sm text-muted-foreground">Remaining budget</p>
-                  <p className="mt-2 font-mono text-3xl font-semibold">
+                  <p className="mt-2 font-mono text-2xl font-bold tracking-tight text-foreground">
                     {formatUsdc(plan.remainingBudgetUsdc)}
                   </p>
                 </CardContent>

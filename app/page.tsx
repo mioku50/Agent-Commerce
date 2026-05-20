@@ -24,6 +24,7 @@ import {
   ChartNoAxesCombined,
   ClipboardCheck,
   Fuel,
+  Info,
   LayoutDashboard,
   ListChecks,
   PlusCircle,
@@ -75,15 +76,21 @@ export default function Home() {
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
             <Button asChild size="lg">
-              <Link href="/review">
-                <ClipboardCheck />
-                Review Pack
+              <Link href="/about">
+                <Info />
+                What is this?
               </Link>
             </Button>
             <Button asChild size="lg" variant="secondary">
               <Link href="/demo">
                 <Sparkles />
                 Start guided demo
+              </Link>
+            </Button>
+            <Button asChild size="lg" variant="outline">
+              <Link href="/review">
+                <ClipboardCheck />
+                Review Pack
               </Link>
             </Button>
             <Button asChild size="lg" variant="outline">
