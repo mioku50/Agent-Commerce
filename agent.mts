@@ -113,6 +113,7 @@ type RunLog = {
     stage: string;
     message: string;
   }>;
+  persistenceWarnings: string[];
 };
 
 type ExecutableDecision = AgentPlanDecision & {
@@ -124,6 +125,13 @@ type PreflightResult = {
   requestId?: string;
   paymentRequired?: unknown;
   responseBody?: string;
+};
+
+type GatewayBalanceDiagnostic = {
+  available: number | null;
+  formattedAvailable: string | null;
+  detectable: boolean;
+  warning?: string;
 };
 
 const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000" as const;
@@ -417,6 +425,71 @@ function runSummary(input: {
   return `Selected ${input.selected}, paid ${input.paid}, skipped ${input.skipped}, failed ${input.failed}. Spent ${formatUsdc(input.spent)} USDC.`;
 }
 
+class InsufficientGatewayBalanceError extends Error {
+  constructor(
+    message: string,
+    readonly availableUsdc: number | null,
+    readonly requiredUsdc: number,
+  ) {
+    super(message);
+    this.name = "InsufficientGatewayBalanceError";
+  }
+}
+
+function isInsufficientBalanceError(error: unknown) {
+  const message = toErrorMessage(error).toLowerCase();
+  return (
+    message.includes("insufficient_balance") ||
+    message.includes("insufficient balance") ||
+    message.includes("not enough balance")
+  );
+}
+
+function lowerLimitDemoCommand(args: CliArgs) {
+  const task = args.task.replace(/"/g, '\\"');
+  return `AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "${task}" --limit 0.001`;
+}
+
+function printPlanPreflight(input: {
+  selected: ExecutableDecision[];
+  skippedCount: number;
+  estimatedSpendUsdc: number;
+  budgetUsdc: number;
+  gatewayBalance: GatewayBalanceDiagnostic;
+  skipDeposit: boolean;
+  depositAmountUsdc: string;
+}) {
+  console.log("\nBuyer-agent preflight summary:");
+  console.log(`  Selected services: ${input.selected.length}`);
+  for (const decision of input.selected) {
+    console.log(
+      `    - ${decision.service.name}: ${formatUsdc(decision.expectedPriceUsd)} USDC (${decision.service.method} ${decision.service.endpoint})`,
+    );
+  }
+  console.log(`  Skipped services: ${input.skippedCount}`);
+  console.log(`  Estimated spend: ${formatUsdc(input.estimatedSpendUsdc)} USDC`);
+  console.log(`  Current budget: ${formatUsdc(input.budgetUsdc)} USDC`);
+  console.log(
+    `  Fits budget: ${input.estimatedSpendUsdc <= input.budgetUsdc + 0.0000001 ? "yes" : "no"}`,
+  );
+
+  if (input.gatewayBalance.detectable) {
+    console.log(
+      `  Gateway available balance: ${input.gatewayBalance.formattedAvailable ?? "unknown"} USDC`,
+    );
+    const projected =
+      (input.gatewayBalance.available ?? 0) +
+      (input.skipDeposit ? 0 : Number(input.depositAmountUsdc));
+    console.log(
+      `  Balance appears sufficient: ${projected + 0.0000001 >= input.estimatedSpendUsdc ? "yes" : "no"}`,
+    );
+  } else {
+    console.log(
+      `  Gateway balance: not detectable${input.gatewayBalance.warning ? ` (${input.gatewayBalance.warning})` : ""}`,
+    );
+  }
+}
+
 async function fetchServiceRegistry(baseUrl: string, retries: number, timeoutMs: number) {
   const response = await fetchWithRetry(
     `${baseUrl}/api/store/services`,
@@ -520,26 +593,112 @@ async function main() {
     steps: [],
     summary: null,
     errors: [],
+    persistenceWarnings: [],
   };
   await writeRunLog(runFilePath, runLog);
 
-  const supabaseRun = await createAgentRun({
-    task: args.task,
-    mode: args.mode,
-    status: "running",
-    base_url: baseUrl,
-    agent_wallet: agentAccount.address,
-    budget_usdc: formatUsdc(args.spendingLimit),
-    spent_usdc: "0",
-    raw: {
-      localRunId: runId,
-      walletSource: runLog.walletSource,
-      targetNetwork: TARGET_NETWORK,
-      mcp: "raw Arc Docs MCP fallback verified before implementation",
-    },
-  });
+  function addPersistenceWarning(stage: string, detail: string) {
+    const warning = `${stage}: ${detail}`;
+    runLog.persistenceWarnings.push(warning);
+    console.warn(`[agent-persistence] ${warning}`);
+  }
+
+  async function safeCreateRun() {
+    try {
+      const created = await createAgentRun({
+        task: args.task,
+        mode: args.mode,
+        status: "running",
+        base_url: baseUrl,
+        agent_wallet: agentAccount.address,
+        budget_usdc: formatUsdc(args.spendingLimit),
+        spent_usdc: "0",
+        raw: {
+          localRunId: runId,
+          walletSource: runLog.walletSource,
+          targetNetwork: TARGET_NETWORK,
+          mcp: "raw Arc Docs MCP fallback verified before implementation",
+        },
+      });
+      if (!created) {
+        addPersistenceWarning("create agent run", "Supabase row was not created; local paid execution will continue.");
+      }
+      return created;
+    } catch (error) {
+      addPersistenceWarning("create agent run", toErrorMessage(error));
+      return null;
+    }
+  }
+
+  async function safeUpdateRun(input: Parameters<typeof updateAgentRun>[1], stage: string) {
+    try {
+      const ok = await updateAgentRun(runLog.supabaseRunId, input);
+      if (!ok && runLog.supabaseRunId) {
+        addPersistenceWarning(stage, "Supabase run update returned false.");
+      }
+      return ok;
+    } catch (error) {
+      addPersistenceWarning(stage, toErrorMessage(error));
+      return false;
+    }
+  }
+
+  async function safeCreateStep(input: Parameters<typeof createAgentStep>[0], stage: string) {
+    try {
+      const step = await createAgentStep(input);
+      if (!step) addPersistenceWarning(stage, "Supabase step was not created.");
+      return step;
+    } catch (error) {
+      addPersistenceWarning(stage, toErrorMessage(error));
+      return null;
+    }
+  }
+
+  async function safeUpdateStep(
+    stepId: string | null,
+    input: Parameters<typeof updateAgentStep>[1],
+    stage: string,
+  ) {
+    try {
+      const ok = await updateAgentStep(stepId, input);
+      if (!ok && stepId) addPersistenceWarning(stage, "Supabase step update returned false.");
+      return ok;
+    } catch (error) {
+      addPersistenceWarning(stage, toErrorMessage(error));
+      return false;
+    }
+  }
+
+  async function safeFindPaymentEvent(input: Parameters<typeof findRecentPaymentEvent>[0]) {
+    try {
+      return await findRecentPaymentEvent(input);
+    } catch (error) {
+      addPersistenceWarning("payment event matching", toErrorMessage(error));
+      return null;
+    }
+  }
+
+  async function safeRecalculatePassport(stage: string) {
+    try {
+      return await recalculateAgentProfile(agentAccount.address, {
+        runId: runLog.supabaseRunId,
+      });
+    } catch (error) {
+      addPersistenceWarning(stage, toErrorMessage(error));
+      return null;
+    }
+  }
+
+  const supabaseRun = await safeCreateRun();
   runLog.supabaseRunId = supabaseRun?.id ?? null;
-  await createOrUpdateAgentProfileByWallet(agentAccount.address);
+  try {
+    const profile = await createOrUpdateAgentProfileByWallet(agentAccount.address);
+    if (!profile) {
+      addPersistenceWarning("passport bootstrap", "Agent profile was not created yet.");
+    }
+  } catch (error) {
+    addPersistenceWarning("passport bootstrap", toErrorMessage(error));
+  }
   await writeRunLog(runFilePath, runLog);
 
   console.log(`Run file: ${runFilePath}`);
@@ -557,15 +716,13 @@ async function main() {
     runLog.status = "failed";
     runLog.summary = `${stage} failed: ${toErrorMessage(error)}`;
     await appendRunError(runFilePath, runLog, stage, error);
-    await updateAgentRun(runLog.supabaseRunId, {
+    await safeUpdateRun({
       status: "failed",
       spent_usdc: runLog.spentUsdc,
       summary: runLog.summary,
       error: toErrorMessage(error),
-    });
-    await recalculateAgentProfile(agentAccount.address, {
-      runId: runLog.supabaseRunId,
-    });
+    }, "mark run failed");
+    await safeRecalculatePassport("recalculate passport after failure");
 
     console.error("\nAgent runner stopped gracefully.");
     if (runLog.depositTxHash) {
@@ -573,7 +730,21 @@ async function main() {
     }
     console.error(`${stage} failed.`);
     console.error(`Reason: ${toErrorMessage(error)}`);
+    if (isInsufficientBalanceError(error)) {
+      console.error(
+        "Gateway balance is insufficient for the selected plan. Fund the buyer-agent from /agent-launch, deposit more USDC into Gateway, or run a lower-limit proof command:",
+      );
+      console.error(lowerLimitDemoCommand(args));
+    }
     console.error(`Run file: ${runFilePath}`);
+    console.error(`Paid count: ${runLog.steps.filter((step) => step.status === "paid").length}`);
+    console.error(`Spent amount: ${runLog.spentUsdc} USDC`);
+    if (runLog.persistenceWarnings.length > 0) {
+      console.error("Persistence warnings:");
+      for (const warning of runLog.persistenceWarnings) {
+        console.error(`  - ${warning}`);
+      }
+    }
     console.error("Retry with the same wallet and existing Gateway balance:");
     console.error(retryCommand(runFilePath, args));
   }
@@ -583,14 +754,12 @@ async function main() {
       runLog.status = "stopped";
       runLog.summary = "Agent run stopped by SIGINT.";
       await writeRunLog(runFilePath, runLog);
-      await updateAgentRun(runLog.supabaseRunId, {
+      await safeUpdateRun({
         status: "stopped",
         spent_usdc: runLog.spentUsdc,
         summary: runLog.summary,
-      });
-      await recalculateAgentProfile(agentAccount.address, {
-        runId: runLog.supabaseRunId,
-      });
+      }, "mark run stopped");
+      await safeRecalculatePassport("recalculate passport after stop");
       console.log(`\nAgent stopped. Run file: ${runFilePath}`);
       process.exit(0);
     })();
@@ -691,6 +860,48 @@ async function main() {
     await new Promise((resolve) => setTimeout(resolve, postDepositWaitMs));
   }
 
+  async function detectGatewayBalance(label: string): Promise<GatewayBalanceDiagnostic> {
+    try {
+      const balances = await withRetry(
+        () => gateway.getBalances(),
+        {
+          retries: 1,
+          timeoutMs: Math.min(fetchTimeoutMs, 15_000),
+          label,
+        },
+      );
+      const available = Number(balances.gateway.formattedAvailable);
+      return {
+        available: Number.isFinite(available) ? available : null,
+        formattedAvailable: balances.gateway.formattedAvailable,
+        detectable: true,
+      };
+    } catch (error) {
+      await appendRunError(runFilePath, runLog, label, error);
+      return {
+        available: null,
+        formattedAvailable: null,
+        detectable: false,
+        warning: toErrorMessage(error),
+      };
+    }
+  }
+
+  function assertGatewayBalanceCanCoverPlan(
+    diagnostic: GatewayBalanceDiagnostic,
+    estimatedSpendUsdc: number,
+  ) {
+    if (!diagnostic.detectable || diagnostic.available === null) return;
+    const projectedAvailable = diagnostic.available + (skipDeposit ? 0 : Number(depositAmount));
+    if (projectedAvailable + 0.0000001 >= estimatedSpendUsdc) return;
+
+    throw new InsufficientGatewayBalanceError(
+      `Gateway balance is insufficient for selected plan: ${formatUsdc(projectedAvailable)} USDC projected available, ${formatUsdc(estimatedSpendUsdc)} USDC required.`,
+      diagnostic.available,
+      estimatedSpendUsdc,
+    );
+  }
+
   async function preflightPaymentRequirement(
     service: ApiService,
     body: unknown,
@@ -733,10 +944,10 @@ async function main() {
 
     updateLocalStep(runLog, stepIndex, { status: "selected" });
     await writeRunLog(runFilePath, runLog);
-    await updateAgentStep(step?.id ?? null, {
+    await safeUpdateStep(step?.id ?? null, {
       status: "selected",
       raw: safeRaw({ decision: "selected" }),
-    });
+    }, `persist selected step ${stepIndex}`);
 
     const preflight = await preflightPaymentRequirement(service, body);
     updateLocalStep(runLog, stepIndex, {
@@ -744,14 +955,14 @@ async function main() {
       requestId: preflight.requestId ?? null,
     });
     await writeRunLog(runFilePath, runLog);
-    await updateAgentStep(step?.id ?? null, {
+    await safeUpdateStep(step?.id ?? null, {
       status: "payment_required",
       request_id: preflight.requestId ?? null,
       raw: safeRaw({
         paymentRequired: preflight.paymentRequired,
         responseBody: preflight.responseBody,
       }),
-    });
+    }, `persist payment requirement step ${stepIndex}`);
 
     const paymentStartedAt = new Date(Date.now() - 5000);
     let result: PayResult<unknown>;
@@ -775,13 +986,20 @@ async function main() {
         error: toErrorMessage(error),
       });
       await writeRunLog(runFilePath, runLog);
-      await updateAgentStep(step?.id ?? null, {
+      await safeUpdateStep(step?.id ?? null, {
         status: "failed",
         request_id: requestId,
         error: toErrorMessage(error),
         raw: safeRaw({ diagnostics: exchanges }),
-      });
+      }, `persist failed step ${stepIndex}`);
       printPaymentHttpDiagnostics(exchanges, runFilePath);
+      if (isInsufficientBalanceError(error)) {
+        throw new InsufficientGatewayBalanceError(
+          `Gateway balance is insufficient for ${service.name}. Required plan spend is ${formatUsdc(decision.expectedPriceUsd)} USDC for this step; fund or deposit more USDC before retrying.`,
+          null,
+          decision.expectedPriceUsd,
+        );
+      }
       throw error;
     }
 
@@ -793,7 +1011,7 @@ async function main() {
 
     const paidExchange = latestExchange(httpDiagnostics.getRecent(url), true);
     const requestId = paidExchange?.requestId ?? preflight.requestId ?? null;
-    const paymentEventId = await findRecentPaymentEvent({
+    const paymentEventId = await safeFindPaymentEvent({
       endpoint: service.endpoint,
       payer: agentAccount.address,
       amountUsdc: result.formattedAmount,
@@ -812,7 +1030,7 @@ async function main() {
       paymentEventId,
     });
     await writeRunLog(runFilePath, runLog);
-    await updateAgentStep(step?.id ?? null, {
+    await safeUpdateStep(step?.id ?? null, {
       status: "paid",
       request_id: requestId,
       payment_event_id: paymentEventId,
@@ -823,10 +1041,10 @@ async function main() {
         status: result.status,
         paymentResponse: paidExchange?.paymentResponse,
       }),
-    });
-    await updateAgentRun(runLog.supabaseRunId, {
+    }, `persist paid step ${stepIndex}`);
+    await safeUpdateRun({
       spent_usdc: runLog.spentUsdc,
-    });
+    }, "persist spent amount");
 
     console.log(
       `  ${service.name}: paid ${result.formattedAmount} USDC (spent ${runLog.spentUsdc}/${formatUsdc(args.spendingLimit)} USDC).`,
@@ -852,7 +1070,7 @@ async function main() {
     const skippedCount = plan.skipped.length;
     console.log(`Planner selected ${selectedCount} service(s), skipped ${skippedCount}.`);
 
-    await updateAgentRun(runLog.supabaseRunId, {
+    await safeUpdateRun({
       raw: {
         localRunId: runId,
         walletSource: runLog.walletSource,
@@ -863,14 +1081,14 @@ async function main() {
         estimatedSpendUsdc: plan.estimatedSpendUsdc,
         planWarnings: plan.warnings,
       },
-    });
+    }, "persist plan summary");
 
     const executableDecisions: ExecutableDecision[] = [];
     for (const [index, decision] of decisions.entries()) {
       const stepIndex = index + 1;
       const { service } = decision;
       const step = runLog.supabaseRunId
-        ? await createAgentStep({
+        ? await safeCreateStep({
             run_id: runLog.supabaseRunId,
             step_index: stepIndex,
             service_id: service.id,
@@ -887,7 +1105,7 @@ async function main() {
               expectedPriceUsd: decision.expectedPriceUsd,
               sourceType: service.sourceType,
             }),
-          })
+          }, `create timeline step ${stepIndex}`)
         : null;
 
       const status: AgentStepStatus =
@@ -899,14 +1117,14 @@ async function main() {
         status,
         reasoning: decision.reasoning,
       });
-      await updateAgentStep(step?.id ?? null, {
+      await safeUpdateStep(step?.id ?? null, {
         status,
         raw: safeRaw({
           decision: decision.decision,
           expectedPriceUsd: decision.expectedPriceUsd,
           sourceType: service.sourceType,
         }),
-      });
+      }, `persist planned step ${stepIndex}`);
       executableDecisions.push({ ...decision, step, stepIndex });
     }
     await writeRunLog(runFilePath, runLog);
@@ -916,6 +1134,18 @@ async function main() {
     );
 
     if (selected.length > 0) {
+      const gatewayDiagnostic = await detectGatewayBalance("Gateway balance preflight");
+      printPlanPreflight({
+        selected,
+        skippedCount,
+        estimatedSpendUsdc: plan.estimatedSpendUsdc,
+        budgetUsdc: args.spendingLimit,
+        gatewayBalance: gatewayDiagnostic,
+        skipDeposit,
+        depositAmountUsdc: depositAmount,
+      });
+      assertGatewayBalanceCanCoverPlan(gatewayDiagnostic, plan.estimatedSpendUsdc);
+
       console.log(
         skipDeposit
           ? "This run will reuse existing Gateway balance and skip the initial deposit."
@@ -949,18 +1179,24 @@ async function main() {
     runLog.status = finalStatus;
     runLog.summary = summary;
     await writeRunLog(runFilePath, runLog);
-    await updateAgentRun(runLog.supabaseRunId, {
+    await safeUpdateRun({
       status: finalStatus,
       spent_usdc: runLog.spentUsdc,
       summary,
       error: failedCount > 0 ? "One or more selected services failed." : null,
-    });
-    const passport = await recalculateAgentProfile(agentAccount.address, {
-      runId: runLog.supabaseRunId,
-    });
+    }, "persist final run summary");
+    const passport = await safeRecalculatePassport("recalculate passport after completion");
 
     console.log(`\nAgent run complete. ${summary}`);
     console.log(`Run file: ${runFilePath}`);
+    console.log(`Paid count: ${paidCount}`);
+    console.log(`Spent amount: ${runLog.spentUsdc} USDC`);
+    if (runLog.persistenceWarnings.length > 0) {
+      console.log("Persistence warnings (paid execution still completed):");
+      for (const warning of runLog.persistenceWarnings) {
+        console.log(`  - ${warning}`);
+      }
+    }
     if (runLog.supabaseRunId) {
       console.log(`Timeline: ${baseUrl}/runs/${runLog.supabaseRunId}`);
     }

@@ -302,6 +302,40 @@ export default async function ReviewPage() {
 
         <Card className="rounded-lg shadow-sm">
           <CardHeader>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Badge variant="secondary">Demo health</Badge>
+              {data.checks.recentInsufficientBalanceFailures > 0 ? (
+                <Badge variant="outline">Recent balance warning</Badge>
+              ) : (
+                <Badge variant="default">Reviewer-safe</Badge>
+              )}
+            </div>
+            <CardTitle>Recommended reviewer run</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+            <div className="grid gap-3 text-sm leading-6 text-muted-foreground">
+              <p>
+                Successful run: {data.checks.latestSuccessfulRunExists ? "available" : "not yet"} /
+                latest receipt: {data.checks.latestReceiptExists ? "available" : "not yet"} /
+                seller-created service: {data.checks.sellerCreatedLiveServiceExists ? "live" : "missing"}.
+              </p>
+              {data.checks.recentInsufficientBalanceFailures > 0 ? (
+                <p>
+                  Recent failed run(s) appear to be testnet/Gateway balance
+                  failures. Use the stable sentiment command below or fund more
+                  Gateway balance from Agent Launch.
+                </p>
+              ) : null}
+              <div className="rounded-md border bg-muted/40 p-4">
+                <code className="break-all font-mono text-sm">{data.recommendedCommand}</code>
+              </div>
+            </div>
+            <CopyButton value={data.recommendedCommand} label="Copy command" />
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-lg shadow-sm">
+          <CardHeader>
             <CardTitle>Run local review smoke</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">

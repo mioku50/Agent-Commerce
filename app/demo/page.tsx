@@ -68,6 +68,7 @@ type LiveProof = {
   run: PublicAgentRun | null;
   receipt: CommerceReceipt | null;
   profile: PublicAgentProfile | null;
+  recentInsufficientBalanceFailures: number;
   warning: string | null;
 };
 
@@ -149,15 +150,24 @@ async function getLiveProof(): Promise<LiveProof> {
       fetchRecentReceipts({ limit: 1 }),
       listAgentProfiles(1),
     ]);
+    const recentInsufficientBalanceFailures = runs.filter((run) => {
+      const text = [run.error, run.summary].filter(Boolean).join(" ").toLowerCase();
+      return (
+        run.status === "failed" &&
+        (text.includes("insufficient_balance") ||
+          text.includes("insufficient balance") ||
+          text.includes("gateway balance"))
+      );
+    }).length;
 
     return {
       run:
         runs.find((run) => run.status === "completed" && (run.paid_count ?? 0) > 0) ??
         runs.find((run) => run.status === "completed") ??
-        runs[0] ??
         null,
       receipt: receipts[0] ?? null,
       profile: profiles[0] ?? null,
+      recentInsufficientBalanceFailures,
       warning: null,
     };
   } catch (error) {
@@ -166,6 +176,7 @@ async function getLiveProof(): Promise<LiveProof> {
       run: null,
       receipt: null,
       profile: null,
+      recentInsufficientBalanceFailures: 0,
       warning: message,
     };
   }
@@ -495,6 +506,27 @@ export default async function DemoPage() {
               Live proof is unavailable right now: {proof.warning}
             </p>
           ) : null}
+          <Card className="rounded-lg shadow-sm">
+            <CardHeader>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <Badge variant="secondary">Demo health</Badge>
+                <Badge variant={proof.recentInsufficientBalanceFailures > 0 ? "outline" : "default"}>
+                  {proof.recentInsufficientBalanceFailures > 0 ? "Balance warning" : "Reviewer-safe"}
+                </Badge>
+              </div>
+              <CardTitle>Use the stable sentiment/tone command</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+              <p className="text-sm leading-6 text-muted-foreground">
+                Latest successful run: {proof.run ? "available" : "not yet"}.
+                Latest receipt: {proof.receipt ? "available" : "not yet"}.
+                {proof.recentInsufficientBalanceFailures > 0
+                  ? " Recent failed run(s) look like testnet/Gateway balance failures, so reviewers should use the lower-budget command."
+                  : " No recent insufficient-balance failures detected in the public run sample."}
+              </p>
+              <CopyButton value={demoCommand} label="Copy stable command" />
+            </CardContent>
+          </Card>
           <LiveProofCards proof={proof} />
         </section>
 

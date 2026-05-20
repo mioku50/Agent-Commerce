@@ -31,6 +31,9 @@ import {
 import { listAllStoreServices } from "@/lib/services/store-service-persistence";
 import type { ApiService } from "@/lib/services/registry";
 
+export const RECOMMENDED_REVIEWER_COMMAND =
+  'AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005';
+
 export type ReviewHealthStatus = {
   generatedAt: string;
   baseUrl: string;
@@ -41,7 +44,10 @@ export type ReviewHealthStatus = {
     apiStoreServiceCount: number;
     receiptCount: number;
     sellerCreatedLiveServiceCount: number;
+    recentInsufficientBalanceFailures: number;
   };
+  recommendedCommand: string;
+  recentFailedRuns: PublicAgentRun[];
   latestRunUrl: string | null;
   latestReceiptUrl: string | null;
   mainPassportUrl: string | null;
@@ -58,6 +64,16 @@ export function getDefaultProductionUrl() {
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null);
 
   return (publicUrl ?? "https://agent-commerce-six.vercel.app").replace(/\/$/, "");
+}
+
+function isInsufficientBalanceRun(run: PublicAgentRun) {
+  const text = [run.error, run.summary].filter(Boolean).join(" ").toLowerCase();
+  return (
+    text.includes("insufficient_balance") ||
+    text.includes("insufficient balance") ||
+    text.includes("not enough balance") ||
+    text.includes("gateway balance")
+  );
 }
 
 function urlFor(baseUrl: string, path: string) {
@@ -105,9 +121,12 @@ export async function getReviewHealthStatus(
     runs.find((run) => run.status === "completed" && (run.paid_count ?? 0) > 0) ??
     runs.find((run) => run.status === "completed") ??
     null;
-  const latestRun = latestSuccessfulRun ?? runs[0] ?? null;
+  const latestRun = latestSuccessfulRun;
   const latestReceipt = receipts[0] ?? null;
   const mainProfile = profiles[0] ?? null;
+  const recentFailedRuns = runs.filter((run) => run.status === "failed");
+  const recentInsufficientBalanceFailures =
+    recentFailedRuns.filter(isInsufficientBalanceRun).length;
   const sellerCreatedLiveServices = services.filter(
     (service) => service.sourceType !== "static" && service.status === "live",
   );
@@ -128,7 +147,10 @@ export async function getReviewHealthStatus(
       apiStoreServiceCount: services.length,
       receiptCount: receipts.length,
       sellerCreatedLiveServiceCount: sellerCreatedLiveServices.length,
+      recentInsufficientBalanceFailures,
     },
+    recommendedCommand: RECOMMENDED_REVIEWER_COMMAND,
+    recentFailedRuns,
     latestRunUrl: latestRun ? urlFor(baseUrl, `/runs/${latestRun.id}`) : null,
     latestReceiptUrl: latestReceipt
       ? urlFor(baseUrl, `/receipts/${latestReceipt.id}`)

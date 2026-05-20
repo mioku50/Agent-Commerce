@@ -37,6 +37,19 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function failedRunReason(run: PublicAgentRun) {
+  if (run.status !== "failed") return null;
+  const text = [run.error, run.summary].filter(Boolean).join(" ").toLowerCase();
+  if (
+    text.includes("insufficient_balance") ||
+    text.includes("insufficient balance") ||
+    text.includes("gateway balance")
+  ) {
+    return "testnet/balance failure";
+  }
+  return "testnet failure";
+}
+
 function RunCard({ run }: { run: PublicAgentRun }) {
   return (
     <Card className="command-card rounded-lg shadow-sm">
@@ -45,6 +58,11 @@ function RunCard({ run }: { run: PublicAgentRun }) {
           <div className="flex min-w-0 flex-wrap items-center gap-2">
             <StatusBadge status={run.status} />
             <StatusBadge status={run.mode} />
+            {failedRunReason(run) ? (
+              <span className="rounded-full border border-amber-400/25 bg-amber-400/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-amber-300">
+                {failedRunReason(run)}
+              </span>
+            ) : null}
           </div>
           <p className="shrink-0 text-xs text-muted-foreground">
             {formatDate(run.created_at)}

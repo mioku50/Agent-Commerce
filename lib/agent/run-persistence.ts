@@ -285,11 +285,23 @@ export async function createAgentRun(input: AgentRunInsert) {
   const client = getServiceSupabase();
   if (!client) return null;
 
-  const { data, error } = await client
-    .from("agent_runs")
-    .insert(input)
-    .select()
-    .single();
+  let data: unknown;
+  let error: { message: string } | null = null;
+
+  try {
+    const result = await client
+      .from("agent_runs")
+      .insert(input)
+      .select()
+      .single();
+    data = result.data;
+    error = result.error;
+  } catch (caught) {
+    console.warn(
+      `[agent-run-persistence] Failed to create run: ${safeErrorMessage(caught)}`,
+    );
+    return null;
+  }
 
   if (error) {
     console.warn(`[agent-run-persistence] Failed to create run: ${error.message}`);
@@ -305,7 +317,17 @@ export async function updateAgentRun(runId: string | null, input: AgentRunUpdate
   const client = getServiceSupabase();
   if (!client) return false;
 
-  const { error } = await client.from("agent_runs").update(input).eq("id", runId);
+  let error: { message: string } | null = null;
+
+  try {
+    const result = await client.from("agent_runs").update(input).eq("id", runId);
+    error = result.error;
+  } catch (caught) {
+    console.warn(
+      `[agent-run-persistence] Failed to update run: ${safeErrorMessage(caught)}`,
+    );
+    return false;
+  }
 
   if (error) {
     console.warn(`[agent-run-persistence] Failed to update run: ${error.message}`);
@@ -319,28 +341,50 @@ export async function createAgentStep(input: AgentStepInsert) {
   const client = getServiceSupabase();
   if (!client) return null;
 
-  const { data: existing, error: lookupError } = await client
-    .from("agent_purchase_steps")
-    .select("*")
-    .eq("run_id", input.run_id)
-    .eq("step_index", input.step_index)
-    .maybeSingle();
+  let existing: AgentStepRow | null = null;
 
-  if (lookupError) {
+  try {
+    const { data, error: lookupError } = await client
+      .from("agent_purchase_steps")
+      .select("*")
+      .eq("run_id", input.run_id)
+      .eq("step_index", input.step_index)
+      .maybeSingle();
+
+    existing = (data as AgentStepRow | null) ?? null;
+
+    if (lookupError) {
+      console.warn(
+        `[agent-run-persistence] Failed to check existing step before upsert: ${lookupError.message}`,
+      );
+    }
+  } catch (caught) {
     console.warn(
-      `[agent-run-persistence] Failed to check existing step before upsert: ${lookupError.message}`,
+      `[agent-run-persistence] Failed to check existing step before upsert: ${safeErrorMessage(caught)}`,
     );
   }
 
   const payload = existing
-    ? mergeAgentStepInput(input, existing as AgentStepRow)
+    ? mergeAgentStepInput(input, existing)
     : input;
 
-  const { data, error } = await client
-    .from("agent_purchase_steps")
-    .upsert(payload, { onConflict: "run_id,step_index" })
-    .select()
-    .single();
+  let data: unknown;
+  let error: { message: string } | null = null;
+
+  try {
+    const result = await client
+      .from("agent_purchase_steps")
+      .upsert(payload, { onConflict: "run_id,step_index" })
+      .select()
+      .single();
+    data = result.data;
+    error = result.error;
+  } catch (caught) {
+    console.warn(
+      `[agent-run-persistence] Failed to upsert step: ${safeErrorMessage(caught)}`,
+    );
+    return null;
+  }
 
   if (error) {
     console.warn(`[agent-run-persistence] Failed to upsert step: ${error.message}`);
@@ -356,10 +400,20 @@ export async function updateAgentStep(stepId: string | null, input: AgentStepUpd
   const client = getServiceSupabase();
   if (!client) return false;
 
-  const { error } = await client
-    .from("agent_purchase_steps")
-    .update(input)
-    .eq("id", stepId);
+  let error: { message: string } | null = null;
+
+  try {
+    const result = await client
+      .from("agent_purchase_steps")
+      .update(input)
+      .eq("id", stepId);
+    error = result.error;
+  } catch (caught) {
+    console.warn(
+      `[agent-run-persistence] Failed to update step: ${safeErrorMessage(caught)}`,
+    );
+    return false;
+  }
 
   if (error) {
     console.warn(`[agent-run-persistence] Failed to update step: ${error.message}`);
@@ -385,14 +439,26 @@ export async function findRecentPaymentEvent(input: {
     requestId: input.requestId ?? null,
   };
 
-  const { data, error } = await client
-    .from("payment_events")
-    .select("id,amount_usdc")
-    .eq("endpoint", input.endpoint)
-    .ilike("payer", input.payer)
-    .gte("created_at", input.since.toISOString())
-    .order("created_at", { ascending: false })
-    .limit(10);
+  let data: Array<{ id: string; amount_usdc: string }> | null = null;
+  let error: { message: string } | null = null;
+
+  try {
+    const result = await client
+      .from("payment_events")
+      .select("id,amount_usdc")
+      .eq("endpoint", input.endpoint)
+      .ilike("payer", input.payer)
+      .gte("created_at", input.since.toISOString())
+      .order("created_at", { ascending: false })
+      .limit(10);
+    data = result.data as Array<{ id: string; amount_usdc: string }> | null;
+    error = result.error;
+  } catch (caught) {
+    console.warn(
+      `[agent-run-persistence] Failed to match payment event${contextSuffix(context)}: ${safeErrorMessage(caught)}`,
+    );
+    return null;
+  }
 
   if (error) {
     console.warn(

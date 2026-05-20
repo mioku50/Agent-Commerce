@@ -170,6 +170,14 @@ Public timeline views:
 
 Usage:
 
+Reviewer-safe default:
+
+```bash
+AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
+```
+
+Higher-budget market context run, only after confirming Gateway balance:
+
 ```bash
 npm run agent -- --task "Prepare a market context report" --limit 0.05
 ```
@@ -177,7 +185,7 @@ npm run agent -- --task "Prepare a market context report" --limit 0.05
 Reuse an existing funded Gateway balance:
 
 ```bash
-AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Prepare a market context report" --limit 0.02
+AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
 ```
 
 For a full run including Agent Task, Gateway balance must be large enough. Quote + dataset + compute + agent-task costs about `0.0413 USDC`.
@@ -699,7 +707,7 @@ Copy `.env.example` to `.env.local` when local configuration is needed. Never co
 Agent runner examples:
 
 ```bash
-npm run agent -- --task "Prepare a market context report" --limit 0.05
+AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
 AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Create a small proof of agent commerce" --limit 0.001
 ```
 

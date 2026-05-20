@@ -128,8 +128,8 @@ export function AgentLaunchClient() {
   );
   const [nativeAmount, setNativeAmount] = useState("0.05");
   const [erc20Amount, setErc20Amount] = useState("0.05");
-  const [task, setTask] = useState("Prepare a market context report");
-  const [limit, setLimit] = useState("0.05");
+  const [task, setTask] = useState("Analyze tone and sentiment for a short builder update");
+  const [limit, setLimit] = useState("0.005");
   const [txState, setTxState] = useState<TransactionState | null>(null);
   const [buyerNativeBalance, setBuyerNativeBalance] = useState<bigint | null>(null);
   const [buyerErc20Balance, setBuyerErc20Balance] = useState<bigint | null>(null);
