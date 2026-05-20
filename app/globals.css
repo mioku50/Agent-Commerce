@@ -16,35 +16,36 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+@import "../styles/design-tokens.css";
 @import "tailwindcss";
 @import "tw-animate-css";
 
 :root {
-  --background: 45 50% 96.86%;
-  --foreground: 222 37% 20%;
-  --card: 0 0% 100%;
-  --card-foreground: 222 37% 20%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 222 37% 20%;
-  --primary: 210 100% 38%;
+  --background: 220 30% 4.7%;
+  --foreground: 225 32% 95.7%;
+  --card: 218 24% 7.3%;
+  --card-foreground: 225 32% 95.7%;
+  --popover: 218 24% 7.3%;
+  --popover-foreground: 225 32% 95.7%;
+  --primary: 220 100% 62%;
   --primary-foreground: 0 0% 100%;
-  --secondary: 211 100% 96%;
-  --secondary-foreground: 210 100% 31%;
-  --muted: 42 37% 91%;
-  --muted-foreground: 222 16% 43%;
-  --accent: 210 100% 94%;
-  --accent-foreground: 210 100% 30%;
-  --destructive: 353.92 83.15% 65.1%;
+  --secondary: 219 36% 13%;
+  --secondary-foreground: 225 32% 95.7%;
+  --muted: 220 23% 11%;
+  --muted-foreground: 225 12% 60%;
+  --accent: 219 36% 13%;
+  --accent-foreground: 225 32% 95.7%;
+  --destructive: 354 100% 64%;
   --destructive-foreground: 0 0% 100%;
-  --border: 210 40% 96.1%;
-  --input: 210 40% 96.1%;
-  --ring: 210 100% 45%;
-  --chart-1: 210 100% 45%;
-  --chart-2: 189 88% 38%;
-  --chart-3: 154 66% 38%;
+  --border: 222 26% 16%;
+  --input: 222 26% 16%;
+  --ring: 220 100% 62%;
+  --chart-1: 220 100% 62%;
+  --chart-2: 174 57% 68%;
+  --chart-3: 158 100% 41%;
   --chart-4: 38 92% 50%;
   --chart-5: 260 74% 62%;
-  --radius: 0.5rem;
+  --radius: 0.625rem;
 }
 
 @theme inline {
@@ -83,9 +84,57 @@
   }
   body {
     @apply bg-background text-foreground;
+    color-scheme: dark;
+    font-family: var(--font-sans);
     background-image:
-      linear-gradient(180deg, hsl(45 60% 98%) 0%, hsl(var(--background)) 220px),
-      radial-gradient(circle at top left, hsl(210 100% 94% / 0.65), transparent 34rem);
+      radial-gradient(circle at 20% -10%, rgb(61 126 255 / 0.2), transparent 28rem),
+      radial-gradient(circle at 85% 5%, rgb(0 208 132 / 0.09), transparent 26rem),
+      linear-gradient(180deg, #080a0f 0%, #090b11 48%, #080a0f 100%);
     background-attachment: fixed;
+  }
+
+  code,
+  pre,
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
+  ::selection {
+    background: rgb(61 126 255 / 0.35);
+  }
+}
+
+@layer utilities {
+  .text-code {
+    color: var(--color-text-code);
+  }
+
+  .tabular-usdc {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .command-card {
+    transition: var(--transition-base);
+  }
+
+  .command-card:hover {
+    border-color: rgb(61 126 255 / 0.55);
+    box-shadow: 0 4px 24px rgb(61 126 255 / 0.08);
+    transform: translateY(-1px);
+  }
+
+  .skeleton-shimmer {
+    background: linear-gradient(90deg, #141820 25%, #1e2433 50%, #141820 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.3s linear infinite;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
   }
 }

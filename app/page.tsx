@@ -17,231 +17,206 @@
  */
 
 import Link from "next/link";
+import { connection } from "next/server";
 import {
-  BookOpen,
-  Bot,
+  ArrowRight,
   BadgeCheck,
+  Bot,
   ChartNoAxesCombined,
   ClipboardCheck,
   Fuel,
-  Info,
-  LayoutDashboard,
   ListChecks,
-  PlusCircle,
   ReceiptText,
-  Rocket,
   Sparkles,
   Store,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { USDCAmount } from "@/components/wallet/USDCAmount";
+import { fetchRecentAgentRuns } from "@/lib/agent/runs-public";
+import { listAgentProfiles } from "@/lib/agent/passport-persistence";
+import { listAllStoreServices } from "@/lib/services/store-service-persistence";
+import { shortenHash } from "@/lib/utils";
 
-const features = [
-  {
-    title: "API Store",
-    icon: Store,
-    body: "A service catalog with endpoint metadata, categories, prices, and example use cases for agent-buyable APIs.",
-  },
-  {
-    title: "Buyer Agent",
-    icon: Bot,
-    body: "A buyer flow for discovering services, paying with USDC through x402, and recording why each paid call was useful.",
-  },
-  {
-    title: "Seller Dashboard",
-    icon: ChartNoAxesCombined,
-    body: "A seller surface for API revenue, agent purchases, Gateway balance, and withdraw earnings.",
-  },
+const quickActions = [
+  { href: "/demo", label: "Start guided demo", icon: Sparkles },
+  { href: "/agent-launch", label: "Fund buyer-agent", icon: Fuel },
+  { href: "/agents", label: "Agent Passports", icon: BadgeCheck },
+  { href: "/receipts", label: "Commerce Receipts", icon: ReceiptText },
+  { href: "/seller/analytics", label: "Seller Analytics", icon: ChartNoAxesCombined },
 ];
 
-export default function Home() {
+export default async function Home() {
+  await connection();
+
+  const [servicesResult, runsResult, profilesResult] = await Promise.allSettled([
+    listAllStoreServices(),
+    fetchRecentAgentRuns(5),
+    listAgentProfiles(5),
+  ]);
+
+  const services =
+    servicesResult.status === "fulfilled" ? servicesResult.value.services : [];
+  const runs = runsResult.status === "fulfilled" ? runsResult.value : [];
+  const profiles = profilesResult.status === "fulfilled" ? profilesResult.value : [];
+  const completedRuns = runs.filter((run) => run.status === "completed").length;
+  const spent = runs.reduce((sum, run) => sum + Number(run.spent_usdc || 0), 0);
+
   return (
     <main className="min-h-screen bg-background">
-      <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-14 sm:px-6 lg:grid-cols-[1.08fr_0.92fr] lg:items-center lg:py-20">
-        <div>
-          <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-primary">
-            Agent Commerce on Arc
-          </p>
-          <h1 className="max-w-4xl text-5xl font-bold leading-[0.96] tracking-normal text-foreground sm:text-6xl lg:text-7xl">
-            Arc Agent Commerce
-          </h1>
-          <p className="mt-6 max-w-2xl text-2xl font-semibold leading-tight text-foreground sm:text-3xl">
-            An x402-powered API Store where AI agents buy services with USDC on
-            Arc.
-          </p>
-          <p className="mt-5 max-w-2xl text-base leading-7 text-muted-foreground">
-            This demo reframes Arc Nanopayments as an API marketplace: agents
-            discover paid services, inspect prices, pay per request, and receive
-            useful responses instantly.
-          </p>
-          <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-            <Button asChild size="lg">
-              <Link href="/about">
-                <Info />
-                What is this?
+      <section className="border-b bg-secondary/20">
+        <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-12 sm:px-6 xl:grid-cols-[1.08fr_0.92fr] xl:items-center">
+          <div className="min-w-0">
+            <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-primary">
+              Arc Command Center
+            </p>
+            <h1 className="max-w-4xl text-4xl font-bold leading-[1.05] tracking-normal text-foreground sm:text-6xl">
+              Agent commerce control center for paid APIs on Arc
+            </h1>
+            <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">
+              Discover x402-powered services, plan buyer-agent purchases, fund
+              the local agent wallet, and inspect the public proof trail:
+              timelines, receipts, passports, and seller analytics.
+            </p>
+            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Button asChild size="lg">
+                <Link href="/demo">
+                  <Sparkles />
+                  Start guided demo
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="secondary">
+                <Link href="/agent-control">
+                  <Bot />
+                  Agent Control
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/store">
+                  <Store />
+                  Open Store
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
+                <Link href="/agent-setup">
+                  <ClipboardCheck />
+                  Local setup
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            {[
+              ["API Store", services.length.toString(), "services"],
+              ["Agent Runs", `${runs.length} total`, `${completedRuns} done`],
+              ["Spent", spent.toFixed(4), "USDC tracked"],
+              ["Agents", profiles.length.toString(), "active passports"],
+            ].map(([label, value, detail]) => (
+              <Card className="command-card rounded-lg" key={label}>
+                <CardContent className="p-5">
+                  <p className="text-sm text-muted-foreground">{label}</p>
+                  <p className="mt-3 font-mono text-3xl font-semibold tabular-usdc text-foreground">
+                    {value}
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6 xl:grid-cols-[1fr_0.85fr]">
+        <Card className="command-card rounded-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Store className="size-5" />
+              API Store Preview
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {(services.length > 0 ? services.slice(0, 5) : []).map((service) => (
+              <Link
+                key={service.slug}
+                href={`/store/${service.slug}`}
+                className="grid min-w-0 gap-3 rounded-md border bg-background/60 p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:grid-cols-[1fr_auto]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-semibold">{service.name}</p>
+                  <p className="mt-1 truncate text-xs text-muted-foreground">
+                    {service.endpoint}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3 md:justify-end">
+                  <span className="rounded-md border px-2 py-1 font-mono text-xs">
+                    {service.method}
+                  </span>
+                  <USDCAmount value={service.priceUsd} />
+                </div>
               </Link>
-            </Button>
-            <Button asChild size="lg" variant="secondary">
-              <Link href="/demo">
-                <Sparkles />
-                Start guided demo
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/review">
-                <ClipboardCheck />
-                Review Pack
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/launch">
-                <Rocket />
-                Launch Pack
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
+            ))}
+            <Button asChild variant="outline">
               <Link href="/store">
-                <Store />
-                Open API Store
+                Browse all services
+                <ArrowRight />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/dashboard">
-                <LayoutDashboard />
-                Open Seller Dashboard
+          </CardContent>
+        </Card>
+
+        <Card className="command-card rounded-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <ListChecks className="size-5" />
+              Recent Agent Runs
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3">
+            {runs.slice(0, 3).map((run) => (
+              <Link
+                key={run.id}
+                href={`/runs/${run.id}`}
+                className="grid min-w-0 gap-3 rounded-md border bg-background/60 p-4 transition-colors hover:border-primary/40 hover:bg-primary/5"
+              >
+                <div className="flex min-w-0 items-center justify-between gap-3">
+                  <StatusBadge status={run.status} />
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {shortenHash(run.id, 4)}
+                  </span>
+                </div>
+                <p className="line-clamp-2 text-sm font-medium">{run.task}</p>
+                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                  <span>{run.spent_usdc} USDC</span>
+                  <span>{run.paid_count ?? 0} paid</span>
+                  <span>{run.step_count ?? 0} steps</span>
+                </div>
               </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/seller">
-                <PlusCircle />
-                Create API Service
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/agent-control">
-                <Bot />
-                Agent Control
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/agent-launch">
-                <Fuel />
-                Fund Agent
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
+            ))}
+            <Button asChild variant="outline">
               <Link href="/runs">
-                <ListChecks />
-                View Agent Runs
+                View all runs
+                <ArrowRight />
               </Link>
             </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/agents">
-                <BadgeCheck />
-                Agent Passports
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="/receipts">
-                <ReceiptText />
-                Commerce Receipts
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline">
-              <Link href="https://github.com/mioku50/Agent-Commerce#readme">
-                <BookOpen />
-                View README
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        <div className="grid gap-4">
-          <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
-            <div className="flex items-center justify-between border-b px-5 py-4">
-              <span className="text-sm font-semibold">API Store preview</span>
-              <span className="rounded-md bg-secondary px-2.5 py-1 text-xs font-semibold text-secondary-foreground">
-                Arc Testnet
-              </span>
-            </div>
-            <div className="divide-y">
-              {[
-                ["Premium Quote", "0.001 USDC", "GET"],
-                ["Market Snapshot", "0.01 USDC", "GET"],
-                ["Agent Task", "0.03 USDC", "GET"],
-              ].map(([name, price, method]) => (
-                <div className="grid grid-cols-[1fr_auto] gap-4 px-5 py-5" key={name}>
-                  <div>
-                    <p className="font-semibold text-foreground">{name}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      x402 payment required
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-mono text-sm font-semibold text-primary">{price}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">{method}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-            <div className="grid gap-3 border-t bg-muted/35 px-5 py-4 text-sm text-muted-foreground sm:grid-cols-2">
-              <span>Gateway balance visible to sellers</span>
-              <span>Agent purchases tracked in Supabase</span>
-            </div>
-          </div>
-          <ArcWalletWidget />
-        </div>
+          </CardContent>
+        </Card>
       </section>
 
-      <section className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            ["1", "Agent discovers APIs", "The API Store exposes paid services, prices, schemas, and machine-readable discovery metadata."],
-            ["2", "Agent pays with USDC on Arc", "The local buyer-agent uses the existing x402/Gateway flow to satisfy HTTP 402 payment requirements."],
-            ["3", "Proof updates publicly", "Run timelines, commerce receipts, Agent Passports, and seller analytics make the purchase auditable."],
-          ].map(([step, title, body]) => (
-            <article className="rounded-lg border bg-card p-5 shadow-sm" key={title}>
-              <span className="flex size-8 items-center justify-center rounded-md bg-primary font-mono text-sm font-semibold text-primary-foreground">
-                {step}
-              </span>
-              <h2 className="mt-4 text-lg font-semibold">{title}</h2>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">{body}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto w-full max-w-6xl px-4 pb-16 sm:px-6">
-        <div className="max-w-3xl">
-          <p className="mb-3 text-xs font-bold uppercase tracking-[0.18em] text-primary">
-            API marketplace demo
-          </p>
-          <h2 className="text-3xl font-bold tracking-normal text-foreground sm:text-4xl">
-            USDC payments for AI agents
-          </h2>
-          <p className="mt-4 leading-7 text-muted-foreground">
-            Phase 1 keeps the product surface focused: a clear landing page,
-            a metadata-backed API Store, buyer-agent timelines, public Agent
-            Passports, and a seller dashboard that preserves the existing x402,
-            Gateway, and Supabase payment foundation.
-          </p>
-        </div>
-        <div className="mt-8 grid gap-4 md:grid-cols-3">
-          {features.map((feature) => {
-            const Icon = feature.icon;
-            return (
-              <article className="rounded-lg border bg-card p-6 shadow-sm" key={feature.title}>
-                <div className="mb-5 flex h-10 w-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                  <Icon size={20} />
-                </div>
-                <h3 className="text-lg font-semibold">{feature.title}</h3>
-                <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                  {feature.body}
-                </p>
-              </article>
-            );
-          })}
-        </div>
+      <section className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6">
+        <Card className="rounded-lg">
+          <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:flex-wrap">
+            {quickActions.map(({ href, label, icon: Icon }) => (
+              <Button key={href} asChild variant="outline">
+                <Link href={href}>
+                  <Icon className="size-4" />
+                  {label}
+                </Link>
+              </Button>
+            ))}
+          </CardContent>
+        </Card>
       </section>
     </main>
   );

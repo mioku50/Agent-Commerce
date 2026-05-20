@@ -1,0 +1,22 @@
+:root {
+  --color-bg-base: #080a0f;
+  --color-bg-panel: #0e1117;
+  --color-bg-elevated: #141820;
+  --color-border: #1e2433;
+  --color-border-subtle: #161b27;
+  --color-primary: #3d7eff;
+  --color-primary-dim: #1e3d80;
+  --color-success: #00d084;
+  --color-warning: #f5a623;
+  --color-error: #ff4757;
+  --color-text-primary: #f0f2f8;
+  --color-text-secondary: #8b93a8;
+  --color-text-muted: #4a5166;
+  --color-text-code: #7fdbca;
+
+  --font-sans: var(--font-dm-sans), system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), "SFMono-Regular", Consolas, monospace;
+
+  --transition-fast: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}

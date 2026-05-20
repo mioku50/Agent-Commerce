@@ -32,7 +32,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
+import { USDCAmount } from "@/components/wallet/USDCAmount";
+import { WalletAddress } from "@/components/wallet/WalletAddress";
 import {
   fetchRecentReceipts,
   type CommerceReceipt,
@@ -60,32 +63,40 @@ function formatDate(value: string) {
 
 function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
   return (
-    <Card className="rounded-lg shadow-sm">
-      <CardHeader>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Badge variant="default">x402 paid</Badge>
-          <Badge
-            variant={
-              receipt.serviceSourceType === "seller_mock" ? "secondary" : "outline"
-            }
-          >
-            {receipt.sourceLabel}
-          </Badge>
-          <Badge variant={receipt.paymentEvent ? "default" : "outline"}>
-            {receipt.paymentEventStatusLabel}
-          </Badge>
-        </div>
-        <CardTitle className="text-xl">{receipt.serviceName}</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {formatDate(receipt.createdAt)}
-        </p>
-      </CardHeader>
-      <CardContent className="grid gap-5">
-        <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-muted-foreground">Amount</dt>
-            <dd className="font-mono">{receipt.amountUsdc} USDC</dd>
+    <Card className="command-card rounded-lg shadow-sm">
+      <CardContent className="grid gap-4 p-5">
+        <div className="grid min-w-0 gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
+          <div className="min-w-0">
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <StatusBadge status="paid" />
+              <Badge
+                variant={
+                  receipt.serviceSourceType === "seller_mock" ? "secondary" : "outline"
+                }
+              >
+                {receipt.sourceLabel}
+              </Badge>
+              <Badge variant={receipt.paymentEvent ? "default" : "outline"}>
+                {receipt.paymentEventStatusLabel}
+              </Badge>
+            </div>
+            <h2 className="truncate text-lg font-semibold">{receipt.serviceName}</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {formatDate(receipt.createdAt)}
+            </p>
           </div>
+          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+            <USDCAmount value={receipt.amountUsdc} size="lg" />
+            <Button asChild>
+              <Link href={`/receipts/${receipt.id}`}>
+                View
+                <ArrowRight />
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-muted-foreground">Method</dt>
             <dd className="font-mono">{receipt.method ?? "n/a"}</dd>
@@ -98,8 +109,12 @@ function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
           </div>
           <div>
             <dt className="text-muted-foreground">Buyer agent</dt>
-            <dd className="font-mono">
-              {receipt.buyerWallet ? shortenHash(receipt.buyerWallet, 5) : "n/a"}
+            <dd className="min-w-0">
+              {receipt.buyerWallet ? (
+                <WalletAddress address={receipt.buyerWallet} chars={5} copyable={false} />
+              ) : (
+                "n/a"
+              )}
             </dd>
           </div>
         </dl>
@@ -109,12 +124,6 @@ function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
           </p>
         ) : null}
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:flex-wrap">
-          <Button asChild>
-            <Link href={`/receipts/${receipt.id}`}>
-              Open receipt
-              <ArrowRight />
-            </Link>
-          </Button>
           <Button asChild variant="outline">
             <Link href={receipt.links.run}>
               Run timeline
@@ -194,20 +203,12 @@ async function ReceiptList({
           </CardContent>
         </Card>
       ) : receipts.length === 0 ? (
-        <Card className="rounded-lg">
-          <CardContent className="flex flex-col items-start gap-4 p-6">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <FileSearch size={20} />
-            </div>
-            <div>
-              <p className="font-medium">No paid commerce receipts yet.</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Run a buyer-agent purchase through the API Store to create the
-                first public receipt.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={FileSearch}
+          title="No paid commerce receipts yet."
+          description="Run a buyer-agent purchase through the API Store to create the first public receipt."
+          action={{ label: "Open Agent Setup", href: "/agent-setup" }}
+        />
       ) : (
         receipts.map((receipt) => (
           <ReceiptCard key={receipt.id} receipt={receipt} />
@@ -279,10 +280,6 @@ export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) 
             </Button>
           </div>
         </div>
-      </section>
-
-      <section className="mx-auto w-full max-w-6xl px-4 pt-8 sm:px-6">
-        <ArcWalletWidget />
       </section>
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8 sm:px-6 md:grid-cols-3">

@@ -17,11 +17,12 @@
  */
 
 import { cookies } from "next/headers";
-import { GlobalNavClient } from "@/components/global-nav-client";
+import type React from "react";
+import { CommandCenterLayout } from "@/components/layout/layout";
 
-export async function GlobalNav() {
+export async function GlobalNav({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
   const loggedIn = cookieStore.get("session")?.value === "authenticated";
 
-  return <GlobalNavClient loggedIn={loggedIn} />;
+  return <CommandCenterLayout loggedIn={loggedIn}>{children}</CommandCenterLayout>;
 }

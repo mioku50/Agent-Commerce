@@ -21,19 +21,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Bot } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/empty-state";
+import { StatusBadge } from "@/components/ui/status-badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { USDCAmount } from "@/components/wallet/USDCAmount";
+import { WalletAddress } from "@/components/wallet/WalletAddress";
 import type { PublicAgentRun } from "@/lib/agent/runs-public";
-import { shortenHash } from "@/lib/utils";
-
-function statusVariant(status: string) {
-  if (status === "completed") return "default";
-  if (status === "failed") return "destructive";
-  if (status === "running") return "secondary";
-  return "outline";
-}
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat("en", {
@@ -44,24 +39,28 @@ function formatDate(value: string) {
 
 function RunCard({ run }: { run: PublicAgentRun }) {
   return (
-    <Card className="rounded-lg shadow-sm">
+    <Card className="command-card rounded-lg shadow-sm">
       <CardHeader>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Badge variant={statusVariant(run.status)}>{run.status}</Badge>
-          <Badge variant="secondary">{run.mode}</Badge>
+        <div className="mb-3 flex min-w-0 flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <StatusBadge status={run.status} />
+            <StatusBadge status={run.mode} />
+          </div>
+          <p className="shrink-0 text-xs text-muted-foreground">
+            {formatDate(run.created_at)}
+          </p>
         </div>
-        <CardTitle className="line-clamp-2 text-xl">{run.task}</CardTitle>
-        <p className="text-sm text-muted-foreground">{formatDate(run.created_at)}</p>
+        <CardTitle className="line-clamp-2 text-xl leading-snug">{run.task}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-5">
         <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
           <div>
             <dt className="text-muted-foreground">Budget</dt>
-            <dd className="font-mono">{run.budget_usdc} USDC</dd>
+            <dd><USDCAmount value={run.budget_usdc} /></dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Spent</dt>
-            <dd className="font-mono">{run.spent_usdc} USDC</dd>
+            <dd><USDCAmount value={run.spent_usdc} /></dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Paid</dt>
@@ -76,9 +75,9 @@ function RunCard({ run }: { run: PublicAgentRun }) {
           {run.agent_wallet ? (
             <Link
               href={`/agents/${run.agent_wallet}`}
-              className="font-mono text-xs text-primary hover:underline"
+              className="min-w-0 text-primary hover:underline"
             >
-              {shortenHash(run.agent_wallet, 6)}
+              <WalletAddress address={run.agent_wallet} chars={6} copyable={false} />
             </Link>
           ) : (
             <p className="font-mono text-xs text-muted-foreground">No wallet</p>
@@ -121,22 +120,12 @@ export function RunsListClient({ initialRuns, error }: { initialRuns: PublicAgen
           </CardContent>
         </Card>
       ) : filteredRuns.length === 0 ? (
-        <Card className="rounded-lg">
-          <CardContent className="flex flex-col items-start gap-4 p-6">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <Bot size={20} />
-            </div>
-            <div>
-              <p className="font-medium">
-                {filter === "successful" ? "No successful agent runs yet." : "No agent runs yet."}
-              </p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Run `npm run agent -- --task &quot;Prepare a market context
-                report&quot; --limit 0.05` after applying the Phase 3 migration.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Bot}
+          title={filter === "successful" ? "No successful agent runs yet." : "No agent runs yet."}
+          description="Launch your first buyer-agent run from Agent Control after funding the local buyer-agent wallet."
+          action={{ label: "Open Agent Control", href: "/agent-control" }}
+        />
       ) : (
         filteredRuns.map((run) => <RunCard key={run.id} run={run} />)
       )}

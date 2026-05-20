@@ -17,13 +17,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
   DEFAULT_AGENT_BUDGET_USDC,
@@ -152,7 +145,7 @@ export function AgentControlClient({ categories }: AgentControlClientProps) {
   const [preferredCategories, setPreferredCategories] = useState<string[]>([]);
   const [allowSellerCreated, setAllowSellerCreated] = useState(true);
   const [allowOfficial, setAllowOfficial] = useState(true);
-  const [mode, setMode] = useState("dry-run");
+  const [mode, setMode] = useState<"dry-run" | "scripted" | "live">("dry-run");
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -250,15 +243,30 @@ export function AgentControlClient({ categories }: AgentControlClientProps) {
 
           <div className="grid gap-2">
             <Label>Mode</Label>
-            <Select value={mode} onValueChange={setMode}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="dry-run">Dry-run planning</SelectItem>
-                <SelectItem value="local-command">Generate local command</SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="grid grid-cols-3 gap-2 rounded-md border bg-muted/25 p-1">
+              {[
+                ["dry-run", "Dry-run"],
+                ["scripted", "Scripted"],
+                ["live", "Live"],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setMode(value as "dry-run" | "scripted" | "live")}
+                  className={cn(
+                    "rounded-md px-3 py-2 text-xs font-semibold transition-colors",
+                    mode === value
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Browser planning is read-only; live paid execution still runs in the local CLI.
+            </p>
           </div>
 
           <div className="grid gap-3">
@@ -331,7 +339,7 @@ export function AgentControlClient({ categories }: AgentControlClientProps) {
               {plan?.localCommand ?? estimatedCommand}
             </div>
             <CopyButton value={plan?.localCommand ?? estimatedCommand} label="Copy command" />
-            {mode === "local-command" ? (
+            {mode !== "dry-run" ? (
               <p className="text-xs text-muted-foreground">
                 This command intentionally omits `AGENT_PRIVATE_KEY`.
               </p>

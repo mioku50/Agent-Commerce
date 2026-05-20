@@ -30,12 +30,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
+import { EmptyState } from "@/components/ui/empty-state";
+import { USDCAmount } from "@/components/wallet/USDCAmount";
+import { WalletAddress } from "@/components/wallet/WalletAddress";
 import {
   listAgentProfiles,
   type PublicAgentProfile,
 } from "@/lib/agent/passport-persistence";
-import { shortenHash } from "@/lib/utils";
 
 export const metadata = {
   title: "Agent Passports | Arc Agent Commerce",
@@ -52,17 +53,34 @@ function formatDate(value: string | null) {
 }
 
 function ProfileCard({ profile }: { profile: PublicAgentProfile }) {
+  const trustColor =
+    profile.trust_score >= 67
+      ? "bg-emerald-400"
+      : profile.trust_score >= 34
+        ? "bg-amber-400"
+        : "bg-red-400";
+
   return (
-    <Card className="rounded-lg shadow-sm">
+    <Card className="command-card rounded-lg shadow-sm">
       <CardHeader>
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">Agent Passport</Badge>
-          <Badge variant={profile.trust_score >= 60 ? "default" : "outline"}>
-            Trust {profile.trust_score}/100
-          </Badge>
+        <div className="mb-3 flex flex-wrap items-start justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="secondary">Agent Passport</Badge>
+            <Badge variant={profile.trust_score >= 60 ? "default" : "outline"}>
+              Trust {profile.trust_score}/100
+            </Badge>
+          </div>
+          <div className="w-full max-w-[220px]">
+            <div className="h-2 overflow-hidden rounded-full bg-muted">
+              <div
+                className={`h-full ${trustColor}`}
+                style={{ width: `${Math.min(100, Math.max(0, profile.trust_score))}%` }}
+              />
+            </div>
+          </div>
         </div>
-        <CardTitle className="break-all font-mono text-xl">
-          {shortenHash(profile.wallet, 8)}
+        <CardTitle className="min-w-0 text-xl">
+          <WalletAddress address={profile.wallet} chars={8} />
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           Last run: {formatDate(profile.last_run_at)}
@@ -84,7 +102,7 @@ function ProfileCard({ profile }: { profile: PublicAgentProfile }) {
           </div>
           <div>
             <dt className="text-muted-foreground">Spent</dt>
-            <dd className="font-mono">{profile.total_usdc_spent} USDC</dd>
+            <dd><USDCAmount value={profile.total_usdc_spent} /></dd>
           </div>
         </dl>
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -125,20 +143,12 @@ async function AgentsList() {
           </CardContent>
         </Card>
       ) : profiles.length === 0 ? (
-        <Card className="rounded-lg">
-          <CardContent className="flex flex-col items-start gap-4 p-6">
-            <div className="flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-              <Bot size={20} />
-            </div>
-            <div>
-              <p className="font-medium">No agent passports yet.</p>
-              <p className="mt-2 text-sm text-muted-foreground">
-                Run the buyer-agent after applying the Phase 5 migration to create
-                the first public wallet passport.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={Bot}
+          title="No agent passports yet."
+          description="Run the buyer-agent after applying the Phase 5 migration to create the first public wallet passport."
+          action={{ label: "Open Agent Setup", href: "/agent-setup" }}
+        />
       ) : (
         profiles.map((profile) => (
           <ProfileCard key={profile.wallet} profile={profile} />
@@ -206,10 +216,6 @@ export default function AgentsPage() {
             </Button>
           </div>
         </div>
-      </section>
-
-      <section className="mx-auto w-full max-w-6xl px-4 pt-8 sm:px-6">
-        <ArcWalletWidget />
       </section>
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8 sm:px-6 md:grid-cols-3">

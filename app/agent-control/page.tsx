@@ -1,12 +1,11 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import { Suspense } from "react";
-import { Bot, Fuel, ListChecks, Sparkles, Store } from "lucide-react";
+import { Bot, Fuel, ListChecks, ShieldCheck, Sparkles, Store } from "lucide-react";
 import { AgentControlClient } from "@/app/agent-control/agent-control-client";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
 import {
   categoriesForServices,
   listAllStoreServices,
@@ -68,6 +67,12 @@ export default function AgentControlPage() {
               </Link>
             </Button>
             <Button asChild variant="outline">
+              <Link href="/agent-setup">
+                <ShieldCheck />
+                Setup Guide
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
               <Link href="/runs">
                 <ListChecks />
                 Agent Runs
@@ -84,7 +89,6 @@ export default function AgentControlPage() {
       </section>
 
       <section className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6">
-        <ArcWalletWidget className="mb-5" />
         <div className="mb-5 grid gap-4 md:grid-cols-3">
           {[
             ["Dry-run", "No payment signatures, deposits, or private keys are handled in the browser."],

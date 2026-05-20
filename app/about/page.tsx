@@ -121,7 +121,7 @@ export default function AboutPage() {
               The current internet is built for humans holding credit cards. When automated AI software tries to solve complex problems, it frequently hits paywalls or requires humans to preemptively create accounts and buy expensive SaaS subscriptions.
             </p>
             <p>
-              By giving agents their own programmatic wallets and an open marketplace that accepts instant, tiny payments, we enable software to act autonomously. Agents can now "hire" other specialized tools on the fly, paying exactly for what they use, unlocking a new economy of machine-to-machine commerce.
+              By giving agents their own programmatic wallets and an open marketplace that accepts instant, tiny payments, we enable software to act autonomously. Agents can now &quot;hire&quot; other specialized tools on the fly, paying exactly for what they use, unlocking a new economy of machine-to-machine commerce.
             </p>
           </div>
           <div className="mt-10">

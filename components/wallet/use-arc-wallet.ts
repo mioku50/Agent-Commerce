@@ -274,6 +274,30 @@ export function useArcWallet() {
     }
   }, []);
 
+  const disconnect = useCallback(async () => {
+    const provider = getProvider();
+
+    try {
+      await provider?.request({
+        method: "wallet_revokePermissions",
+        params: [{ eth_accounts: {} }],
+      });
+    } catch {
+      // Not every injected wallet supports permission revocation. Clearing
+      // local state still disconnects this app session without exposing keys.
+    } finally {
+      setAddress(null);
+      setNativeBalanceWei(null);
+      setErc20UsdcBalance(null);
+      setError(null);
+    }
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await readWalletState();
+    if (address) await loadBalances(address);
+  }, [address, loadBalances, readWalletState]);
+
   return {
     address,
     chainId,
@@ -287,7 +311,9 @@ export function useArcWallet() {
     isArcTestnet,
     connect,
     switchToArc,
+    disconnect,
     loadBalances,
+    refresh,
     setError,
   };
 }

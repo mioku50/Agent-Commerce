@@ -17,7 +17,7 @@
  */
 
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import { GlobalNav } from "@/components/global-nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "sonner";
@@ -34,8 +34,14 @@ export const metadata: Metadata = {
     "An x402-powered API Store where AI agents buy services with USDC on Arc.",
 };
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const dmSans = DM_Sans({
+  variable: "--font-dm-sans",
+  display: "swap",
+  subsets: ["latin"],
+});
+
+const jetBrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   display: "swap",
   subsets: ["latin"],
 });
@@ -47,10 +53,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.className} antialiased`}>
+      <body className={`${dmSans.variable} ${jetBrainsMono.variable} antialiased`}>
         <TooltipProvider>
-          <GlobalNav />
-          {children}
+          <GlobalNav>{children}</GlobalNav>
         </TooltipProvider>
         <Toaster richColors position="bottom-right" />
       </body>

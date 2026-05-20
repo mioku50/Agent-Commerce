@@ -36,6 +36,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { LocalAgentSetupGuide } from "@/components/agent/local-agent-setup-guide";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -362,6 +363,12 @@ export default async function DemoPage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
+                <Link href="/agent-setup">
+                  Setup guide
+                  <ShieldCheck />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
                 <Link href="/receipts">
                   View receipts
                   <ReceiptText />
@@ -490,6 +497,8 @@ export default async function DemoPage() {
           ) : null}
           <LiveProofCards proof={proof} />
         </section>
+
+        <LocalAgentSetupGuide compact />
 
         <Card className="rounded-lg shadow-sm">
           <CardHeader>

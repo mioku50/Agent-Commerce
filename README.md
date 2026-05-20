@@ -17,6 +17,7 @@ Live links:
 - API Store: https://agent-commerce-six.vercel.app/store
 - Agent Control: https://agent-commerce-six.vercel.app/agent-control
 - Agent Launch: https://agent-commerce-six.vercel.app/agent-launch
+- Local Agent Setup: https://agent-commerce-six.vercel.app/agent-setup
 - Receipts: https://agent-commerce-six.vercel.app/receipts
 
 How to review in 2 minutes:
@@ -24,10 +25,11 @@ How to review in 2 minutes:
 1. Open `/review` for health/status, proof links, and reviewer notes.
 2. Open `/launch` for submission copy, X thread outline, and recording checklist.
 3. Open `/demo` for the guided story and copy the demo command.
-4. Open `/store` to confirm this is a marketplace, not just one protected endpoint.
-5. Open the latest run, receipt, Agent Passport, and seller analytics links from `/review`.
-6. Verify unpaid protection with `curl -i https://agent-commerce-six.vercel.app/api/premium/quote` and expect HTTP 402.
-7. Run `npm run review:smoke` to verify public pages, JSON endpoints, and the decoded x402 challenge.
+4. Open `/agent-setup` to see how a reviewer/operator runs the local CLI agent safely.
+5. Open `/store` to confirm this is a marketplace, not just one protected endpoint.
+6. Open the latest run, receipt, Agent Passport, and seller analytics links from `/review`.
+7. Verify unpaid protection with `curl -i https://agent-commerce-six.vercel.app/api/premium/quote` and expect HTTP 402.
+8. Run `npm run review:smoke` to verify public pages, JSON endpoints, and the decoded x402 challenge.
 
 Latest demo command:
 
@@ -427,6 +429,51 @@ npm run review:smoke
 
 This phase is content/UI only. It does not add payment flows, does not move private keys into the browser, and does not modify x402/Gateway verification or settlement.
 
+## Phase 16 — Local Agent Setup Guide and CLI Onboarding
+
+`/agent-setup` explains how reviewers and developers run the buyer-agent locally from the correct repository after funding the buyer-agent wallet from `/agent-launch`.
+
+The flow is:
+
+1. Open the project repository.
+2. Clone the repository locally.
+3. Install dependencies.
+4. Create `.env.local` from `.env.example`.
+5. Set `BASE_URL=https://agent-commerce-six.vercel.app`.
+6. Set or generate a buyer-agent private key locally only.
+7. Fund the buyer-agent wallet on Arc Testnet from `/agent-launch`.
+8. Run the generated `npm run agent` command.
+9. Open the resulting run timeline, receipt, and Agent Passport.
+
+Repository:
+
+```bash
+git clone https://github.com/mioku50/Agent-Commerce.git
+cd Agent-Commerce
+npm install
+```
+
+Required local environment checklist:
+
+- `BASE_URL`
+- `AGENT_PRIVATE_KEY`
+- `AGENT_MAX_IN_FLIGHT`
+- optional `AGENT_SKIP_FUNDING`
+- optional `AGENT_SKIP_DEPOSIT`
+- optional `AGENT_DEPOSIT_USDC`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- operator-only `SUPABASE_SERVICE_ROLE_KEY` for CLI timeline/passport persistence
+
+Security boundary:
+
+- never paste private keys into the browser
+- `.env.local` stays local and must not be committed
+- browser wallet only funds the buyer-agent wallet
+- local CLI signs x402 payments
+
+Public user limitation: the current CLI persistence flow requires private Supabase service-role credentials for run timeline/passport/receipt metadata. That is suitable for reviewer/operator demos but is not yet a fully public end-user flow.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -490,6 +537,7 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - reviewer-ready public submission pack with health/status checks
 - production review smoke script and `/api/review/status`
 - launch submission pack with copy, proof links, and recording checklist
+- local buyer-agent setup guide and CLI onboarding
 
 This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
 
@@ -501,6 +549,7 @@ Planned architecture:
 - **Demo Story**: guided `/demo` page linking the full proof loop.
 - **Review Pack**: `/review` page with production links, health checks, proof links, and reviewer notes.
 - **Launch Pack**: `/launch` page with submission copy, X thread outline, live demo links, and recording checklist.
+- **Local Agent Setup**: `/agent-setup` page for repo clone, env setup, funding, and CLI run instructions.
 - **QA Toolkit**: `npm run review:smoke` plus `/api/review/status` for production health checks.
 - **Service Registry**: typed metadata in `lib/services/registry.ts`.
 - **Seller Services**: Supabase-backed listings in `store_services`, merged with the static registry for public discovery.
@@ -526,6 +575,8 @@ app/
   agent-control/
     page.tsx
   agent-launch/
+    page.tsx
+  agent-setup/
     page.tsx
   store/
     page.tsx
@@ -586,10 +637,11 @@ supabase/
 13. **Reviewer Readiness / Public Submission Pack**: complete / active prototype.
 14. **Production QA and Review Smoke Toolkit**: complete / active prototype.
 15. **Final Launch / Submission Content Pack**: complete / active prototype.
-16. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
-17. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-18. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
-19. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
+16. **Local Agent Setup Guide and CLI Onboarding**: complete / active prototype.
+17. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
+18. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+19. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
+20. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -623,6 +675,7 @@ Then open:
 - `http://localhost:3000/demo`
 - `http://localhost:3000/agent-control`
 - `http://localhost:3000/agent-launch`
+- `http://localhost:3000/agent-setup`
 - `http://localhost:3000/store`
 - `http://localhost:3000/seller`
 - `http://localhost:3000/seller/analytics`

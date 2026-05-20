@@ -45,7 +45,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CopyButton } from "@/components/copy-button";
-import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
 import type {
   ApiService,
   ServiceMethod,
@@ -204,7 +203,6 @@ export function StoreMarketplace({
                   </Button>
                 </div>
               </div>
-              <ArcWalletWidget />
             </div>
           </div>
         </div>

@@ -19,6 +19,7 @@
 import Link from "next/link";
 import { BadgeCheck, Bot, ReceiptText, ShieldCheck, Store } from "lucide-react";
 import { AgentLaunchClient } from "@/app/agent-launch/agent-launch-client";
+import { LocalAgentSetupGuide } from "@/components/agent/local-agent-setup-guide";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -53,6 +54,12 @@ export default function AgentLaunchPage() {
               <Link href="/agent-control">
                 <Bot />
                 Dry-run planner
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="/agent-setup">
+                <ShieldCheck />
+                Setup Guide
               </Link>
             </Button>
             <Button asChild variant="outline">
@@ -104,6 +111,10 @@ export default function AgentLaunchPage() {
 
       <section className="mx-auto w-full max-w-7xl px-4 pb-16 sm:px-6">
         <AgentLaunchClient />
+      </section>
+
+      <section className="mx-auto w-full max-w-7xl px-4 pb-16 sm:px-6">
+        <LocalAgentSetupGuide compact />
       </section>
     </main>
   );
