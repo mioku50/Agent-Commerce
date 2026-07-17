@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { tryGetServerSupabaseConfig } from "../supabase/server-env";
 import {
   serviceRegistry,
   type ApiService,
@@ -173,12 +174,11 @@ const paymentEventColumns = [
 let supabase: SupabaseClient | null = null;
 
 function getServiceSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const config = tryGetServerSupabaseConfig();
 
-  if (!supabaseUrl || !serviceRoleKey) return null;
+  if (!config) return null;
 
-  supabase ??= createClient(supabaseUrl, serviceRoleKey, {
+  supabase ??= createClient(config.url, config.key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

@@ -1,4 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getPublicSupabaseConfig } from "../supabase/env.ts";
+import { tryGetServerSupabaseConfig } from "../supabase/server-env.ts";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -292,17 +294,16 @@ function isMissingPassportTableError(message: string) {
 }
 
 function getServiceSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const config = tryGetServerSupabaseConfig();
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!config) {
     console.warn(
-      "[agent-passport] Supabase service role env is missing; passport persistence disabled.",
+      "[agent-passport] Server Supabase env is missing; passport persistence disabled.",
     );
     return null;
   }
 
-  serviceSupabase ??= createClient(supabaseUrl, serviceRoleKey, {
+  serviceSupabase ??= createClient(config.url, config.key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -316,14 +317,9 @@ function getServiceSupabase() {
 }
 
 function getPublicSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const { url, key } = getPublicSupabaseConfig();
 
-  if (!supabaseUrl || !publishableKey) {
-    throw new Error("Supabase public env vars are required to read agent profiles.");
-  }
-
-  publicSupabase ??= createClient(supabaseUrl, publishableKey, {
+  publicSupabase ??= createClient(url, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

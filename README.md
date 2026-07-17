@@ -470,9 +470,13 @@ Required local environment checklist:
 - optional `AGENT_SKIP_FUNDING`
 - optional `AGENT_SKIP_DEPOSIT`
 - optional `AGENT_DEPOSIT_USDC`
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
-- operator-only `SUPABASE_SERVICE_ROLE_KEY` for CLI timeline/passport persistence
+- `NEXT_PUBLIC_AGENT_DB_SUPABASE_URL`
+- `NEXT_PUBLIC_AGENT_DB_SUPABASE_PUBLISHABLE_KEY`
+- `AGENT_DB_SUPABASE_URL`
+- operator-only `AGENT_DB_SUPABASE_SECRET_KEY` for CLI timeline/passport persistence
+
+The legacy Supabase variable names remain supported temporarily during the
+database transition. New environments should use the `AGENT_DB` names above.
 
 Security boundary:
 
@@ -534,6 +538,41 @@ server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY`. Never use a
 `NEXT_PUBLIC_` variable for the attester key. Apply the Supabase migration in
 `supabase/migrations/20260717190000_add_onchain_proof_metadata.sql` before
 enabling writes.
+
+## Phase 17.1 — Vercel AGENT_DB Supabase Migration
+
+The application now prefers the new Vercel Supabase integration variables for
+all browser and server database clients:
+
+- browser: `NEXT_PUBLIC_AGENT_DB_SUPABASE_URL` and
+  `NEXT_PUBLIC_AGENT_DB_SUPABASE_PUBLISHABLE_KEY`
+- server: `AGENT_DB_SUPABASE_URL` and preferably
+  `AGENT_DB_SUPABASE_SECRET_KEY`
+- server compatibility fallback: `AGENT_DB_SUPABASE_SERVICE_ROLE_KEY`
+- migrations: `AGENT_DB_POSTGRES_URL_NON_POOLING`
+
+The old variable names remain as temporary runtime fallbacks. The x402 payment
+and Gateway core keep their existing variables and must receive aliases that
+point to the same new database during the transition. The public review status
+API reports only the selected provider and environment variable names; it never
+returns URLs or credentials.
+
+Apply every migration in lexical order and rebuild the fresh demo seed with:
+
+```bash
+npx vercel env run -e production -- npm run db:migrate
+npx vercel env run -e production -- npm run db:verify
+```
+
+`db:migrate` records applied versions, uses the non-pooling Postgres connection,
+and always reruns the idempotent `supabase/seed.sql`. `db:verify` checks public
+read access, public write RLS, server writes, and fresh run, receipt, payment
+event, Agent Passport, and onchain proof-metadata records, then removes its
+temporary verification data.
+
+This is a schema plus fresh-seed migration. The unavailable legacy Supabase
+project is not read, and historical runs, receipts, passports, payment events,
+or analytics are not copied.
 
 ## Core User Flows
 
@@ -756,9 +795,25 @@ npm run build
 npm run review:smoke
 ```
 
+Database migration and verification against the linked Vercel production
+environment:
+
+```bash
+npx vercel env run -e production -- npm run db:migrate
+npx vercel env run -e production -- npm run db:verify
+```
+
 ## Environment
 
 Copy `.env.example` to `.env.local` when local configuration is needed. Never commit `.env`, `.env.local`, private keys, Circle API keys, entity secrets, wallet secrets, or bearer tokens.
+
+Supabase configuration prefers
+`NEXT_PUBLIC_AGENT_DB_SUPABASE_URL`/`NEXT_PUBLIC_AGENT_DB_SUPABASE_PUBLISHABLE_KEY`
+in the browser and `AGENT_DB_SUPABASE_URL`/`AGENT_DB_SUPABASE_SECRET_KEY` on the
+server. `AGENT_DB_SUPABASE_SERVICE_ROLE_KEY` and the legacy Supabase names are
+temporary fallbacks. Database migrations use
+`AGENT_DB_POSTGRES_URL_NON_POOLING`; diagnostic output includes only the provider
+and selected variable names.
 
 The onchain proof writer uses `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS` plus the
 server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY`. Contract deployment

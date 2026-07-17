@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getPublicSupabaseConfig } from "../supabase/env";
 
 export type PublicAgentRun = {
   id: string;
@@ -211,14 +212,9 @@ async function publicSupabaseFetchWithRetry(
 }
 
 export function createPublicSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const publishableKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const { url, key } = getPublicSupabaseConfig();
 
-  if (!supabaseUrl || !publishableKey) {
-    throw new Error("Supabase public env vars are required to read agent runs.");
-  }
-
-  supabase ??= createClient(supabaseUrl, publishableKey, {
+  supabase ??= createClient(url, key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

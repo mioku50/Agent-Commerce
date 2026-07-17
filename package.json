@@ -13,6 +13,8 @@
     "agent": "node --experimental-transform-types --no-warnings --env-file=.env.local agent.mts",
     "gateway:balance": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/gateway-balance.mts",
     "agents:rebuild": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/rebuild-agent-passports.mts",
+    "db:migrate": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/agent-db-migrate.mts",
+    "db:verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/agent-db-verify.mts",
     "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts"
   },
   "dependencies": {

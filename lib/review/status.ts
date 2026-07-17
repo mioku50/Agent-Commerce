@@ -30,6 +30,7 @@ import {
 } from "@/lib/commerce/receipts";
 import { listAllStoreServices } from "@/lib/services/store-service-persistence";
 import type { ApiService } from "@/lib/services/registry";
+import { getServerDatabaseDiagnostic } from "../supabase/server-env";
 
 export const RECOMMENDED_REVIEWER_COMMAND =
   'AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005';
@@ -55,6 +56,7 @@ export type ReviewHealthStatus = {
   latestReceipt: CommerceReceipt | null;
   mainProfile: PublicAgentProfile | null;
   warnings: string[];
+  database: ReturnType<typeof getServerDatabaseDiagnostic>;
 };
 
 export function getDefaultProductionUrl() {
@@ -162,5 +164,6 @@ export async function getReviewHealthStatus(
     latestReceipt,
     mainProfile,
     warnings,
+    database: getServerDatabaseDiagnostic(),
   };
 }

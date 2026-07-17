@@ -51,3 +51,5 @@ load-test-env.sh
 /contracts/cache/
 /contracts/out/
 /contracts/broadcast/
+.env*
+!.env.example

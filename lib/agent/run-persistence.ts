@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { tryGetServerSupabaseConfig } from "../supabase/server-env.ts";
 
 export type AgentRunStatus = "running" | "completed" | "failed" | "stopped";
 export type AgentStepStatus =
@@ -258,17 +259,16 @@ function mergeAgentStepInput(input: AgentStepInsert, existing: AgentStepRow): Ag
 }
 
 function getServiceSupabase() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const config = tryGetServerSupabaseConfig();
 
-  if (!supabaseUrl || !serviceRoleKey) {
+  if (!config) {
     console.warn(
-      "[agent-run-persistence] Supabase service role env is missing; timeline persistence disabled.",
+      "[agent-run-persistence] Server Supabase env is missing; timeline persistence disabled.",
     );
     return null;
   }
 
-  supabase ??= createClient(supabaseUrl, serviceRoleKey, {
+  supabase ??= createClient(config.url, config.key, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,

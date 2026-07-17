@@ -39,9 +39,16 @@ const envItems = [
   ["AGENT_SKIP_FUNDING", "Optional; reuse a wallet that is already funded."],
   ["AGENT_SKIP_DEPOSIT", "Optional; reuse existing Gateway balance."],
   ["AGENT_DEPOSIT_USDC", "Optional deposit amount for Gateway-funded runs."],
-  ["NEXT_PUBLIC_SUPABASE_URL", "Required for public UI/runtime reads."],
-  ["NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY", "Required for public Supabase reads."],
-  ["SUPABASE_SERVICE_ROLE_KEY", "Operator-only: needed for CLI timeline/passport persistence."],
+  ["NEXT_PUBLIC_AGENT_DB_SUPABASE_URL", "Preferred database URL for public UI/runtime reads."],
+  [
+    "NEXT_PUBLIC_AGENT_DB_SUPABASE_PUBLISHABLE_KEY",
+    "Preferred publishable key for public Supabase reads.",
+  ],
+  ["AGENT_DB_SUPABASE_URL", "Preferred server database URL for CLI persistence."],
+  [
+    "AGENT_DB_SUPABASE_SECRET_KEY",
+    "Operator-only: preferred for CLI timeline/passport persistence.",
+  ],
 ];
 
 export function LocalAgentSetupGuide({ compact = false }: { compact?: boolean }) {

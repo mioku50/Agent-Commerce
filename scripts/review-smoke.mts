@@ -26,6 +26,11 @@ type ReviewStatus = {
   latestRunUrl?: string | null;
   latestReceiptUrl?: string | null;
   mainPassportUrl?: string | null;
+  database?: {
+    provider?: string;
+    publicClient?: { configured?: boolean };
+    serverClient?: { configured?: boolean };
+  };
 };
 
 const ARC_TESTNET_NETWORK = "eip155:5042002";
@@ -134,11 +139,21 @@ async function checkReviewStatus(baseUrl: string) {
   const json = (await readJson(response)) as ReviewStatus;
 
   return {
-    check: {
-      name: "/api/review/status returns valid JSON",
-      ok: response.status === 200,
-      detail: `HTTP ${response.status}`,
-    } satisfies CheckResult,
+    checks: [
+      {
+        name: "/api/review/status returns valid JSON",
+        ok: response.status === 200,
+        detail: `HTTP ${response.status}`,
+      },
+      {
+        name: "review status uses the AGENT_DB provider",
+        ok:
+          json.database?.provider === "agent-db" &&
+          json.database.publicClient?.configured === true &&
+          json.database.serverClient?.configured === true,
+        detail: `provider=${json.database?.provider ?? "missing"} public=${json.database?.publicClient?.configured === true ? "configured" : "missing"} server=${json.database?.serverClient?.configured === true ? "configured" : "missing"}`,
+      },
+    ] satisfies CheckResult[],
     status: json,
   };
 }
@@ -308,10 +323,17 @@ async function main() {
   );
   results.push(...(Array.isArray(receiptsResult) ? receiptsResult : [receiptsResult]));
 
+  for (const path of ["/api/agent/runs", "/api/agents", "/api/seller/analytics"]) {
+    const result = await safelyRun(`${path} returns 200`, () =>
+      checkStatus(baseUrl, path, 200),
+    );
+    results.push(...(Array.isArray(result) ? result : [result]));
+  }
+
   try {
     const result = await checkReviewStatus(baseUrl);
     reviewStatus = result.status;
-    results.push(result.check);
+    results.push(...result.checks);
   } catch (error) {
     reviewStatusWarning = error instanceof Error ? error.message : String(error);
   }
