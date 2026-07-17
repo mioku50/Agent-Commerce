@@ -46,3 +46,8 @@ next-env.d.ts
 arc-agent-commerce@0.1.0
 node
 load-test-env.sh
+
+# Foundry build and broadcast artifacts
+/contracts/cache/
+/contracts/out/
+/contracts/broadcast/

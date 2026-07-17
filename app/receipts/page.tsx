@@ -61,6 +61,13 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function onchainStatusLabel(receipt: CommerceReceipt) {
+  if (receipt.onchainProof?.status === "verified") return "Onchain verified";
+  if (receipt.onchainProof?.status === "pending") return "Onchain pending";
+  if (receipt.onchainProof?.status === "failed") return "Onchain failed";
+  return "Onchain unavailable";
+}
+
 function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
   return (
     <Card className="command-card rounded-lg shadow-sm">
@@ -78,6 +85,17 @@ function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
               </Badge>
               <Badge variant={receipt.paymentEvent ? "default" : "outline"}>
                 {receipt.paymentEventStatusLabel}
+              </Badge>
+              <Badge
+                variant={
+                  receipt.onchainProof?.status === "verified"
+                    ? "default"
+                    : receipt.onchainProof?.status === "failed"
+                      ? "destructive"
+                      : "outline"
+                }
+              >
+                {onchainStatusLabel(receipt)}
               </Badge>
             </div>
             <h2 className="truncate text-lg font-semibold">{receipt.serviceName}</h2>
@@ -116,6 +134,10 @@ function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
                 "n/a"
               )}
             </dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Proof status</dt>
+            <dd>{onchainStatusLabel(receipt)}</dd>
           </div>
         </dl>
         {receipt.endpoint ? (
@@ -286,7 +308,7 @@ export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) 
         {[
           ["x402 paid", "Only successful paid purchase steps become receipts"],
           ["Agent-linked", "Every receipt links to a buyer wallet and Passport"],
-          ["Payment-aware", "Matched payment events are shown without signatures"],
+          ["Onchain proof", "Receipt hashes are attested on Arc after settlement"],
         ].map(([title, body]) => (
           <Card key={title} className="rounded-lg">
             <CardHeader>

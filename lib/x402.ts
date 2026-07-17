@@ -19,7 +19,12 @@
 import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
-import { NextRequest, NextResponse } from "next/server";
+import { after, NextRequest, NextResponse } from "next/server";
+import {
+  attestPaymentEvent,
+  createProofIdentifiers,
+  markOnchainProofFailed,
+} from "@/lib/commerce/onchain-proof";
 
 // Arc Testnet contract addresses (from @circle-fin/x402-batching SDK)
 const ARC_TESTNET_NETWORK = "eip155:5042002";
@@ -279,20 +284,30 @@ export function withGateway(
         );
       }
 
-      // Record payment event in Supabase
+      // Record payment event in Supabase. Onchain proof creation is a separate,
+      // non-custodial post-response side effect and never changes settlement.
       const amountUsdc = (
         Number(requirements.amount) / 1e6
       ).toString();
       const payer = settleResult.payer ?? verifyResult.payer ?? "unknown";
+      const paymentEventId = randomUUID();
+      const proofIdentifiers = createProofIdentifiers(paymentEventId, endpoint);
 
       const { error } = await getSupabase().from("payment_events").insert({
+        id: paymentEventId,
         endpoint,
         payer,
         amount_usdc: amountUsdc,
         network: requirements.network,
         gateway_tx: settleResult.transaction ?? null,
+        receipt_hash: proofIdentifiers.receiptHash,
+        service_hash: proofIdentifiers.serviceHash,
+        onchain_contract_address: proofIdentifiers.contractAddress,
+        onchain_chain_id: proofIdentifiers.chainId,
+        onchain_status: "pending",
         raw: { requirements, settleResult },
       });
+      const paymentEventRecorded = !error;
 
       if (error) {
         console.error("Failed to record payment event:", error.message);
@@ -301,6 +316,17 @@ export function withGateway(
       console.log(
         `[x402] Payment settled: ${endpoint} — ${amountUsdc} USDC from ${payer} requestId=${diagnostics.requestId}`,
       );
+
+      // Clone only for proof hashing. Failure here must not affect fulfillment.
+      let proofRequest: Request | null = null;
+      try {
+        proofRequest = req.clone();
+      } catch (error) {
+        console.error(
+          `[proof-registry] Failed to clone request for receipt ${paymentEventId}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
 
       // Call the actual route handler
       const response = await handler(req);
@@ -317,6 +343,36 @@ export function withGateway(
 
       response.headers.set("PAYMENT-RESPONSE", settleResponseHeader);
       response.headers.set("X-Agent-Commerce-Request-Id", diagnostics.requestId);
+
+      if (paymentEventRecorded) {
+        try {
+          if (!proofRequest) {
+            after(() => markOnchainProofFailed(getSupabase(), paymentEventId));
+          } else {
+            const proofResponse = response.clone();
+            after(() =>
+              attestPaymentEvent({
+                supabase: getSupabase(),
+                paymentEventId,
+                endpoint,
+                amountAtomic: requirements.amount,
+                buyer: payer,
+                seller: requirements.payTo,
+                request: proofRequest,
+                response: proofResponse,
+              }),
+            );
+          }
+        } catch (error) {
+          // The paid response remains authoritative even if the background
+          // attestation cannot be scheduled. Its persisted status stays pending.
+          console.error(
+            `[proof-registry] Failed to schedule proof for receipt ${paymentEventId}:`,
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      }
+
       return response;
     } catch (error) {
       const message =

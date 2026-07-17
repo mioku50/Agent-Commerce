@@ -44,6 +44,7 @@ What makes this different from `arc-nanopayments`:
 - Seller-created safe mock services that expand the marketplace without an arbitrary proxy.
 - Wallet-funded agent launch for Arc Testnet users while x402 signing remains local.
 - Public commerce receipts, Agent Passports, and seller analytics as audit surfaces.
+- Compact onchain receipt proofs on Arc, written only after x402 settlement.
 - Production smoke tooling for reviewer confidence.
 
 Current testnet limitations:
@@ -482,6 +483,58 @@ Security boundary:
 
 Public user limitation: the current CLI persistence flow requires private Supabase service-role credentials for run timeline/passport/receipt metadata. That is suitable for reviewer/operator demos but is not yet a fully public end-user flow.
 
+## Phase 17 — Onchain Agent Commerce Proof Registry
+
+Successfully settled x402 calls can now create a compact receipt proof in
+`AgentCommerceProofRegistry` on Arc Testnet. The contract lives in the isolated
+`contracts/` Foundry workspace and stores only the receipt hash, service hash,
+buyer, seller, USDC amount in 6-decimal atomic units, request hash, response
+hash, and block timestamp.
+
+The proof layer is intentionally non-custodial:
+
+- Circle Gateway remains responsible for x402 verification and settlement.
+- The registry never receives or transfers funds.
+- Only the operator or an operator-approved attester can register a proof.
+- A receipt hash can be registered only once.
+- Attestation runs after the paid response is produced. A failed onchain write
+  leaves the already-paid API response intact and records `pending` or `failed`
+  status in Supabase.
+
+`AgentCommerceProofRegistry` is a custom, unaudited testnet prototype. Review
+and audit it before any production use.
+
+Receipt proof surfaces:
+
+- `/receipts/[id]` shows the proof status, registry, transaction hash, and
+  Arcscan links.
+- `GET /api/proofs/[receiptId]` reads the corresponding registry proof without
+  signing or submitting a transaction.
+
+Test and deploy the contract:
+
+```bash
+cd contracts
+forge test
+
+# Use a Foundry encrypted keystore; do not pass a private key on the CLI.
+cast wallet import arc-proof-deployer --interactive
+export ARC_TESTNET_RPC_URL=https://rpc.testnet.arc.network
+export PROOF_REGISTRY_OPERATOR_ADDRESS=0x...
+export PROOF_REGISTRY_ATTESTER_ADDRESS=0x...
+forge script script/DeployAgentCommerceProofRegistry.s.sol \
+  --rpc-url arc_testnet \
+  --account arc-proof-deployer \
+  --sender 0xYourDeployerAddress \
+  --broadcast
+```
+
+After deployment, configure `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS` and the
+server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY`. Never use a
+`NEXT_PUBLIC_` variable for the attester key. Apply the Supabase migration in
+`supabase/migrations/20260717190000_add_onchain_proof_metadata.sql` before
+enabling writes.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -547,7 +600,7 @@ The current MVP keeps the payment foundation intact and adds the marketplace lay
 - launch submission pack with copy, proof links, and recording checklist
 - local buyer-agent setup guide and CLI onboarding
 
-This scope intentionally avoids deep changes to payment verification, Gateway balance, withdrawal, x402 middleware, or Supabase persistence.
+This scope intentionally avoids deep changes to payment verification, Gateway balance, or withdrawal. Phase 17 adds an isolated post-settlement proof hook and receipt metadata migration without changing the existing x402 verification or settlement decisions.
 
 ## Architecture
 
@@ -566,6 +619,7 @@ Planned architecture:
 - **Gateway**: balance and withdrawal flows for seller earnings.
 - **Storage**: Supabase for payment events, purchases, agent runs, Agent Passports, reputation events, and dashboard data.
 - **Receipts**: public audit trail derived from paid purchase steps, run metadata, service metadata, and matched payment events.
+- **Onchain Proofs**: a non-custodial Arc registry attested after settlement, with status and transaction metadata in Supabase.
 - **Wallet UX**: browser wallet connect, Arc Testnet balance display, and explicit user-confirmed testnet funding actions.
 - **Agent**: local buyer-agent script with service selection, x402 payment flow, spending policy, and purchase reasoning log.
 
@@ -646,10 +700,11 @@ supabase/
 14. **Production QA and Review Smoke Toolkit**: complete / active prototype.
 15. **Final Launch / Submission Content Pack**: complete / active prototype.
 16. **Local Agent Setup Guide and CLI Onboarding**: complete / active prototype.
-17. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
-18. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-19. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
-20. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
+17. **Onchain Agent Commerce Proof Registry**: complete / active prototype.
+18. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
+19. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
+20. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
+21. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
 
 ## Built on Arc Nanopayments
 
@@ -695,6 +750,7 @@ Then open:
 Useful checks:
 
 ```bash
+(cd contracts && forge test)
 npm run lint
 npm run build
 npm run review:smoke
@@ -703,6 +759,12 @@ npm run review:smoke
 ## Environment
 
 Copy `.env.example` to `.env.local` when local configuration is needed. Never commit `.env`, `.env.local`, private keys, Circle API keys, entity secrets, wallet secrets, or bearer tokens.
+
+The onchain proof writer uses `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS` plus the
+server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY`. Contract deployment
+uses the public `PROOF_REGISTRY_OPERATOR_ADDRESS` and
+`PROOF_REGISTRY_ATTESTER_ADDRESS` inputs with an encrypted Foundry keystore.
+No proof-writer or deployer key is exposed to client components.
 
 Agent runner examples:
 
@@ -721,4 +783,4 @@ After a run completes, open `/review` for reviewer-ready proof links, `/demo` fo
 
 ## Status
 
-Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, seller analytics, public commerce receipts, browser wallet visibility/funding UX, a guided demo story, a reviewer-ready submission pack, and production smoke tooling while preserving the upstream x402, Gateway, Supabase payment events, withdrawal, and payment verification layers.
+Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, seller analytics, public commerce receipts with an Arc Testnet proof registry, browser wallet visibility/funding UX, a guided demo story, a reviewer-ready submission pack, and production smoke tooling while preserving the upstream x402 verification, Gateway settlement, and withdrawal layers.

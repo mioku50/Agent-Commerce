@@ -19,6 +19,11 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createPublicSupabase } from "@/lib/agent/runs-public";
 import {
+  ARC_TESTNET_EXPLORER_URL,
+  onchainProofMetadataFromRow,
+  type OnchainProofMetadata,
+} from "@/lib/commerce/onchain-proof";
+import {
   type ApiService,
   type ServiceMethod,
   type ServiceSourceType,
@@ -64,6 +69,19 @@ type PaymentEventRow = {
   amount_usdc: string;
   network: string;
   gateway_tx: string | null;
+  receipt_hash: string | null;
+  service_hash: string | null;
+  request_hash: string | null;
+  response_hash: string | null;
+  onchain_contract_address: string | null;
+  onchain_chain_id: number | string | null;
+  onchain_tx_hash: string | null;
+  onchain_status: string | null;
+};
+
+export type CommerceReceiptOnchainProof = OnchainProofMetadata & {
+  contractExplorerUrl: string | null;
+  transactionExplorerUrl: string | null;
 };
 
 export type CommerceReceiptPaymentEvent = {
@@ -73,6 +91,7 @@ export type CommerceReceiptPaymentEvent = {
   network: string;
   gatewayTx: string | null;
   payer: string;
+  onchainProof: CommerceReceiptOnchainProof | null;
 };
 
 export type CommerceReceipt = {
@@ -99,6 +118,7 @@ export type CommerceReceipt = {
     | "Payment event matched"
     | "Payment event unavailable";
   paymentEvent: CommerceReceiptPaymentEvent | null;
+  onchainProof: CommerceReceiptOnchainProof | null;
   responsePreview: unknown;
   reasoning: string | null;
   links: {
@@ -155,6 +175,14 @@ const paymentEventColumns = [
   "amount_usdc",
   "network",
   "gateway_tx",
+  "receipt_hash",
+  "service_hash",
+  "request_hash",
+  "response_hash",
+  "onchain_contract_address",
+  "onchain_chain_id",
+  "onchain_tx_hash",
+  "onchain_status",
 ].join(",");
 
 function toNumber(value: string | number | null | undefined) {
@@ -342,6 +370,8 @@ function paymentEventSummary(
 ): CommerceReceiptPaymentEvent | null {
   if (!event) return null;
 
+  const onchainProof = onchainProofSummary(event);
+
   return {
     id: event.id,
     createdAt: event.created_at,
@@ -349,6 +379,30 @@ function paymentEventSummary(
     network: event.network,
     gatewayTx: event.gateway_tx,
     payer: event.payer,
+    onchainProof,
+  };
+}
+
+function onchainProofSummary(
+  event: PaymentEventRow | null,
+): CommerceReceiptOnchainProof | null {
+  if (!event) return null;
+
+  const metadata = onchainProofMetadataFromRow(event);
+  if (!metadata) return null;
+
+  const explorerBase = (
+    process.env.NEXT_PUBLIC_ARC_EXPLORER_URL ?? ARC_TESTNET_EXPLORER_URL
+  ).replace(/\/$/, "");
+
+  return {
+    ...metadata,
+    contractExplorerUrl: metadata.contractAddress
+      ? `${explorerBase}/address/${metadata.contractAddress}`
+      : null,
+    transactionExplorerUrl: metadata.transactionHash
+      ? `${explorerBase}/tx/${metadata.transactionHash}`
+      : null,
   };
 }
 
@@ -366,6 +420,7 @@ function buildReceipt(input: {
   const directPaymentEventId = step.payment_event_id ?? null;
   const matchedPaymentEventId =
     !directPaymentEventId && paymentEvent ? paymentEvent.id : null;
+  const onchainProof = onchainProofSummary(paymentEvent);
 
   return {
     id: step.id,
@@ -391,6 +446,7 @@ function buildReceipt(input: {
       ? "Payment event matched"
       : "Payment event unavailable",
     paymentEvent: paymentEventSummary(paymentEvent),
+    onchainProof,
     responsePreview: step.response_preview,
     reasoning: step.reasoning,
     links: {

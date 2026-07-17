@@ -73,6 +73,13 @@ function JsonPreview({ value }: { value: unknown }) {
   );
 }
 
+function onchainStatusLabel(receipt: CommerceReceipt) {
+  if (receipt.onchainProof?.status === "verified") return "Onchain verified";
+  if (receipt.onchainProof?.status === "pending") return "Onchain pending";
+  if (receipt.onchainProof?.status === "failed") return "Onchain failed";
+  return "Onchain unavailable";
+}
+
 async function getReceiptUrl(id: string) {
   const headerStore = await headers();
   const host = headerStore.get("x-forwarded-host") ?? headerStore.get("host");
@@ -102,6 +109,17 @@ function ReceiptSummary({
           </Badge>
           <Badge variant={receipt.paymentEvent ? "default" : "outline"}>
             {receipt.paymentEventStatusLabel}
+          </Badge>
+          <Badge
+            variant={
+              receipt.onchainProof?.status === "verified"
+                ? "default"
+                : receipt.onchainProof?.status === "failed"
+                  ? "destructive"
+                  : "outline"
+            }
+          >
+            {onchainStatusLabel(receipt)}
           </Badge>
         </div>
         <CardTitle className="flex items-center gap-2 text-3xl">
@@ -336,6 +354,124 @@ function ResponseCard({ receipt }: { receipt: CommerceReceipt }) {
   );
 }
 
+function OnchainProofCard({ receipt }: { receipt: CommerceReceipt }) {
+  const proof = receipt.onchainProof;
+
+  return (
+    <Card className="rounded-lg shadow-sm">
+      <CardHeader>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle className="flex items-center gap-2 text-xl">
+            <ShieldCheck className="size-5" />
+            Onchain proof
+          </CardTitle>
+          <Badge
+            variant={
+              proof?.status === "verified"
+                ? "default"
+                : proof?.status === "failed"
+                  ? "destructive"
+                  : "outline"
+            }
+          >
+            {onchainStatusLabel(receipt)}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="grid gap-5">
+        {!proof ? (
+          <p className="text-sm leading-6 text-muted-foreground">
+            This legacy receipt does not have onchain proof metadata.
+          </p>
+        ) : (
+          <>
+            <dl className="grid gap-4 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Chain ID</dt>
+                <dd className="font-mono">{proof.chainId ?? "n/a"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Receipt hash</dt>
+                <dd className="mt-1 flex flex-wrap items-center gap-2 font-mono">
+                  <span className="break-all">{proof.receiptHash ?? "n/a"}</span>
+                  {proof.receiptHash ? (
+                    <CopyButton
+                      value={proof.receiptHash}
+                      label="Copy receipt hash"
+                      size="sm"
+                    />
+                  ) : null}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-muted-foreground">Contract address</dt>
+                <dd className="mt-1 flex flex-wrap items-center gap-2 font-mono">
+                  {proof.contractExplorerUrl && proof.contractAddress ? (
+                    <a
+                      href={proof.contractExplorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="break-all text-primary hover:underline"
+                    >
+                      {proof.contractAddress}
+                    </a>
+                  ) : (
+                    "n/a"
+                  )}
+                  {proof.contractAddress ? (
+                    <CopyButton
+                      value={proof.contractAddress}
+                      label="Copy contract"
+                      size="sm"
+                    />
+                  ) : null}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-muted-foreground">Transaction hash</dt>
+                <dd className="mt-1 flex flex-wrap items-center gap-2 font-mono">
+                  {proof.transactionExplorerUrl && proof.transactionHash ? (
+                    <a
+                      href={proof.transactionExplorerUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="break-all text-primary hover:underline"
+                    >
+                      {proof.transactionHash}
+                    </a>
+                  ) : (
+                    "n/a"
+                  )}
+                  {proof.transactionHash ? (
+                    <CopyButton
+                      value={proof.transactionHash}
+                      label="Copy transaction"
+                      size="sm"
+                    />
+                  ) : null}
+                </dd>
+              </div>
+            </dl>
+
+            {proof.transactionExplorerUrl ? (
+              <Button asChild variant="outline" className="w-fit">
+                <a
+                  href={proof.transactionExplorerUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink />
+                  View on Arcscan
+                </a>
+              </Button>
+            ) : null}
+          </>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 async function ReceiptDetail({ params }: ReceiptDetailPageProps) {
   await connection();
   const { id } = await params;
@@ -363,6 +499,7 @@ async function ReceiptDetail({ params }: ReceiptDetailPageProps) {
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6 lg:grid-cols-[1fr_320px]">
         <div className="grid gap-4">
           <MetadataCard receipt={receipt} />
+          <OnchainProofCard receipt={receipt} />
           <ResponseCard receipt={receipt} />
         </div>
         <ReceiptLinks receipt={receipt} />
