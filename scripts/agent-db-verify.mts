@@ -40,6 +40,7 @@ async function main() {
   const paymentEventId = randomUUID();
   const stepId = randomUUID();
   const unauthorizedRunId = randomUUID();
+  const proofId = hash(`receipt:${paymentEventId}`);
 
   try {
     const { data: seededService, error: seededServiceError } = await publicClient
@@ -82,14 +83,20 @@ async function main() {
       amount_usdc: "0.001",
       network: "eip155:5042002",
       gateway_tx: null,
-      receipt_hash: hash(`receipt:${paymentEventId}`),
+      receipt_hash: proofId,
       service_hash: hash("service:/api/premium/quote"),
       request_hash: hash("request:agent-db-verification"),
       response_hash: hash("response:agent-db-verification"),
+      onchain_buyer: wallet,
+      onchain_seller: "0x0000000000000000000000000000000000001712",
+      onchain_amount_atomic: "1000",
       onchain_contract_address: null,
       onchain_chain_id: 5_042_002,
       onchain_tx_hash: null,
       onchain_status: "pending",
+      onchain_proof_id: proofId,
+      onchain_attester: "0x0000000000000000000000000000000000001713",
+      onchain_attempt_count: 0,
       raw: { agent_db_verification: true },
     });
     assert(!paymentError, `Server client could not create proof metadata: ${paymentError?.message}`);
@@ -126,7 +133,7 @@ async function main() {
         .single(),
       publicClient
         .from("payment_events")
-        .select("id,receipt_hash,onchain_chain_id,onchain_status")
+        .select("id,receipt_hash,onchain_chain_id,onchain_status,onchain_proof_id,onchain_attester,onchain_amount_atomic")
         .eq("id", paymentEventId)
         .single(),
       publicClient.from("agent_profiles").select("wallet,total_runs").eq("wallet", wallet).single(),
@@ -142,7 +149,9 @@ async function main() {
     assert(
       !paymentRead.error &&
         paymentRead.data.onchain_status === "pending" &&
-        paymentRead.data.onchain_chain_id === 5_042_002,
+        paymentRead.data.onchain_chain_id === 5_042_002 &&
+        paymentRead.data.onchain_proof_id === proofId &&
+        paymentRead.data.onchain_amount_atomic === "1000",
       "Public onchain proof metadata read failed.",
     );
     assert(!passportRead.error && passportRead.data.total_runs >= 1, "Public Agent Passport read failed.");

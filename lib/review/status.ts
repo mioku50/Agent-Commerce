@@ -31,6 +31,7 @@ import {
 import { listAllStoreServices } from "@/lib/services/store-service-persistence";
 import type { ApiService } from "@/lib/services/registry";
 import { getServerDatabaseDiagnostic } from "../supabase/server-env";
+import { getProofRegistryDiagnostic } from "../commerce/onchain-proof";
 
 export const RECOMMENDED_REVIEWER_COMMAND =
   'AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005';
@@ -46,6 +47,10 @@ export type ReviewHealthStatus = {
     receiptCount: number;
     sellerCreatedLiveServiceCount: number;
     recentInsufficientBalanceFailures: number;
+    verifiedProofExists: boolean;
+    verifiedProofCount: number;
+    pendingProofCount: number;
+    failedProofCount: number;
   };
   recommendedCommand: string;
   recentFailedRuns: PublicAgentRun[];
@@ -57,6 +62,7 @@ export type ReviewHealthStatus = {
   mainProfile: PublicAgentProfile | null;
   warnings: string[];
   database: ReturnType<typeof getServerDatabaseDiagnostic>;
+  proofRegistry: ReturnType<typeof getProofRegistryDiagnostic>;
 };
 
 export function getDefaultProductionUrl() {
@@ -125,6 +131,15 @@ export async function getReviewHealthStatus(
     null;
   const latestRun = latestSuccessfulRun;
   const latestReceipt = receipts[0] ?? null;
+  const verifiedReceipts = receipts.filter(
+    (receipt) => receipt.onchainProof?.status === "verified",
+  );
+  const pendingProofCount = receipts.filter(
+    (receipt) => receipt.onchainProof?.status === "pending",
+  ).length;
+  const failedProofCount = receipts.filter(
+    (receipt) => receipt.onchainProof?.status === "failed",
+  ).length;
   const mainProfile = profiles[0] ?? null;
   const recentFailedRuns = runs.filter((run) => run.status === "failed");
   const recentInsufficientBalanceFailures =
@@ -150,6 +165,10 @@ export async function getReviewHealthStatus(
       receiptCount: receipts.length,
       sellerCreatedLiveServiceCount: sellerCreatedLiveServices.length,
       recentInsufficientBalanceFailures,
+      verifiedProofExists: verifiedReceipts.length > 0,
+      verifiedProofCount: verifiedReceipts.length,
+      pendingProofCount,
+      failedProofCount,
     },
     recommendedCommand: RECOMMENDED_REVIEWER_COMMAND,
     recentFailedRuns,
@@ -165,5 +184,6 @@ export async function getReviewHealthStatus(
     mainProfile,
     warnings,
     database: getServerDatabaseDiagnostic(),
+    proofRegistry: getProofRegistryDiagnostic(),
   };
 }

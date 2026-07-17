@@ -77,6 +77,13 @@ type PaymentEventRow = {
   onchain_chain_id: number | string | null;
   onchain_tx_hash: string | null;
   onchain_status: string | null;
+  onchain_block_number: number | string | null;
+  onchain_proof_id: string | null;
+  onchain_attester: string | null;
+  onchain_verified_at: string | null;
+  onchain_last_attempt_at: string | null;
+  onchain_attempt_count: number | null;
+  onchain_error: string | null;
 };
 
 export type CommerceReceiptOnchainProof = OnchainProofMetadata & {
@@ -183,6 +190,13 @@ const paymentEventColumns = [
   "onchain_chain_id",
   "onchain_tx_hash",
   "onchain_status",
+  "onchain_block_number",
+  "onchain_proof_id",
+  "onchain_attester",
+  "onchain_verified_at",
+  "onchain_last_attempt_at",
+  "onchain_attempt_count",
+  "onchain_error",
 ].join(",");
 
 function toNumber(value: string | number | null | undefined) {

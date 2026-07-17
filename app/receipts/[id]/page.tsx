@@ -74,9 +74,9 @@ function JsonPreview({ value }: { value: unknown }) {
 }
 
 function onchainStatusLabel(receipt: CommerceReceipt) {
-  if (receipt.onchainProof?.status === "verified") return "Onchain verified";
-  if (receipt.onchainProof?.status === "pending") return "Onchain pending";
-  if (receipt.onchainProof?.status === "failed") return "Onchain failed";
+  if (receipt.onchainProof?.status === "verified") return "Verified on Arc";
+  if (receipt.onchainProof?.status === "pending") return "Onchain proof pending";
+  if (receipt.onchainProof?.status === "failed") return "Proof failed";
   return "Onchain unavailable";
 }
 
@@ -403,6 +403,36 @@ function OnchainProofCard({ receipt }: { receipt: CommerceReceipt }) {
                   ) : null}
                 </dd>
               </div>
+              <div>
+                <dt className="text-muted-foreground">Proof ID</dt>
+                <dd className="mt-1 flex flex-wrap items-center gap-2 font-mono">
+                  <span className="break-all">{proof.proofId ?? "n/a"}</span>
+                  {proof.proofId ? (
+                    <CopyButton value={proof.proofId} label="Copy proof ID" size="sm" />
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Block number</dt>
+                <dd className="font-mono">{proof.blockNumber ?? "n/a"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Attester</dt>
+                <dd className="mt-1 flex flex-wrap items-center gap-2 font-mono">
+                  <span className="break-all">{proof.attester ?? "n/a"}</span>
+                  {proof.attester ? (
+                    <CopyButton value={proof.attester} label="Copy attester" size="sm" />
+                  ) : null}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Verified at</dt>
+                <dd>{proof.verifiedAt ? formatDate(proof.verifiedAt) : "n/a"}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Attempts</dt>
+                <dd className="font-mono">{proof.attemptCount}</dd>
+              </div>
               <div className="sm:col-span-2">
                 <dt className="text-muted-foreground">Contract address</dt>
                 <dd className="mt-1 flex flex-wrap items-center gap-2 font-mono">
@@ -464,6 +494,11 @@ function OnchainProofCard({ receipt }: { receipt: CommerceReceipt }) {
                   View on Arcscan
                 </a>
               </Button>
+            ) : null}
+            {proof.status === "failed" && proof.error ? (
+              <p className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                {proof.error}
+              </p>
             ) : null}
           </>
         )}

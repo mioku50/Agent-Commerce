@@ -1,5 +1,9 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getPublicSupabaseConfig } from "../supabase/env";
+import {
+  onchainProofMetadataFromRow,
+  type OnchainProofMetadata,
+} from "../commerce/onchain-proof";
 
 export type PublicAgentRun = {
   id: string;
@@ -38,6 +42,7 @@ export type PublicAgentStep = {
   payment_event_id: string | null;
   matched_payment_event_id?: string | null;
   matched_gateway_tx?: string | null;
+  onchain_proof?: OnchainProofMetadata | null;
   response_preview: unknown;
   error: string | null;
 };
@@ -49,6 +54,21 @@ type PublicPaymentEvent = {
   payer: string;
   amount_usdc: string;
   gateway_tx: string | null;
+  receipt_hash: string | null;
+  service_hash: string | null;
+  request_hash: string | null;
+  response_hash: string | null;
+  onchain_contract_address: string | null;
+  onchain_chain_id: number | string | null;
+  onchain_tx_hash: string | null;
+  onchain_status: string | null;
+  onchain_block_number: number | string | null;
+  onchain_proof_id: string | null;
+  onchain_attester: string | null;
+  onchain_verified_at: string | null;
+  onchain_last_attempt_at: string | null;
+  onchain_attempt_count: number | null;
+  onchain_error: string | null;
 };
 
 const runColumns = [
@@ -93,6 +113,21 @@ const paymentEventColumns = [
   "payer",
   "amount_usdc",
   "gateway_tx",
+  "receipt_hash",
+  "service_hash",
+  "request_hash",
+  "response_hash",
+  "onchain_contract_address",
+  "onchain_chain_id",
+  "onchain_tx_hash",
+  "onchain_status",
+  "onchain_block_number",
+  "onchain_proof_id",
+  "onchain_attester",
+  "onchain_verified_at",
+  "onchain_last_attempt_at",
+  "onchain_attempt_count",
+  "onchain_error",
 ].join(",");
 
 let supabase: SupabaseClient | null = null;
@@ -276,20 +311,22 @@ function matchPaymentEventsToSteps(run: PublicAgentRun, steps: PublicAgentStep[]
   const usedEventIds = new Set<string>();
 
   return steps.map((step) => {
-    if (step.status !== "paid" || step.payment_event_id || !step.endpoint) {
+    if (step.status !== "paid" || !step.endpoint) {
       return step;
     }
 
     const expectedAmount = normalizedAmount(step.price_usdc);
-    const matchedEvent = events.find((event) => {
-      if (usedEventIds.has(event.id)) return false;
+    const matchedEvent = step.payment_event_id
+      ? events.find((event) => event.id === step.payment_event_id)
+      : events.find((event) => {
+          if (usedEventIds.has(event.id)) return false;
 
-      return (
-        event.endpoint === step.endpoint &&
-        event.payer.toLowerCase() === run.agent_wallet?.toLowerCase() &&
-        Math.abs(normalizedAmount(event.amount_usdc) - expectedAmount) < 0.000001
-      );
-    });
+          return (
+            event.endpoint === step.endpoint &&
+            event.payer.toLowerCase() === run.agent_wallet?.toLowerCase() &&
+            Math.abs(normalizedAmount(event.amount_usdc) - expectedAmount) < 0.000001
+          );
+        });
 
     if (!matchedEvent) return step;
 
@@ -297,8 +334,9 @@ function matchPaymentEventsToSteps(run: PublicAgentRun, steps: PublicAgentStep[]
 
     return {
       ...step,
-      matched_payment_event_id: matchedEvent.id,
+      matched_payment_event_id: step.payment_event_id ? null : matchedEvent.id,
       matched_gateway_tx: matchedEvent.gateway_tx,
+      onchain_proof: onchainProofMetadataFromRow(matchedEvent),
     };
   });
 }

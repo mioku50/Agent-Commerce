@@ -19,6 +19,10 @@
 import { NextResponse } from "next/server";
 import { fetchReceiptById } from "@/lib/commerce/receipts";
 import { readAgentCommerceProof } from "@/lib/commerce/onchain-proof";
+import {
+  fetchProofRecordByReceiptIdentifier,
+  proofMetadataForRecord,
+} from "@/lib/commerce/proof-records";
 
 type RouteContext = {
   params: Promise<{
@@ -33,11 +37,16 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
   try {
     const receipt = await fetchReceiptById(receiptId);
-    if (!receipt) {
+    const record = receipt
+      ? null
+      : await fetchProofRecordByReceiptIdentifier(receiptId);
+    const metadata = receipt?.onchainProof ??
+      (record ? proofMetadataForRecord(record) : null);
+
+    if (!receipt && !record) {
       return NextResponse.json({ error: "Receipt not found" }, { status: 404 });
     }
 
-    const metadata = receipt.onchainProof;
     if (!metadata) {
       return NextResponse.json({
         receiptId,
@@ -51,6 +60,8 @@ export async function GET(_request: Request, { params }: RouteContext) {
 
     return NextResponse.json({
       receiptId,
+      paymentEventId:
+        receipt?.paymentEvent?.id ?? record?.id ?? null,
       status: metadata.status,
       metadata,
       proof,

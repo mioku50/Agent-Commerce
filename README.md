@@ -574,6 +574,61 @@ This is a schema plus fresh-seed migration. The unavailable legacy Supabase
 project is not read, and historical runs, receipts, passports, payment events,
 or analytics are not copied.
 
+## Phase 18 — Active Onchain Commerce Proofs
+
+The app-owned `AgentCommerceProofRegistry` is deployed and source-verified on
+Arc Testnet:
+
+- contract: [`0x92dC1aFC126F755ba5d5254e8D697CAe10474851`](https://testnet.arcscan.app/address/0x92dC1aFC126F755ba5d5254e8D697CAe10474851)
+- deployment transaction: [`0x7efc6fc86e96781030f79f5ef8e2b1169e8a38b8f9d3395b905cee687bef2ab2`](https://testnet.arcscan.app/tx/0x7efc6fc86e96781030f79f5ef8e2b1169e8a38b8f9d3395b905cee687bef2ab2)
+- deployment block: `52324595`
+- operator: `0x7cE65e573463B83164FFc282a0556D5542defefA`
+- authorized attester: `0x90ceE92dC33647763881DDF830aDFC17217Dfe4A`
+
+Phase 18 production paid smoke proof:
+
+- receipt: [`ee1e67b1-f019-4789-b3cb-f03a5eac76df`](https://agent-commerce-six.vercel.app/receipts/ee1e67b1-f019-4789-b3cb-f03a5eac76df)
+- proof ID: `0xbf474905cb57d74e2d2d43953ddcdd42a0b0f05faf68fa0b111c75e0e6435c58`
+- proof transaction: [`0x02d8dd4ee9f28762e7673e269409ebeebedc59398f9b3f005b0b5a89292c0c29`](https://testnet.arcscan.app/tx/0x02d8dd4ee9f28762e7673e269409ebeebedc59398f9b3f005b0b5a89292c0c29)
+- proof block: `52326627`
+
+Reprocessing that payment event retained the same transaction and the registry
+reported exactly one `ProofRegistered` event for the receipt hash.
+
+These are application-owned addresses. USDC, CCTP, Gateway, and other
+infrastructure contract addresses are not presented as proof of this app.
+
+After x402 settlement and response fulfillment, the Next.js `after()` hook
+hashes the request and response and publishes the compact receipt proof. The
+paid response is not blocked by the Arc transaction. Agent DB tracks:
+
+- `Onchain proof pending`
+- `Verified on Arc`
+- `Proof failed`
+
+Verified records include the proof ID, contract, transaction hash, block,
+attester, and verification timestamp. Before every write, the publisher reads
+`isRegistered(receiptId)` and validates any existing proof field-by-field. The
+contract rejects duplicate receipt IDs, so retries and concurrent persistence
+cannot create a second onchain receipt.
+
+Read-only proof APIs:
+
+- `GET /api/proofs/<receipt-step-id-or-proof-id>`
+- `GET /api/proofs/transactions/<transaction-hash>`
+
+Recovery is intentionally server-only. Run it only in an environment that
+provides the attester secret without printing or writing it to a file:
+
+```bash
+npm run proofs:recover -- --dry-run
+npm run proofs:recover -- --limit 25
+npm run proofs:recover -- --payment-event <payment-event-uuid>
+```
+
+The second processing of an already verified payment event performs an onchain
+read/reconciliation and retains the original proof transaction.
+
 ## Core User Flows
 
 ### Agent Buyer Flow
@@ -820,6 +875,13 @@ server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY`. Contract deployment
 uses the public `PROOF_REGISTRY_OPERATOR_ADDRESS` and
 `PROOF_REGISTRY_ATTESTER_ADDRESS` inputs with an encrypted Foundry keystore.
 No proof-writer or deployer key is exposed to client components.
+
+Production proof configuration also includes
+`AGENT_COMMERCE_PROOF_OPERATOR_ADDRESS`,
+`AGENT_COMMERCE_PROOF_ATTESTER_ADDRESS`, `ARC_TESTNET_RPC_URL`,
+`ARC_EXPLORER_URL`, and the public `NEXT_PUBLIC_ARC_EXPLORER_URL`. The operator
+and attester private keys are server-only Vercel secrets; neither uses a
+`NEXT_PUBLIC_` name.
 
 Agent runner examples:
 

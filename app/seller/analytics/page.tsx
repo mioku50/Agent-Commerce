@@ -51,6 +51,13 @@ function sourceLabel(sourceType: string) {
   return "External placeholder";
 }
 
+function proofStatusLabel(status: string | null) {
+  if (status === "verified") return "Verified on Arc";
+  if (status === "pending") return "Onchain proof pending";
+  if (status === "failed") return "Proof failed";
+  return "Proof unavailable";
+}
+
 function StatCard({
   title,
   value,
@@ -169,6 +176,7 @@ function RecentPurchasesTable({
               <TableHead>Buyer agent</TableHead>
               <TableHead>Request ID</TableHead>
               <TableHead>Payment event</TableHead>
+              <TableHead>Onchain proof</TableHead>
               <TableHead>Revenue</TableHead>
               <TableHead>Run</TableHead>
               <TableHead>Receipt</TableHead>
@@ -177,7 +185,7 @@ function RecentPurchasesTable({
           <TableBody>
             {purchases.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-muted-foreground">
+                <TableCell colSpan={9} className="text-muted-foreground">
                   No paid purchases recorded yet.
                 </TableCell>
               </TableRow>
@@ -229,6 +237,32 @@ function RecentPurchasesTable({
                       ) : (
                         <span className="text-muted-foreground">n/a</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-col items-start gap-1">
+                        <Badge
+                          variant={
+                            purchase.onchainProofStatus === "verified"
+                              ? "default"
+                              : purchase.onchainProofStatus === "failed"
+                                ? "destructive"
+                                : "outline"
+                          }
+                        >
+                          {proofStatusLabel(purchase.onchainProofStatus)}
+                        </Badge>
+                        {purchase.onchainTransactionUrl ? (
+                          <a
+                            href={purchase.onchainTransactionUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 font-mono text-xs text-primary hover:underline"
+                          >
+                            {shortenHash(purchase.onchainTransactionHash ?? "", 6)}
+                            <ExternalLink size={12} />
+                          </a>
+                        ) : null}
+                      </div>
                     </TableCell>
                     <TableCell className="font-mono">
                       {purchase.priceUsdc} USDC
@@ -367,7 +401,7 @@ async function SellerAnalyticsContent() {
         </Card>
       ) : null}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard
           title="Estimated revenue"
           value={`${analytics.overview.estimatedUsdcRevenue} USDC`}
@@ -378,6 +412,12 @@ async function SellerAnalyticsContent() {
           title="Paid calls"
           value={analytics.overview.paidCalls}
           detail={`${analytics.overview.linkedPaymentEvents} linked payment event(s).`}
+          icon={ReceiptText}
+        />
+        <StatCard
+          title="Verified Arc proofs"
+          value={analytics.overview.verifiedProofs}
+          detail={`${analytics.overview.pendingProofs} pending, ${analytics.overview.failedProofs} failed.`}
           icon={ReceiptText}
         />
         <StatCard

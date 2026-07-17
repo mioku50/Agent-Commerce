@@ -62,9 +62,9 @@ function formatDate(value: string) {
 }
 
 function onchainStatusLabel(receipt: CommerceReceipt) {
-  if (receipt.onchainProof?.status === "verified") return "Onchain verified";
-  if (receipt.onchainProof?.status === "pending") return "Onchain pending";
-  if (receipt.onchainProof?.status === "failed") return "Onchain failed";
+  if (receipt.onchainProof?.status === "verified") return "Verified on Arc";
+  if (receipt.onchainProof?.status === "pending") return "Onchain proof pending";
+  if (receipt.onchainProof?.status === "failed") return "Proof failed";
   return "Onchain unavailable";
 }
 

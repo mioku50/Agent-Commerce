@@ -31,12 +31,27 @@ type ReviewStatus = {
     publicClient?: { configured?: boolean };
     serverClient?: { configured?: boolean };
   };
+  checks?: {
+    verifiedProofExists?: boolean;
+    verifiedProofCount?: number;
+    pendingProofCount?: number;
+    failedProofCount?: number;
+  };
+  proofRegistry?: {
+    registryAddress?: string | null;
+    attesterAddress?: string | null;
+    chainId?: number;
+  };
 };
 
 const ARC_TESTNET_NETWORK = "eip155:5042002";
 const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
 const DEFAULT_BASE_URL = "https://agent-commerce-six.vercel.app";
 const REQUEST_TIMEOUT_MS = Number(process.env.REVIEW_SMOKE_TIMEOUT_MS ?? 60_000);
+
+function requiresVerifiedProof() {
+  return process.argv.includes("--require-verified-proof");
+}
 
 function getBaseUrl() {
   const explicitArg = process.argv.find((arg) => arg.startsWith("--base-url="));
@@ -138,22 +153,40 @@ async function checkReviewStatus(baseUrl: string) {
   const response = await fetchWithTimeout(urlFor(baseUrl, "/api/review/status"));
   const json = (await readJson(response)) as ReviewStatus;
 
+  const checks = [
+    {
+      name: "/api/review/status returns valid JSON",
+      ok: response.status === 200,
+      detail: `HTTP ${response.status}`,
+    },
+    {
+      name: "review status uses the AGENT_DB provider",
+      ok:
+        json.database?.provider === "agent-db" &&
+        json.database.publicClient?.configured === true &&
+        json.database.serverClient?.configured === true,
+      detail: `provider=${json.database?.provider ?? "missing"} public=${json.database?.publicClient?.configured === true ? "configured" : "missing"} server=${json.database?.serverClient?.configured === true ? "configured" : "missing"}`,
+    },
+    {
+      name: "review status exposes the app-owned Arc proof registry",
+      ok:
+        /^0x[0-9a-f]{40}$/i.test(json.proofRegistry?.registryAddress ?? "") &&
+        /^0x[0-9a-f]{40}$/i.test(json.proofRegistry?.attesterAddress ?? "") &&
+        json.proofRegistry?.chainId === 5_042_002,
+      detail: `registry=${json.proofRegistry?.registryAddress ?? "missing"} attester=${json.proofRegistry?.attesterAddress ?? "missing"}`,
+    },
+  ] satisfies CheckResult[];
+
+  if (requiresVerifiedProof()) {
+    checks.push({
+      name: "at least one paid receipt is Verified on Arc",
+      ok: json.checks?.verifiedProofExists === true,
+      detail: `verified=${json.checks?.verifiedProofCount ?? 0} pending=${json.checks?.pendingProofCount ?? 0} failed=${json.checks?.failedProofCount ?? 0}`,
+    });
+  }
+
   return {
-    checks: [
-      {
-        name: "/api/review/status returns valid JSON",
-        ok: response.status === 200,
-        detail: `HTTP ${response.status}`,
-      },
-      {
-        name: "review status uses the AGENT_DB provider",
-        ok:
-          json.database?.provider === "agent-db" &&
-          json.database.publicClient?.configured === true &&
-          json.database.serverClient?.configured === true,
-        detail: `provider=${json.database?.provider ?? "missing"} public=${json.database?.publicClient?.configured === true ? "configured" : "missing"} server=${json.database?.serverClient?.configured === true ? "configured" : "missing"}`,
-      },
-    ] satisfies CheckResult[],
+    checks,
     status: json,
   };
 }

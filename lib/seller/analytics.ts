@@ -10,6 +10,7 @@ import {
   listDynamicStoreServiceRows,
   rowToApiService,
 } from "@/lib/services/store-service-persistence";
+import { ARC_TESTNET_EXPLORER_URL } from "@/lib/commerce/onchain-proof";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -51,6 +52,11 @@ type PaymentEventRow = {
   amount_usdc: string;
   network: string;
   gateway_tx: string | null;
+  onchain_status: string | null;
+  onchain_tx_hash: string | null;
+  onchain_contract_address: string | null;
+  onchain_block_number: number | string | null;
+  onchain_proof_id: string | null;
   raw: JsonRecord | null;
 };
 
@@ -64,6 +70,9 @@ export type SellerAnalyticsOverview = {
   estimatedUsdcRevenue: string;
   buyerAgentWallets: number;
   linkedPaymentEvents: number;
+  verifiedProofs: number;
+  pendingProofs: number;
+  failedProofs: number;
 };
 
 export type SellerAnalyticsService = {
@@ -101,6 +110,12 @@ export type SellerAnalyticsPurchase = {
   paymentEventId: string | null;
   matchedPaymentEventId: string | null;
   gatewayTx: string | null;
+  onchainProofStatus: string | null;
+  onchainTransactionHash: string | null;
+  onchainContractAddress: string | null;
+  onchainBlockNumber: number | string | null;
+  onchainProofId: string | null;
+  onchainTransactionUrl: string | null;
 };
 
 export type SellerAnalyticsBuyerWallet = {
@@ -168,6 +183,11 @@ const paymentEventColumns = [
   "amount_usdc",
   "network",
   "gateway_tx",
+  "onchain_status",
+  "onchain_tx_hash",
+  "onchain_contract_address",
+  "onchain_block_number",
+  "onchain_proof_id",
   "raw",
 ].join(",");
 
@@ -222,6 +242,9 @@ function emptyAnalytics(warning: string | null): SellerAnalytics {
       estimatedUsdcRevenue: "0",
       buyerAgentWallets: 0,
       linkedPaymentEvents: 0,
+      verifiedProofs: 0,
+      pendingProofs: 0,
+      failedProofs: 0,
     },
     sourceBreakdown: [],
     topServices: [],
@@ -506,6 +529,9 @@ export async function getSellerAnalytics(options: { serviceId?: string } = {}) {
     metricsByService.set(key, metric);
 
     if (step.status === "paid") {
+      const explorerBase = (
+        process.env.NEXT_PUBLIC_ARC_EXPLORER_URL ?? ARC_TESTNET_EXPLORER_URL
+      ).replace(/\/$/, "");
       purchases.push({
         stepId: step.id,
         createdAt: step.created_at,
@@ -524,6 +550,15 @@ export async function getSellerAnalytics(options: { serviceId?: string } = {}) {
         paymentEventId: step.payment_event_id,
         matchedPaymentEventId: matchedPaymentEvent?.id ?? null,
         gatewayTx: matchedPaymentEvent?.gateway_tx ?? null,
+        onchainProofStatus: matchedPaymentEvent?.onchain_status ?? null,
+        onchainTransactionHash: matchedPaymentEvent?.onchain_tx_hash ?? null,
+        onchainContractAddress:
+          matchedPaymentEvent?.onchain_contract_address ?? null,
+        onchainBlockNumber: matchedPaymentEvent?.onchain_block_number ?? null,
+        onchainProofId: matchedPaymentEvent?.onchain_proof_id ?? null,
+        onchainTransactionUrl: matchedPaymentEvent?.onchain_tx_hash
+          ? `${explorerBase}/tx/${matchedPaymentEvent.onchain_tx_hash}`
+          : null,
       });
     }
   }
@@ -538,6 +573,15 @@ export async function getSellerAnalytics(options: { serviceId?: string } = {}) {
   );
   const linkedPaymentEvents = purchases.filter(
     (purchase) => purchase.paymentEventId || purchase.matchedPaymentEventId,
+  ).length;
+  const verifiedProofs = purchases.filter(
+    (purchase) => purchase.onchainProofStatus === "verified",
+  ).length;
+  const pendingProofs = purchases.filter(
+    (purchase) => purchase.onchainProofStatus === "pending",
+  ).length;
+  const failedProofs = purchases.filter(
+    (purchase) => purchase.onchainProofStatus === "failed",
   ).length;
 
   return {
@@ -554,6 +598,9 @@ export async function getSellerAnalytics(options: { serviceId?: string } = {}) {
       estimatedUsdcRevenue: formatUsdc(estimatedRevenue),
       buyerAgentWallets: buyerWallets.size,
       linkedPaymentEvents,
+      verifiedProofs,
+      pendingProofs,
+      failedProofs,
     },
     sourceBreakdown: Array.from(sourceMetrics.entries()).map(([sourceType, stats]) => ({
       sourceType,

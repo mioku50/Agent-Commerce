@@ -302,8 +302,13 @@ export function withGateway(
         gateway_tx: settleResult.transaction ?? null,
         receipt_hash: proofIdentifiers.receiptHash,
         service_hash: proofIdentifiers.serviceHash,
+        onchain_buyer: payer,
+        onchain_seller: requirements.payTo,
+        onchain_amount_atomic: requirements.amount,
         onchain_contract_address: proofIdentifiers.contractAddress,
         onchain_chain_id: proofIdentifiers.chainId,
+        onchain_proof_id: proofIdentifiers.receiptHash,
+        onchain_attester: proofIdentifiers.attesterAddress,
         onchain_status: "pending",
         raw: { requirements, settleResult },
       });

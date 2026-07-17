@@ -94,6 +94,7 @@ const technicalProofItems = [
   "Paid steps create shareable receipts.",
   "Passport and reputation stats rebuild from public run history.",
   "Seller analytics aggregates paid calls, buyer wallets, request IDs, and estimated USDC revenue.",
+  "Each settled receipt is asynchronously attested in the app-owned AgentCommerceProofRegistry on Arc Testnet.",
 ];
 
 const testnetNotes = [
@@ -101,6 +102,7 @@ const testnetNotes = [
   "The browser never receives private keys.",
   "The browser only funds buyer-agent wallets through explicit user-confirmed transactions.",
   "The local CLI buyer-agent still owns x402 signing and paid protected API requests.",
+  "The proof registry is an app-owned contract, not an infrastructure USDC, CCTP, or Gateway address.",
   "Occasional Supabase, Gateway, or network timeouts are handled with retry/backoff or safe empty states.",
 ];
 
@@ -265,7 +267,7 @@ export default async function ReviewPage() {
           </Card>
         ) : null}
 
-        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
           <StatusCard
             title="Latest successful run"
             ok={data.checks.latestSuccessfulRunExists}
@@ -285,6 +287,15 @@ export default async function ReviewPage() {
             }
           />
           <StatusCard
+            title="Verified on Arc"
+            ok={data.checks.verifiedProofExists}
+            detail={
+              data.checks.verifiedProofExists
+                ? `${data.checks.verifiedProofCount} verified proof(s); ${data.checks.pendingProofCount} pending, ${data.checks.failedProofCount} failed.`
+                : "No verified proof is visible yet. Run the paid smoke flow."
+            }
+          />
+          <StatusCard
             title="Seller-created live service"
             ok={data.checks.sellerCreatedLiveServiceExists}
             detail={
@@ -299,6 +310,54 @@ export default async function ReviewPage() {
             detail={`${data.checks.apiStoreServiceCount} public service(s) available. Disabled smoke-test services are hidden from public discovery.`}
           />
         </section>
+
+        <Card className="rounded-lg shadow-sm">
+          <CardHeader>
+            <div className="mb-3 flex flex-wrap items-center gap-2">
+              <Badge variant={data.proofRegistry.configured ? "default" : "outline"}>
+                {data.proofRegistry.configured ? "Registry active" : "Registry unavailable"}
+              </Badge>
+              <Badge variant="secondary">Arc Testnet {data.proofRegistry.chainId}</Badge>
+            </div>
+            <CardTitle>App-owned AgentCommerceProofRegistry</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 text-sm">
+            <dl className="grid gap-4 md:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">Contract address</dt>
+                <dd className="mt-1 break-all font-mono">
+                  {data.proofRegistry.registryAddress ?? "n/a"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Attester address</dt>
+                <dd className="mt-1 break-all font-mono">
+                  {data.proofRegistry.attesterAddress ?? "n/a"}
+                </dd>
+              </div>
+            </dl>
+            <div className="flex flex-wrap gap-2">
+              {data.proofRegistry.registryAddress ? (
+                <Button asChild variant="outline">
+                  <a
+                    href={`${data.proofRegistry.explorerUrl}/address/${data.proofRegistry.registryAddress}`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <ExternalLink />
+                    Contract on Arcscan
+                  </a>
+                </Button>
+              ) : null}
+              {data.proofRegistry.registryAddress ? (
+                <CopyButton
+                  value={data.proofRegistry.registryAddress}
+                  label="Copy contract"
+                />
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
 
         <Card className="rounded-lg shadow-sm">
           <CardHeader>

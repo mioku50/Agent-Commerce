@@ -31,6 +31,7 @@ import {
   type PublicAgentStep,
 } from "@/lib/agent/runs-public";
 import { shortenHash } from "@/lib/utils";
+import { ARC_TESTNET_EXPLORER_URL } from "@/lib/commerce/onchain-proof";
 
 type RunDetailPageProps = {
   params: Promise<{
@@ -55,6 +56,13 @@ function sourceLabel(sourceType: string | null) {
   if (sourceType === "static") return "Official sample";
   if (sourceType === "seller_mock") return "Seller-created";
   if (sourceType === "external_placeholder") return "External placeholder";
+  return null;
+}
+
+function proofStatusLabel(status: string | undefined) {
+  if (status === "verified") return "Verified on Arc";
+  if (status === "pending") return "Onchain proof pending";
+  if (status === "failed") return "Proof failed";
   return null;
 }
 
@@ -137,6 +145,10 @@ function RunSummary({ run }: { run: PublicAgentRun }) {
 
 function TimelineStep({ step }: { step: PublicAgentStep }) {
   const paymentEventId = step.payment_event_id ?? step.matched_payment_event_id ?? null;
+  const proofLabel = proofStatusLabel(step.onchain_proof?.status);
+  const explorerBase = (
+    process.env.NEXT_PUBLIC_ARC_EXPLORER_URL ?? ARC_TESTNET_EXPLORER_URL
+  ).replace(/\/$/, "");
 
   return (
     <Card className="rounded-lg shadow-sm">
@@ -152,6 +164,19 @@ function TimelineStep({ step }: { step: PublicAgentStep }) {
               }
             >
               {sourceLabel(step.service_source_type)}
+            </Badge>
+          ) : null}
+          {proofLabel ? (
+            <Badge
+              variant={
+                step.onchain_proof?.status === "verified"
+                  ? "default"
+                  : step.onchain_proof?.status === "failed"
+                    ? "destructive"
+                    : "outline"
+              }
+            >
+              {proofLabel}
             </Badge>
           ) : null}
         </div>
@@ -228,13 +253,25 @@ function TimelineStep({ step }: { step: PublicAgentStep }) {
         </div>
 
         {step.status === "paid" ? (
-          <div className="border-t pt-4">
+          <div className="flex flex-wrap gap-2 border-t pt-4">
             <Button asChild variant="outline">
               <Link href={`/receipts/${step.id}`}>
                 <ReceiptText />
                 Public receipt
               </Link>
             </Button>
+            {step.onchain_proof?.transactionHash ? (
+              <Button asChild variant="outline">
+                <a
+                  href={`${explorerBase}/tx/${step.onchain_proof.transactionHash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <ExternalLink />
+                  Arc proof transaction
+                </a>
+              </Button>
+            ) : null}
           </div>
         ) : null}
       </CardContent>

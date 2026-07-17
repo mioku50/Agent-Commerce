@@ -15,6 +15,8 @@
     "agents:rebuild": "node --experimental-transform-types --no-warnings --env-file=.env.local scripts/rebuild-agent-passports.mts",
     "db:migrate": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/agent-db-migrate.mts",
     "db:verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/agent-db-verify.mts",
+    "proofs:recover": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/recover-onchain-proofs.mts",
+    "proofs:smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/proof-registry-smoke.mts",
     "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts"
   },
   "dependencies": {
