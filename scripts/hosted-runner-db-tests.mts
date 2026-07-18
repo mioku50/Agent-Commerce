@@ -30,12 +30,28 @@ async function launch(
   client: SupabaseClient,
   input: { idempotency: string; fingerprint: string },
 ) {
-  const { data, error } = await client.rpc("launch_hosted_agent_job", {
+  const plannerSnapshot = {
+    version: 1,
+    workflowType: "sentiment_tone",
+    workflowLabel: "Sentiment & Tone Report",
+    selectedServices: [
+      { slug: "premium-quote", priceUsdc: 0.001 },
+      { slug: "text-analyzer", priceUsdc: 0.0003 },
+    ],
+    estimatedSpendUsdc: 0.0013,
+    maxPaidCalls: 3,
+    aggregationMode: "deterministic_structured",
+  };
+  const { data, error } = await client.rpc("launch_hosted_agent_workflow", {
     p_idempotency_hash: input.idempotency,
     p_requester_fingerprint: input.fingerprint,
     p_requester_wallet: null,
-    p_task: "Phase 19 hosted buyer-agent database policy test",
-    p_budget_usdc: 0.001,
+    p_workflow_type: "sentiment_tone",
+    p_task: "Phase 20 hosted workflow database policy test",
+    p_input_text: "This is a valid hosted workflow database test input.",
+    p_budget_usdc: 0.005,
+    p_planner_snapshot: plannerSnapshot,
+    p_selected_services: plannerSnapshot.selectedServices,
     p_cooldown_seconds: 30,
     p_rate_window_seconds: 3_600,
     p_rate_max_runs: 3,
@@ -84,6 +100,22 @@ async function main() {
       "Repeated idempotency key did not return the original job.",
     );
 
+    const { data: persisted, error: persistedError } = await server
+      .from("hosted_agent_jobs")
+      .select("workflow_type,input_text,planner_snapshot,selected_services,structured_result,receipt_ids,proof_transaction_hashes")
+      .eq("id", first.job_id)
+      .single();
+    assert(!persistedError && persisted, "Unable to read persisted Phase 20 workflow metadata.");
+    assert(persisted.workflow_type === "sentiment_tone", "Workflow type was not persisted.");
+    assert(
+      Array.isArray(persisted.selected_services) && persisted.selected_services.length === 2,
+      "Selected service snapshot was not persisted.",
+    );
+    assert(
+      Array.isArray(persisted.receipt_ids) && Array.isArray(persisted.proof_transaction_hashes),
+      "Receipt/proof result arrays are not initialized.",
+    );
+
     const blocked = await launch(server, {
       idempotency: digest(`${marker}:blocked`),
       fingerprint: digest(`${marker}:other-requester`),
@@ -106,13 +138,13 @@ async function main() {
     const rateRows = [31, 32, 33].map((secondsAgo, index) => ({
       idempotency_hash: digest(`${marker}:rate:${index}`),
       requester_fingerprint: rateFingerprint,
-      task: "Phase 19 hosted buyer-agent rate-limit test",
+      task: "Phase 20 hosted workflow rate-limit test",
       budget_usdc: 0.001,
       status: "completed",
       progress_stage: "completed",
       completed_at: new Date(Date.now() - secondsAgo * 1_000).toISOString(),
       created_at: new Date(Date.now() - secondsAgo * 1_000).toISOString(),
-      raw: { phase19_test: marker },
+      raw: { phase20_test: marker },
     }));
     const { data: insertedRateRows, error: rateInsertError } = await server
       .from("hosted_agent_jobs")
@@ -132,12 +164,12 @@ async function main() {
       .insert({
         idempotency_hash: digest(`${marker}:recovery`),
         requester_fingerprint: digest(`${marker}:recovery-requester`),
-        task: "Phase 19 hosted buyer-agent failed-job recovery test",
+        task: "Phase 20 hosted workflow failed-job recovery test",
         budget_usdc: 0.001,
         status: "failed",
         progress_stage: "failed",
         error: "Synthetic pre-payment failure",
-        raw: { phase19_test: marker },
+        raw: { phase20_test: marker },
       })
       .select("id")
       .single();
@@ -170,7 +202,7 @@ async function main() {
     assert(!publicReadError && (publicRows ?? []).length === 0, "Hosted job table leaked through public RLS.");
 
     console.log(
-      "[hosted-test] passed: idempotency, one-active-wallet lock, cooldown, rate-limit, safe failed-job recovery, public RLS",
+      "[hosted-test] passed: workflow persistence, idempotency replay, one-active-wallet lock, cooldown, rate-limit, safe failed-job recovery, public RLS",
     );
   } finally {
     if (createdIds.length > 0) {

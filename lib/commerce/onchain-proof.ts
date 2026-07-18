@@ -280,6 +280,41 @@ function safeErrorMessage(error: unknown) {
     .slice(0, 800);
 }
 
+function isTransientArcRpcError(error: unknown) {
+  const message = safeErrorMessage(error).toLowerCase();
+  return [
+    "status: 429",
+    "request limit reached",
+    "rate limit",
+    "status: 502",
+    "status: 503",
+    "status: 504",
+    "timed out",
+    "timeout",
+    "econnreset",
+    "socket hang up",
+  ].some((signal) => message.includes(signal));
+}
+
+async function withArcRpcReadRetry<T>(
+  label: string,
+  operation: () => Promise<T>,
+) {
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (!isTransientArcRpcError(error) || attempt === 3) throw error;
+      const delayMs = 500 * 2 ** attempt;
+      console.warn(
+        `[proof-registry] ${label} hit a transient Arc RPC limit; retrying in ${delayMs}ms.`,
+      );
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw new Error(`${label} retry loop exhausted`);
+}
+
 function bytes32(value: string | null | undefined): Hex | null {
   return value && /^0x[0-9a-fA-F]{64}$/.test(value) ? (value as Hex) : null;
 }
@@ -517,11 +552,30 @@ async function reconcileRegisteredProof(input: {
   if (!actual) return null;
 
   assertProofMatches(input.proof, actual);
-  const details = await findRegistrationDetails(
-    input.publicClient,
-    input.contractAddress,
-    input.proof.receiptHash,
-  );
+  let details: RegistrationDetails;
+  if (input.fallbackTransactionHash) {
+    const receipt = await input.publicClient.getTransactionReceipt({
+      hash: input.fallbackTransactionHash,
+    });
+    if (receipt.status !== "success") {
+      throw new Error("Stored proof transaction reverted");
+    }
+    const block = await input.publicClient.getBlock({
+      blockNumber: receipt.blockNumber,
+    });
+    details = {
+      transactionHash: input.fallbackTransactionHash,
+      blockNumber: receipt.blockNumber,
+      attester: input.fallbackAttester ?? null,
+      verifiedAt: timestampFromBlock(block.timestamp),
+    };
+  } else {
+    details = await findRegistrationDetails(
+      input.publicClient,
+      input.contractAddress,
+      input.proof.receiptHash,
+    );
+  }
   return persistVerified({ ...input, details });
 }
 
@@ -588,39 +642,48 @@ export async function publishStoredProof(input: {
       chain: arcTestnet,
       transport: http(rpcUrl()),
     });
-    const observedChainId = await publicClient.getChainId();
+    const observedChainId = await withArcRpcReadRetry(
+      "chain ID read",
+      () => publicClient!.getChainId(),
+    );
     if (observedChainId !== ARC_TESTNET_CHAIN_ID) {
       throw new Error(
         `Refusing proof write on chain ${observedChainId}; expected ${ARC_TESTNET_CHAIN_ID}`,
       );
     }
 
-    const existing = await reconcileRegisteredProof({
-      supabase,
-      paymentEventId: record.id,
-      publicClient,
-      contractAddress,
-      proof,
-      fallbackTransactionHash: transactionHash,
-      fallbackAttester: account.address,
-    });
+    const existing = await withArcRpcReadRetry(
+      "existing proof reconciliation",
+      () => reconcileRegisteredProof({
+        supabase,
+        paymentEventId: record.id,
+        publicClient: publicClient!,
+        contractAddress,
+        proof: proof!,
+        fallbackTransactionHash: transactionHash,
+        fallbackAttester: account.address,
+      }),
+    );
     if (existing) return existing;
 
-    const { request: writeRequest } = await publicClient.simulateContract({
-      account,
-      address: contractAddress,
-      abi: proofRegistryAbi,
-      functionName: "registerProof",
-      args: [
-        proof.receiptHash,
-        proof.serviceHash,
-        proof.buyer,
-        proof.seller,
-        proof.amount,
-        proof.requestHash,
-        proof.responseHash,
-      ],
-    });
+    const { request: writeRequest } = await withArcRpcReadRetry(
+      "proof simulation",
+      () => publicClient!.simulateContract({
+        account,
+        address: contractAddress,
+        abi: proofRegistryAbi,
+        functionName: "registerProof",
+        args: [
+          proof!.receiptHash,
+          proof!.serviceHash,
+          proof!.buyer,
+          proof!.seller,
+          proof!.amount,
+          proof!.requestHash,
+          proof!.responseHash,
+        ],
+      }),
+    );
     const walletClient = createWalletClient({
       account,
       chain: arcTestnet,
@@ -633,24 +696,29 @@ export async function publishStoredProof(input: {
       onchain_status: "pending",
     });
 
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: transactionHash,
-    });
+    const receipt = await withArcRpcReadRetry(
+      "proof transaction receipt",
+      () => publicClient!.waitForTransactionReceipt({ hash: transactionHash! }),
+    );
     if (receipt.status !== "success") {
       throw new Error("Proof transaction reverted");
     }
 
-    const actual = await readProofData(
-      publicClient,
-      contractAddress,
-      proof.receiptHash,
+    const actual = await withArcRpcReadRetry(
+      "registered proof read",
+      () => readProofData(
+        publicClient!,
+        contractAddress,
+        proof!.receiptHash,
+      ),
     );
     if (!actual) throw new Error("Proof transaction succeeded but proof is unavailable");
     assertProofMatches(proof, actual);
 
-    const block = await publicClient.getBlock({
-      blockNumber: receipt.blockNumber,
-    });
+    const block = await withArcRpcReadRetry(
+      "proof block read",
+      () => publicClient!.getBlock({ blockNumber: receipt.blockNumber }),
+    );
     return persistVerified({
       supabase,
       paymentEventId: record.id,
@@ -668,15 +736,18 @@ export async function publishStoredProof(input: {
   } catch (error) {
     if (publicClient && contractAddress && proof) {
       try {
-        const recovered = await reconcileRegisteredProof({
-          supabase,
-          paymentEventId: record.id,
-          publicClient,
-          contractAddress,
-          proof,
-          fallbackTransactionHash: transactionHash,
-          fallbackAttester: account?.address ?? null,
-        });
+        const recovered = await withArcRpcReadRetry(
+          "failed proof reconciliation",
+          () => reconcileRegisteredProof({
+            supabase,
+            paymentEventId: record.id,
+            publicClient: publicClient!,
+            contractAddress,
+            proof: proof!,
+            fallbackTransactionHash: transactionHash,
+            fallbackAttester: account?.address ?? null,
+          }),
+        );
         if (recovered) return recovered;
       } catch {
         // Preserve the original failure below. Recovery can retry reconciliation.

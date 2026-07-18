@@ -33,6 +33,7 @@ import type { ApiService } from "@/lib/services/registry";
 import { getServerDatabaseDiagnostic } from "../supabase/server-env";
 import { getProofRegistryDiagnostic } from "../commerce/onchain-proof";
 import { getHostedRunnerDiagnostic } from "../agent/hosted-policy";
+import { listRecentHostedAgentJobs } from "../agent/hosted-jobs";
 
 export const RECOMMENDED_REVIEWER_COMMAND =
   'AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005';
@@ -52,11 +53,14 @@ export type ReviewHealthStatus = {
     verifiedProofCount: number;
     pendingProofCount: number;
     failedProofCount: number;
+    latestHostedWorkflowExists: boolean;
+    latestHostedWorkflowVerified: boolean;
   };
   recommendedCommand: string;
   recentFailedRuns: PublicAgentRun[];
   latestRunUrl: string | null;
   latestReceiptUrl: string | null;
+  latestHostedWorkflowUrl: string | null;
   mainPassportUrl: string | null;
   latestRun: PublicAgentRun | null;
   latestReceipt: CommerceReceipt | null;
@@ -65,6 +69,7 @@ export type ReviewHealthStatus = {
   database: ReturnType<typeof getServerDatabaseDiagnostic>;
   proofRegistry: ReturnType<typeof getProofRegistryDiagnostic>;
   hostedRunner: ReturnType<typeof getHostedRunnerDiagnostic>;
+  latestHostedWorkflow: Awaited<ReturnType<typeof listRecentHostedAgentJobs>>[number] | null;
 };
 
 export function getDefaultProductionUrl() {
@@ -110,12 +115,13 @@ function withTimeout<T>(label: string, promise: Promise<T>, timeoutMs = 8_000) {
 export async function getReviewHealthStatus(
   baseUrl = getDefaultProductionUrl(),
 ): Promise<ReviewHealthStatus> {
-  const [runsResult, receiptsResult, profilesResult, servicesResult] =
+  const [runsResult, receiptsResult, profilesResult, servicesResult, hostedResult] =
     await Promise.allSettled([
       withTimeout("Runs", fetchRecentAgentRuns(30)),
       withTimeout("Receipts", fetchRecentReceipts({ limit: 10 })),
       withTimeout("Agent Passports", listAgentProfiles(1)),
       withTimeout("API Store services", listAllStoreServices()),
+      withTimeout("Hosted workflows", listRecentHostedAgentJobs(1)),
     ]);
 
   const runs =
@@ -126,6 +132,9 @@ export async function getReviewHealthStatus(
     profilesResult.status === "fulfilled" ? profilesResult.value : ([] as PublicAgentProfile[]);
   const services =
     servicesResult.status === "fulfilled" ? servicesResult.value.services : ([] as ApiService[]);
+  const hostedWorkflows =
+    hostedResult.status === "fulfilled" ? hostedResult.value : [];
+  const latestHostedWorkflow = hostedWorkflows[0] ?? null;
 
   const latestSuccessfulRun =
     runs.find((run) => run.status === "completed" && (run.paid_count ?? 0) > 0) ??
@@ -154,6 +163,7 @@ export async function getReviewHealthStatus(
     resultWarning("Receipts", receiptsResult),
     resultWarning("Agent Passports", profilesResult),
     resultWarning("API Store services", servicesResult),
+    resultWarning("Hosted workflows", hostedResult),
   ].filter(Boolean) as string[];
 
   return {
@@ -171,12 +181,17 @@ export async function getReviewHealthStatus(
       verifiedProofCount: verifiedReceipts.length,
       pendingProofCount,
       failedProofCount,
+      latestHostedWorkflowExists: Boolean(latestHostedWorkflow),
+      latestHostedWorkflowVerified: (latestHostedWorkflow?.proofCount ?? 0) > 0,
     },
     recommendedCommand: RECOMMENDED_REVIEWER_COMMAND,
     recentFailedRuns,
     latestRunUrl: latestRun ? urlFor(baseUrl, `/runs/${latestRun.id}`) : null,
     latestReceiptUrl: latestReceipt
       ? urlFor(baseUrl, `/receipts/${latestReceipt.id}`)
+      : null,
+    latestHostedWorkflowUrl: latestHostedWorkflow
+      ? urlFor(baseUrl, latestHostedWorkflow.href)
       : null,
     mainPassportUrl: mainProfile
       ? urlFor(baseUrl, `/agents/${mainProfile.wallet}`)
@@ -188,5 +203,6 @@ export async function getReviewHealthStatus(
     database: getServerDatabaseDiagnostic(),
     proofRegistry: getProofRegistryDiagnostic(),
     hostedRunner: getHostedRunnerDiagnostic(),
+    latestHostedWorkflow,
   };
 }

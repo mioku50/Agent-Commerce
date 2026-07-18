@@ -6,7 +6,7 @@
 The current product direction is a hosted agent execution and verification layer:
 
 1. a user launches an agent from the browser;
-2. the agent selects an allowlisted paid API;
+2. the agent previews and selects up to three allowlisted paid APIs;
 3. a project-owned server wallet pays through x402 and Circle Gateway;
 4. the response becomes a public run, receipt, and Agent Passport update;
 5. a compact proof is registered in the app-owned contract on Arc Testnet.
@@ -47,19 +47,28 @@ For the end user, the hosted flow requires no repository clone, no private key, 
 
 ## One-Click Hosted Flow
 
-Open [`/agent-runner`](https://agent-commerce-six.vercel.app/agent-runner) and launch the demo agent.
+Open [`/agent-runner`](https://agent-commerce-six.vercel.app/agent-runner), choose a useful workflow, inspect its server-generated plan and estimated price, then launch it.
+
+Available hosted workflows:
+
+- **Sentiment & Tone Report** — deterministic keyword and punctuation heuristics over user text, plus traceable paid API results;
+- **Builder Update Analysis** — deterministic delivery/risk signal extraction from a project update;
+- **Custom Task** — the shared planner selects relevant services from the fixed server allowlist.
+
+When no LLM is configured, the result is explicitly labeled **Structured workflow result (no LLM configured)**. The application never presents deterministic aggregation as model-generated analysis.
 
 The application then:
 
 1. creates a durable Agent DB job;
 2. applies idempotency, cooldown, rate-limit, and active-job checks;
 3. plans the purchase through the shared agent execution core;
-4. calls an allowlisted x402-protected service;
+4. calls up to three allowlisted x402-protected services within the `0.005 USDC` total cap;
 5. pays with the project-owned Arc Testnet payer wallet;
 6. records the Agent Run, purchase step, payment event, and receipt;
 7. updates the payer wallet's Agent Passport and seller analytics;
 8. publishes a compact post-settlement proof to Arc;
-9. returns links to every public proof surface.
+9. persists a structured Final Report with actual API responses, selected/skipped services, spend, receipts, and proof transactions;
+10. publishes the result at the shareable read-only route `/agent-runner/<job-id>`.
 
 The UI exposes progress states such as:
 
@@ -73,6 +82,23 @@ The UI exposes progress states such as:
 A connected browser wallet is optional and is used only as a requester label. It never pays, signs, or authorizes the hosted purchase.
 
 ## Verified Production Example
+
+Phase 20 was validated with a real two-service browser workflow and production idempotency replay:
+
+| Proof | Value |
+| --- | --- |
+| Hosted result | [`2e3db83c-d975-400e-a2b8-33ae34b2dccc`](https://agent-commerce-six.vercel.app/agent-runner/2e3db83c-d975-400e-a2b8-33ae34b2dccc) |
+| Agent Run | [`295fb035-387e-4df6-8150-f72f1471dcaf`](https://agent-commerce-six.vercel.app/runs/295fb035-387e-4df6-8150-f72f1471dcaf) |
+| Premium Quote receipt | [`3926f005-a4d5-4262-860d-c676fe58bede`](https://agent-commerce-six.vercel.app/receipts/3926f005-a4d5-4262-860d-c676fe58bede) |
+| Text Analyzer receipt | [`dc249909-cae6-43a1-afc0-bdb1ffe570f2`](https://agent-commerce-six.vercel.app/receipts/dc249909-cae6-43a1-afc0-bdb1ffe570f2) |
+| Total paid | `0.0013 USDC` |
+| Arc proof 1 | [`0x8f51a20990b0b9bf74b661fbb86cb28ed6fc9d0d598f6095752047cafb1a01f0`](https://testnet.arcscan.app/tx/0x8f51a20990b0b9bf74b661fbb86cb28ed6fc9d0d598f6095752047cafb1a01f0) |
+| Arc proof 2 | [`0x436c769ccdc19677654afe737f85dd7e9a5975e2b71f15a6955137ccf3238766`](https://testnet.arcscan.app/tx/0x436c769ccdc19677654afe737f85dd7e9a5975e2b71f15a6955137ccf3238766) |
+| Replay result | Same job and two receipt IDs; no second payment or proof |
+
+The Final Report contains the two actual API responses and is explicitly labeled as deterministic structured aggregation. Both receipt hashes return `true` from `AgentCommerceProofRegistry.isRegistered`.
+
+Historical Phase 19 one-service validation:
 
 Phase 19 was validated with a real browser-triggered production run:
 
@@ -97,6 +123,9 @@ The production Playwright smoke launched the CTA in Chromium, observed `Verified
 - shared execution core with the local CLI;
 - server-owned Arc Testnet payer wallet;
 - public progress and result links;
+- plan preview with exact services and estimated cost;
+- multi-service execution and honest partial-failure reports;
+- shareable deterministic Final Reports;
 - explicit recovery for safe pre-payment failures.
 
 ### x402 payments on Arc
@@ -138,7 +167,8 @@ flowchart LR
     P --> S[Allowlisted API Store service]
     S --> X[x402 + Circle Gateway]
     X --> A[Paid API response]
-    A --> D
+    A --> F[Deterministic Final Report]
+    F --> D
     D --> T[Run timeline]
     D --> C[Commerce receipt]
     D --> I[Agent Passport]
@@ -184,6 +214,8 @@ Safety properties:
 - proof publication cannot reverse or block an already completed x402 purchase;
 - the attester private key remains server-only.
 
+Transient proof failures can be recovered either with `npm run proofs:recover` in an authorized server environment or through the operator-only internal recovery route protected by `AGENT_COMMERCE_PROOF_RECOVERY_TOKEN`. Recovery reads canonical payment data from Agent DB, checks the existing transaction/contract state, and never accepts proof fields from a browser.
+
 Read-only proof APIs:
 
 - `GET /api/proofs/<receipt-step-id-or-proof-id>`
@@ -198,6 +230,7 @@ The hosted payer is protected by server-side and database-enforced controls:
 - exact service slug, endpoint, and HTTP method allowlist;
 - no arbitrary URLs;
 - `0.005 USDC` maximum spend per job;
+- at most three paid calls per job;
 - one queued or running job globally for the demo payer;
 - requester cooldown;
 - rolling rate limit;
@@ -210,7 +243,8 @@ The hosted payer is protected by server-side and database-enforced controls:
 
 | Route | Purpose |
 | --- | --- |
-| `/agent-runner` | Launch and follow a hosted paid agent job |
+| `/agent-runner` | Preview and launch useful hosted paid workflows |
+| `/agent-runner/<id>` | Shareable read-only progress and Final Report |
 | `/store` | Browse agent-buyable services |
 | `/agent-control` | Dry-run planning and policy preview |
 | `/runs` | Public agent execution timelines |
@@ -225,7 +259,9 @@ Useful public APIs:
 | Endpoint | Purpose |
 | --- | --- |
 | `GET /api/store/services` | Machine-readable service discovery |
+| `POST /api/hosted-agent/plan` | Validate input and preview the exact allowlisted plan/cost |
 | `POST /api/hosted-agent/jobs` | Create or replay a hosted job |
+| `GET /api/hosted-agent/jobs` | Recent hosted workflow history |
 | `GET /api/hosted-agent/jobs/<id>` | Read hosted job progress and proof links |
 | `GET /api/receipts` | Recent commerce receipts |
 | `GET /api/receipts/<id>` | One receipt |
@@ -236,8 +272,8 @@ Useful public APIs:
 ## Review the Project in Two Minutes
 
 1. Open the [hosted runner](https://agent-commerce-six.vercel.app/agent-runner).
-2. Launch the default paid demo task.
-3. Watch the job progress to `completed` and `Verified on Arc`.
+2. Choose Sentiment & Tone or Builder Update, preview the two-service `0.0013 USDC` plan, and launch it.
+3. Watch the job progress to `completed`, inspect the Final Report, and confirm every receipt is `Verified on Arc`.
 4. Open the generated Agent Run, receipt, Passport, and Arcscan transaction.
 5. Open the [review page](https://agent-commerce-six.vercel.app/review) for the current production status.
 6. Confirm that an unpaid protected request returns HTTP 402:
@@ -277,6 +313,7 @@ Do not commit `.env.local`, private keys, service-role keys, JWT secrets, or dat
 | Server Agent DB | `AGENT_DB_SUPABASE_URL`, `AGENT_DB_SUPABASE_SECRET_KEY` or service-role fallback |
 | Database migrations | `AGENT_DB_POSTGRES_URL_NON_POOLING` |
 | Proof registry | `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS`, server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY` |
+| Proof recovery | server-only `AGENT_COMMERCE_PROOF_RECOVERY_TOKEN` |
 | Local buyer agent | `AGENT_PRIVATE_KEY`, optional funding and Gateway reuse controls |
 
 The hosted payer key, rate-limit secret, Supabase privileged credentials, and proof attester key must exist only in server-side Sensitive environment variables.

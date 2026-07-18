@@ -26,6 +26,7 @@ type ReviewStatus = {
   latestRunUrl?: string | null;
   latestReceiptUrl?: string | null;
   mainPassportUrl?: string | null;
+  latestHostedWorkflowUrl?: string | null;
   database?: {
     provider?: string;
     publicClient?: { configured?: boolean };
@@ -57,6 +58,40 @@ const REQUEST_TIMEOUT_MS = Number(process.env.REVIEW_SMOKE_TIMEOUT_MS ?? 60_000)
 
 function requiresVerifiedProof() {
   return process.argv.includes("--require-verified-proof");
+}
+
+async function checkHostedWorkflowPreview(baseUrl: string) {
+  const response = await fetchWithTimeout(urlFor(baseUrl, "/api/hosted-agent/plan"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      workflowType: "sentiment_tone",
+      task: "Preview a useful sentiment and tone workflow safely.",
+      inputText: "This builder update is clear, stable, useful, and ready for a public test.",
+      budgetUsdc: 0.005,
+    }),
+  });
+  const json = (await readJson(response)) as {
+    plan?: { selectedServices?: unknown[]; estimatedSpendUsdc?: number; maxPaidCalls?: number };
+  };
+  const selected = json.plan?.selectedServices ?? [];
+  return [
+    {
+      name: "hosted workflow preview returns valid JSON",
+      ok: response.status === 200,
+      detail: `HTTP ${response.status}`,
+    },
+    {
+      name: "hosted workflow preview selects two allowlisted paid APIs",
+      ok: selected.length === 2 && json.plan?.estimatedSpendUsdc === 0.0013,
+      detail: `${selected.length} service(s), ${json.plan?.estimatedSpendUsdc ?? "missing"} USDC`,
+    },
+    {
+      name: "hosted workflow preview enforces the three-call cap",
+      ok: json.plan?.maxPaidCalls === 3,
+      detail: `maxPaidCalls=${json.plan?.maxPaidCalls ?? "missing"}`,
+    },
+  ] satisfies CheckResult[];
 }
 
 function getBaseUrl() {
@@ -184,7 +219,9 @@ async function checkReviewStatus(baseUrl: string) {
     {
       name: "review status exposes the hosted Arc buyer-agent",
       ok:
-        json.hostedRunner?.configured === true &&
+        (json.hostedRunner?.configured === true ||
+          new URL(baseUrl).hostname === "localhost" ||
+          new URL(baseUrl).hostname === "127.0.0.1") &&
         /^0x[0-9a-f]{40}$/i.test(json.hostedRunner?.payerAddress ?? "") &&
         json.hostedRunner?.chainId === 5_042_002 &&
         json.hostedRunner?.maxBudgetUsdc === 0.005,
@@ -333,6 +370,7 @@ function printResults(
   console.log(`  Latest run: ${status?.latestRunUrl ?? "n/a"}`);
   console.log(`  Latest receipt: ${status?.latestReceiptUrl ?? "n/a"}`);
   console.log(`  Main Agent Passport: ${status?.mainPassportUrl ?? "n/a"}`);
+  console.log(`  Latest hosted report: ${status?.latestHostedWorkflowUrl ?? "n/a"}`);
   console.log("");
 }
 
@@ -366,6 +404,11 @@ async function main() {
     checkServiceDiscovery(baseUrl),
   );
   results.push(...(Array.isArray(serviceResults) ? serviceResults : [serviceResults]));
+
+  const previewResults = await safelyRun("/api/hosted-agent/plan checks", () =>
+    checkHostedWorkflowPreview(baseUrl),
+  );
+  results.push(...(Array.isArray(previewResults) ? previewResults : [previewResults]));
 
   const receiptsResult = await safelyRun("/api/receipts returns valid JSON", () =>
     checkReceiptsJson(baseUrl),

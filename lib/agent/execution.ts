@@ -47,6 +47,7 @@ import {
 import {
   planAgentPurchases,
   type AgentPlanDecision,
+  type AgentPlanningPolicy,
 } from "./planner.ts";
 import type {
   ApiService,
@@ -77,6 +78,7 @@ export type BuyerAgentProgress = {
 
 export type BuyerAgentExecutionOptions = {
   task: string;
+  requestInputText?: string | null;
   spendingLimit: number;
   baseUrl: string;
   sellerAddress: Address;
@@ -95,6 +97,8 @@ export type BuyerAgentExecutionOptions = {
   requirePersistence?: boolean;
   requirePaidPurchase?: boolean;
   proofWaitTimeoutMs?: number;
+  planningPolicy?: AgentPlanningPolicy;
+  continueOnServiceFailure?: boolean;
   serviceAllowlist?: readonly {
     slug: string;
     endpoint: string;
@@ -103,12 +107,41 @@ export type BuyerAgentExecutionOptions = {
   onProgress?: (progress: BuyerAgentProgress) => void | Promise<void>;
 };
 
+export type BuyerAgentServiceResult = {
+  serviceId: string;
+  serviceSlug: string;
+  serviceName: string;
+  status: "paid" | "failed";
+  amountUsdc: string | null;
+  stepId: string | null;
+  paymentEventId: string | null;
+  response: unknown;
+  error: string | null;
+};
+
 export type BuyerAgentExecutionResult = {
   agentRunId: string | null;
   agentWallet: Address;
   spentUsdc: string;
   paidStepIds: string[];
   paymentEventIds: string[];
+  selectedServices: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    endpoint: string;
+    method: ServiceMethod;
+    priceUsd: number;
+    reasoning: string;
+  }>;
+  skippedServices: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    priceUsd: number;
+    reasoning: string;
+  }>;
+  serviceResults: BuyerAgentServiceResult[];
   status: "completed" | "failed";
   summary: string;
 };
@@ -307,25 +340,34 @@ function serviceUrl(baseUrl: string, service: ApiService) {
   return `${baseUrl}${service.endpoint}`;
 }
 
-function createTextAnalyzerBody(task: string, paidPreviews: unknown[]) {
+function createTextAnalyzerBody(
+  task: string,
+  inputText: string | null | undefined,
+  paidPreviews: unknown[],
+) {
   const context = paidPreviews.length > 0
     ? JSON.stringify(paidPreviews, null, 2)
     : "No paid context has been collected yet.";
 
   return {
-    text: `Task: ${task}\n\nPaid context collected so far:\n${context}`,
+    text: [
+      `Task: ${task}`,
+      inputText?.trim() ? `User input:\n${inputText.trim()}` : null,
+      `Paid context collected so far:\n${context}`,
+    ].filter(Boolean).join("\n\n"),
   };
 }
 
 function requestBodyForService(
   service: ApiService,
   task: string,
+  inputText: string | null | undefined,
   paidPreviews: unknown[],
 ) {
   if (service.method !== "POST") return undefined;
 
   if (service.slug === "text-analyzer") {
-    return createTextAnalyzerBody(task, paidPreviews);
+    return createTextAnalyzerBody(task, inputText, paidPreviews);
   }
 
   const example = service.exampleRequest as { body?: Record<string, unknown> };
@@ -590,6 +632,7 @@ export async function executeBuyerAgent(
   await writeRunLog(runFilePath, runLog);
 
   const paidStepIds: string[] = [];
+  const serviceResults: BuyerAgentServiceResult[] = [];
 
   async function emitProgress(
     stage: BuyerAgentProgressStage,
@@ -623,7 +666,13 @@ export async function executeBuyerAgent(
 
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-      const states = await getPaymentEventProofStates(paymentEventIds);
+      let states;
+      try {
+        states = await getPaymentEventProofStates(paymentEventIds);
+      } catch (error) {
+        addPersistenceWarning("wait for onchain proofs", toErrorMessage(error));
+        return;
+      }
       if (
         states.length === paymentEventIds.length &&
         states.every((state) => state.onchain_status === "verified")
@@ -994,7 +1043,12 @@ export async function executeBuyerAgent(
   async function executePaidStep(decision: ExecutableDecision, paidPreviews: unknown[]) {
     const { service, step, stepIndex } = decision;
     const url = serviceUrl(baseUrl, service);
-    const body = requestBodyForService(service, task, paidPreviews);
+    const body = requestBodyForService(
+      service,
+      task,
+      options.requestInputText,
+      paidPreviews,
+    );
 
     updateLocalStep(runLog, stepIndex, { status: "selected" });
     await writeRunLog(runFilePath, runLog);
@@ -1104,6 +1158,17 @@ export async function executeBuyerAgent(
     console.log(
       `  ${service.name}: paid ${result.formattedAmount} USDC (spent ${runLog.spentUsdc}/${formatUsdc(options.spendingLimit)} USDC).`,
     );
+    return {
+      serviceId: service.id,
+      serviceSlug: service.slug,
+      serviceName: service.name,
+      status: "paid" as const,
+      amountUsdc: result.formattedAmount,
+      stepId: step?.id ?? null,
+      paymentEventId,
+      response: responsePreview,
+      error: null,
+    };
   }
 
   try {
@@ -1136,6 +1201,7 @@ export async function executeBuyerAgent(
       task,
       budgetUsdc: options.spendingLimit,
       services,
+      policy: options.planningPolicy,
     });
     const decisions = plan.decisions;
     const selectedCount = plan.selected.length;
@@ -1241,7 +1307,22 @@ export async function executeBuyerAgent(
 
     const paidPreviews: unknown[] = [];
     for (const decision of selected) {
-      await executePaidStep(decision, paidPreviews);
+      try {
+        serviceResults.push(await executePaidStep(decision, paidPreviews));
+      } catch (error) {
+        serviceResults.push({
+          serviceId: decision.service.id,
+          serviceSlug: decision.service.slug,
+          serviceName: decision.service.name,
+          status: "failed",
+          amountUsdc: null,
+          stepId: decision.step?.id ?? null,
+          paymentEventId: null,
+          response: null,
+          error: toErrorMessage(error),
+        });
+        if (!options.continueOnServiceFailure) throw error;
+      }
     }
 
     await emitProgress(
@@ -1268,7 +1349,10 @@ export async function executeBuyerAgent(
       failed: failedCount,
       spent: Number(runLog.spentUsdc),
     });
-    const finalStatus: AgentRunStatus = failedCount > 0 ? "failed" : "completed";
+    const finalStatus: AgentRunStatus =
+      failedCount > 0 && !options.continueOnServiceFailure
+        ? "failed"
+        : "completed";
     runLog.status = finalStatus;
     runLog.summary = summary;
     await writeRunLog(runFilePath, runLog);
@@ -1307,7 +1391,24 @@ export async function executeBuyerAgent(
       paymentEventIds: runLog.steps
         .map((step) => step.paymentEventId)
         .filter((value): value is string => Boolean(value)),
-      status: "completed",
+      selectedServices: plan.selected.map((decision) => ({
+        id: decision.service.id,
+        slug: decision.service.slug,
+        name: decision.service.name,
+        endpoint: decision.service.endpoint,
+        method: decision.service.method,
+        priceUsd: decision.expectedPriceUsd,
+        reasoning: decision.reasoning,
+      })),
+      skippedServices: plan.skipped.map((decision) => ({
+        id: decision.service.id,
+        slug: decision.service.slug,
+        name: decision.service.name,
+        priceUsd: decision.expectedPriceUsd,
+        reasoning: decision.reasoning,
+      })),
+      serviceResults,
+      status: finalStatus,
       summary,
     };
   } catch (error) {

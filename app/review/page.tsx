@@ -189,6 +189,7 @@ export default async function ReviewPage() {
   const mainPassportHref = data.mainProfile
     ? `/agents/${data.mainProfile.wallet}`
     : "/agents";
+  const latestHostedWorkflowHref = data.latestHostedWorkflow?.href ?? "/agent-runner";
 
   return (
     <main className="min-h-screen bg-background">
@@ -211,7 +212,7 @@ export default async function ReviewPage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
                 <Link href="/agent-runner">
-                  Run live demo agent
+                  Run a useful agent workflow
                   <Bot />
                 </Link>
               </Button>
@@ -477,6 +478,16 @@ export default async function ReviewPage() {
             href="/agent-launch"
             detail="Wallet-funded local buyer-agent launch flow."
             icon={Fuel}
+          />
+          <LinkCard
+            title="Latest Hosted Report"
+            href={latestHostedWorkflowHref}
+            detail={
+              data.latestHostedWorkflow
+                ? `${data.latestHostedWorkflow.spentUsdc} USDC · ${data.latestHostedWorkflow.proofCount} Arc proof(s)`
+                : "Launch a useful hosted workflow."
+            }
+            icon={Bot}
           />
           <LinkCard
             title="Latest Run"

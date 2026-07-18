@@ -6,6 +6,7 @@
 import { after, NextRequest, NextResponse } from "next/server";
 import {
   getHostedAgentJob,
+  listRecentHostedAgentJobs,
   launchHostedAgentJob,
   runHostedAgentJob,
 } from "@/lib/agent/hosted-jobs";
@@ -15,28 +16,27 @@ import {
   hostedRequesterFingerprint,
   optionalRequesterWallet,
   safeHostedError,
-  validateHostedBudget,
-  validateHostedTask,
   validateIdempotencyKey,
 } from "@/lib/agent/hosted-policy";
+import { validateHostedWorkflowRequest } from "@/lib/agent/hosted-workflows";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
-  let task: string;
-  let budgetUsdc: number;
+  let workflowRequest: ReturnType<typeof validateHostedWorkflowRequest>;
   let requesterWallet: string | null;
   let idempotencyKey: string;
 
   try {
     const body = (await request.json()) as {
+      workflowType?: unknown;
       task?: unknown;
+      inputText?: unknown;
       budgetUsdc?: unknown;
       requesterWallet?: unknown;
     };
-    task = validateHostedTask(body.task);
-    budgetUsdc = validateHostedBudget(body.budgetUsdc);
+    workflowRequest = validateHostedWorkflowRequest(body);
     requesterWallet = optionalRequesterWallet(body.requesterWallet);
     idempotencyKey = validateIdempotencyKey(
       request.headers.get("idempotency-key"),
@@ -61,8 +61,7 @@ export async function POST(request: NextRequest) {
         userAgent: request.headers.get("user-agent"),
       }),
       requesterWallet,
-      task,
-      budgetUsdc,
+      request: workflowRequest,
     });
 
     if (!result.jobId) {
@@ -105,7 +104,7 @@ export async function POST(request: NextRequest) {
         idempotent: result.reason === "idempotent",
         status: job?.status ?? "queued",
         statusUrl: `/api/hosted-agent/jobs/${result.jobId}`,
-        hostedRunUrl: `/agent-runner?job=${result.jobId}`,
+        hostedRunUrl: `/agent-runner/${result.jobId}`,
       },
       { status: result.created ? 202 : 200 },
     );
@@ -113,6 +112,22 @@ export async function POST(request: NextRequest) {
     console.error(`[hosted-agent] launch unavailable: ${safeHostedError(error)}`);
     return NextResponse.json(
       { error: "Hosted buyer-agent is temporarily unavailable." },
+      { status: 503 },
+    );
+  }
+}
+
+export async function GET(request: NextRequest) {
+  try {
+    const rawLimit = Number(request.nextUrl.searchParams.get("limit") ?? "8");
+    const jobs = await listRecentHostedAgentJobs(Number.isFinite(rawLimit) ? rawLimit : 8);
+    return NextResponse.json({ jobs }, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    console.error(`[hosted-agent] history unavailable: ${safeHostedError(error)}`);
+    return NextResponse.json(
+      { error: "Unable to load hosted workflow history." },
       { status: 503 },
     );
   }

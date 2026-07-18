@@ -22,6 +22,7 @@ export type AgentPlanDecision = {
 export type AgentPlanningPolicy = {
   preferredCategories?: string[];
   maxServicePriceUsd?: number | null;
+  maxPaidCalls?: number | null;
   allowSellerCreated?: boolean;
   allowOfficial?: boolean;
 };
@@ -186,10 +187,12 @@ export function planAgentPurchases(input: AgentPlanInput): AgentPlanResult {
   const policy = {
     preferredCategories: input.policy?.preferredCategories?.filter(Boolean) ?? [],
     maxServicePriceUsd: input.policy?.maxServicePriceUsd ?? null,
+    maxPaidCalls: input.policy?.maxPaidCalls ?? null,
     allowSellerCreated: input.policy?.allowSellerCreated ?? true,
     allowOfficial: input.policy?.allowOfficial ?? true,
   };
   let remaining = budgetUsdc;
+  let decisionsSelected = 0;
 
   const decisions = sortedServices(input.services).map((service): AgentPlanDecision => {
     const skipped = (reasoning: string): AgentPlanDecision => ({
@@ -239,11 +242,19 @@ export function planAgentPurchases(input: AgentPlanInput): AgentPlanResult {
       return skipped("The scripted policy did not find enough task relevance to justify this paid call.");
     }
 
+    if (
+      policy.maxPaidCalls !== null &&
+      decisionsSelected >= policy.maxPaidCalls
+    ) {
+      return skipped(`Skipped because the workflow is limited to ${policy.maxPaidCalls} paid call(s).`);
+    }
+
     if (service.priceUsd > remaining + 0.0000001) {
       return skipped(`Skipped because ${service.priceLabel} exceeds the remaining budget of ${formatUsdc(remaining)} USDC.`);
     }
 
     remaining = roundUsdc(remaining - service.priceUsd);
+    decisionsSelected += 1;
 
     return {
       service,

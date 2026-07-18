@@ -11,8 +11,20 @@ type HostedStatus = {
     status: "queued" | "running" | "completed" | "failed";
     spentUsdc: string;
     error: string | null;
+    structuredResult: {
+      aggregationMode: string;
+      summary: string;
+      apiResults: unknown[];
+      receiptIds: string[];
+      proofTransactionHashes: string[];
+    } | null;
   };
   receiptIds: string[];
+  proofs: Array<{
+    receiptId: string;
+    status: "pending" | "verified" | "failed";
+    transactionHash: string | null;
+  }>;
   proof: {
     status: "pending" | "verified" | "failed";
     transactionHash: string | null;
@@ -74,12 +86,14 @@ async function main() {
   try {
     await page.goto(`${url}/agent-runner`, { waitUntil: "networkidle" });
     await page.getByText("Project-owned payer wallet", { exact: true }).waitFor();
+    await page.getByRole("button", { name: "Preview plan and cost" }).click();
+    await page.getByText("2 paid APIs", { exact: true }).waitFor();
     const launchResponsePromise = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === "/api/hosted-agent/jobs",
     );
-    await page.getByRole("button", { name: "Run live demo agent" }).click();
+    await page.getByRole("button", { name: "Run this workflow" }).click();
     const launchResponse = await launchResponsePromise;
     assert(
       launchResponse.status() === 202 || launchResponse.status() === 200,
@@ -92,7 +106,7 @@ async function main() {
     assert(launch.jobId, "Hosted browser launch returned no job ID.");
     assert(idempotencyKey && launchBody, "Browser idempotency request was not captured.");
 
-    const deadline = Date.now() + 240_000;
+    const deadline = Date.now() + 120_000;
     let status: HostedStatus | null = null;
     while (Date.now() < deadline) {
       status = await page.evaluate(async (jobId) => {
@@ -106,23 +120,25 @@ async function main() {
       if (status.job.status === "failed") {
         throw new Error(`Hosted browser job failed: ${status.job.error ?? "unknown error"}`);
       }
-      if (status.job.status === "completed" && status.proof?.status === "verified") {
+      if (status.job.status === "completed") {
         break;
       }
       await sleep(1_500);
     }
 
     assert(status?.job.status === "completed", "Hosted browser job did not complete in time.");
-    assert(status.proof?.status === "verified", "Hosted proof was not Verified on Arc in time.");
-    assert(status.receiptIds.length > 0, "Hosted browser job created no receipt.");
+    assert(status.proofs.length >= 2, "Hosted workflow did not create a proof per paid service.");
+    assert(status.receiptIds.length >= 2, "Hosted multi-service workflow created fewer than two receipts.");
+    assert(Number(status.job.spentUsdc) === 0.0013, "Hosted multi-service spend was not 0.0013 USDC.");
+    assert(status.job.structuredResult?.aggregationMode === "deterministic_structured", "Final Report aggregation mode is incorrect.");
+    assert(status.job.structuredResult.apiResults.length >= 2, "Final Report is missing API results.");
     assert(status.links.agentRun && status.links.receipt && status.links.passport, "Hosted result links are incomplete.");
-    assert(status.links.proofTransaction, "Hosted result has no Arc proof transaction link.");
 
-    await page.getByRole("link", { name: "Verified Arc proof" }).waitFor();
+    await page.getByText("Final Report", { exact: true }).waitFor();
     const beforeRepeat = {
       jobId: status.job.id,
       receiptIds: [...status.receiptIds],
-      transactionHash: status.proof.transactionHash,
+      transactionHashes: status.proofs.map((proof) => proof.transactionHash),
     };
 
     const repeated = await page.evaluate(
@@ -160,9 +176,32 @@ async function main() {
       "Repeated launch changed the receipt set.",
     );
     assert(
-      afterRepeat.proof?.transactionHash === beforeRepeat.transactionHash,
-      "Repeated launch changed the onchain proof transaction.",
+      JSON.stringify(afterRepeat.proofs.map((proof) => proof.transactionHash)) ===
+        JSON.stringify(beforeRepeat.transactionHashes),
+      "Repeated launch changed the onchain proof transactions.",
     );
+    console.log(
+      `[hosted-browser-smoke] idempotency replay passed for job=${beforeRepeat.jobId} receipts=${beforeRepeat.receiptIds.length}`,
+    );
+
+    const proofDeadline = Date.now() + 180_000;
+    status = afterRepeat;
+    while (
+      Date.now() < proofDeadline &&
+      !status.proofs.every((proof) => proof.status === "verified")
+    ) {
+      await sleep(1_500);
+      status = await page.evaluate(async (jobId) => {
+        const response = await fetch(`/api/hosted-agent/jobs/${jobId}`, {
+          cache: "no-store",
+        });
+        return (await response.json()) as HostedStatus;
+      }, beforeRepeat.jobId);
+    }
+    assert(status.proofs.every((proof) => proof.status === "verified"), "Every hosted proof was not Verified on Arc in time.");
+    assert(status.links.proofTransaction, "Hosted result has no Arc proof transaction link.");
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByText("Verified on Arc", { exact: true }).first().waitFor();
 
     console.log(
       JSON.stringify(
@@ -171,8 +210,8 @@ async function main() {
           idempotencyReplayPassed: true,
           jobId: status.job.id,
           spentUsdc: status.job.spentUsdc,
-          receiptId: status.receiptIds[0],
-          proofTransaction: status.proof.transactionHash,
+          receiptIds: status.receiptIds,
+          proofTransactions: status.proofs.map((proof) => proof.transactionHash),
           links: status.links,
         },
         null,

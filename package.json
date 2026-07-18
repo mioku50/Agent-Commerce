@@ -18,6 +18,7 @@
     "proofs:recover": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/recover-onchain-proofs.mts",
     "proofs:smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/proof-registry-smoke.mts",
     "hosted:test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/hosted-runner-db-tests.mts",
+    "hosted:workflow-test": "node --experimental-transform-types --no-warnings scripts/hosted-workflow-tests.mts",
     "hosted:recover": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/recover-hosted-agent-job.mts",
     "hosted:browser-smoke": "node --experimental-transform-types --no-warnings scripts/hosted-browser-smoke.mts",
     "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts"

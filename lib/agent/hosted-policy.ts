@@ -135,10 +135,14 @@ export function getHostedRunnerDiagnostic() {
       rateLimitMaxRuns: config.rateLimitMaxRuns,
     };
   } catch {
+    const configuredAddress = process.env.HOSTED_AGENT_ADDRESS?.trim();
     return {
       configured: false,
       chainId: 5_042_002,
-      payerAddress: null,
+      payerAddress:
+        configuredAddress && isAddress(configuredAddress)
+          ? getAddress(configuredAddress)
+          : null,
       maxBudgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
       allowedServices: hostedServiceAllowlist().map((service) => service.slug),
       cooldownSeconds: 60,

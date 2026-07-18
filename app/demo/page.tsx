@@ -351,7 +351,7 @@ export default async function DemoPage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
                 <Link href="/agent-runner">
-                  Run live demo agent
+                  Run a useful agent workflow
                   <Bot />
                 </Link>
               </Button>

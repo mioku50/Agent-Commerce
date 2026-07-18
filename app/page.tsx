@@ -40,7 +40,7 @@ import { listAllStoreServices } from "@/lib/services/store-service-persistence";
 import { shortenHash } from "@/lib/utils";
 
 const quickActions = [
-  { href: "/agent-runner", label: "Run live demo agent", icon: Bot },
+  { href: "/agent-runner", label: "Run a useful agent workflow", icon: Bot },
   { href: "/demo", label: "Start guided demo", icon: Sparkles },
   { href: "/agent-launch", label: "Fund buyer-agent", icon: Fuel },
   { href: "/agents", label: "Agent Passports", icon: BadgeCheck },
@@ -84,7 +84,7 @@ export default async function Home() {
               <Button asChild size="lg">
                 <Link href="/agent-runner">
                   <Bot />
-                  Run live demo agent
+                  Run a useful agent workflow
                 </Link>
               </Button>
               <Button asChild size="lg" variant="secondary">
