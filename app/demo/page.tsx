@@ -350,12 +350,18 @@ export default async function DemoPage() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
+                <Link href="/agent-runner">
+                  Run live demo agent
+                  <Bot />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="secondary">
                 <Link href="/review">
                   Review Pack
                   <ClipboardCheck />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="secondary">
+              <Button asChild size="lg" variant="outline">
                 <Link href="/launch">
                   Launch Pack
                   <Rocket />
@@ -398,9 +404,9 @@ export default async function DemoPage() {
             </CardHeader>
             <CardContent className="grid gap-4">
               <p className="text-sm leading-6 text-muted-foreground">
-                Run this locally after funding the buyer-agent wallet. The
-                browser copy text never includes private keys or payment
-                signatures.
+                Advanced operator flow: run this locally with your own funded
+                buyer-agent wallet. The hosted demo above uses a separate
+                project-owned wallet and never exposes payment secrets.
               </p>
               <div className="rounded-md border bg-muted/40 p-4">
                 <code className="break-all font-mono text-sm">{demoCommand}</code>

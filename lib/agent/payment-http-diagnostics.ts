@@ -175,6 +175,9 @@ export function installPaymentHttpDiagnostics(baseUrl: string) {
     getRecent(url: string) {
       return exchanges.filter((exchange) => exchange.url === url).slice(-4);
     },
+    restore() {
+      globalThis.fetch = previousFetch as typeof fetch;
+    },
   };
 }
 

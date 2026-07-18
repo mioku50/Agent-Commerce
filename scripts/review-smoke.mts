@@ -42,6 +42,12 @@ type ReviewStatus = {
     attesterAddress?: string | null;
     chainId?: number;
   };
+  hostedRunner?: {
+    configured?: boolean;
+    payerAddress?: string | null;
+    chainId?: number;
+    maxBudgetUsdc?: number;
+  };
 };
 
 const ARC_TESTNET_NETWORK = "eip155:5042002";
@@ -174,6 +180,15 @@ async function checkReviewStatus(baseUrl: string) {
         /^0x[0-9a-f]{40}$/i.test(json.proofRegistry?.attesterAddress ?? "") &&
         json.proofRegistry?.chainId === 5_042_002,
       detail: `registry=${json.proofRegistry?.registryAddress ?? "missing"} attester=${json.proofRegistry?.attesterAddress ?? "missing"}`,
+    },
+    {
+      name: "review status exposes the hosted Arc buyer-agent",
+      ok:
+        json.hostedRunner?.configured === true &&
+        /^0x[0-9a-f]{40}$/i.test(json.hostedRunner?.payerAddress ?? "") &&
+        json.hostedRunner?.chainId === 5_042_002 &&
+        json.hostedRunner?.maxBudgetUsdc === 0.005,
+      detail: `configured=${json.hostedRunner?.configured === true ? "yes" : "no"} payer=${json.hostedRunner?.payerAddress ?? "missing"}`,
     },
   ] satisfies CheckResult[];
 
@@ -331,6 +346,7 @@ async function main() {
     "/",
     "/review",
     "/demo",
+    "/agent-runner",
     "/store",
     "/agent-control",
     "/agent-launch",

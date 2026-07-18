@@ -59,6 +59,7 @@ const primaryLinks = [
   { href: "/review", label: "Review Pack", icon: ClipboardCheck },
   { href: "/launch", label: "Launch Pack", icon: Rocket },
   { href: "/demo", label: "Guided Demo", icon: Sparkles },
+  { href: "/agent-runner", label: "Live Agent", icon: Bot },
   { href: "/store", label: "API Store", icon: Store },
   { href: "/agent-control", label: "Agent Control", icon: Bot },
   { href: "/agent-launch", label: "Agent Launch", icon: Fuel },

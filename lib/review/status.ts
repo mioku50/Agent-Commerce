@@ -32,6 +32,7 @@ import { listAllStoreServices } from "@/lib/services/store-service-persistence";
 import type { ApiService } from "@/lib/services/registry";
 import { getServerDatabaseDiagnostic } from "../supabase/server-env";
 import { getProofRegistryDiagnostic } from "../commerce/onchain-proof";
+import { getHostedRunnerDiagnostic } from "../agent/hosted-policy";
 
 export const RECOMMENDED_REVIEWER_COMMAND =
   'AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005';
@@ -63,6 +64,7 @@ export type ReviewHealthStatus = {
   warnings: string[];
   database: ReturnType<typeof getServerDatabaseDiagnostic>;
   proofRegistry: ReturnType<typeof getProofRegistryDiagnostic>;
+  hostedRunner: ReturnType<typeof getHostedRunnerDiagnostic>;
 };
 
 export function getDefaultProductionUrl() {
@@ -185,5 +187,6 @@ export async function getReviewHealthStatus(
     warnings,
     database: getServerDatabaseDiagnostic(),
     proofRegistry: getProofRegistryDiagnostic(),
+    hostedRunner: getHostedRunnerDiagnostic(),
   };
 }

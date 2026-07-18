@@ -100,8 +100,8 @@ const technicalProofItems = [
 const testnetNotes = [
   "Arc Testnet only.",
   "The browser never receives private keys.",
-  "The browser only funds buyer-agent wallets through explicit user-confirmed transactions.",
-  "The local CLI buyer-agent still owns x402 signing and paid protected API requests.",
+  "A connected browser wallet is optional requester identity or an explicit funding source; the project wallet pays hosted runs.",
+  "Hosted x402 signing runs only on the server with the project demo wallet; the local CLI remains the advanced own-wallet flow.",
   "The proof registry is an app-owned contract, not an infrastructure USDC, CCTP, or Gateway address.",
   "Occasional Supabase, Gateway, or network timeouts are handled with retry/backoff or safe empty states.",
 ];
@@ -210,6 +210,12 @@ export default async function ReviewPage() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
+                <Link href="/agent-runner">
+                  Run live demo agent
+                  <Bot />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="secondary">
                 <Link href="/demo">
                   Guided Demo
                   <ArrowRight />
@@ -246,8 +252,9 @@ export default async function ReviewPage() {
             </CardHeader>
             <CardContent className="grid gap-4">
               <p className="text-sm leading-6 text-muted-foreground">
-                Use this local command after funding the buyer-agent wallet.
-                Browser pages never contain private keys or x402 signatures.
+                Advanced own-wallet option. Reviewers can use the one-click
+                hosted runner without cloning; neither browser flow exposes
+                private keys or x402 signatures.
               </p>
               <div className="rounded-md border bg-muted/40 p-4">
                 <code className="break-all font-mono text-sm">{demoCommand}</code>

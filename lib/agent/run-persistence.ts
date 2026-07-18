@@ -479,3 +479,30 @@ export async function findRecentPaymentEvent(input: {
 
   return (matched?.id as string | undefined) ?? null;
 }
+
+export type PaymentEventProofState = {
+  id: string;
+  onchain_status: string | null;
+  onchain_tx_hash: string | null;
+};
+
+export async function getPaymentEventProofStates(paymentEventIds: string[]) {
+  if (paymentEventIds.length === 0) return [];
+
+  const client = getServiceSupabase();
+  if (!client) return [];
+
+  const { data, error } = await client
+    .from("payment_events")
+    .select("id,onchain_status,onchain_tx_hash")
+    .in("id", paymentEventIds);
+
+  if (error) {
+    console.warn(
+      `[agent-run-persistence] Failed to read proof states: ${error.message}`,
+    );
+    return [];
+  }
+
+  return (data ?? []) as PaymentEventProofState[];
+}
