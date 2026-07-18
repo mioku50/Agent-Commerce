@@ -673,6 +673,8 @@ Apply the hosted job migration and run its policy tests with:
 ```bash
 npx vercel env run -e production -- npm run db:migrate
 npx vercel env run -e production -- npm run hosted:test
+npx playwright install chromium
+npm run hosted:browser-smoke -- --confirm-paid-run
 ```
 
 Operator recovery for a pre-payment failure is explicit and server-only:
@@ -680,6 +682,21 @@ Operator recovery for a pre-payment failure is explicit and server-only:
 ```bash
 npm run hosted:recover -- --job <hosted-job-uuid>
 ```
+
+Phase 19 production browser smoke:
+
+- hosted payer: [`0x7df1b81bB463Ddf263c1c470F7C1f3a68FE30df3`](https://testnet.arcscan.app/address/0x7df1b81bB463Ddf263c1c470F7C1f3a68FE30df3)
+- hosted job: [`95b0bf32-0b84-4014-bfdb-91c923422c64`](https://agent-commerce-six.vercel.app/agent-runner?job=95b0bf32-0b84-4014-bfdb-91c923422c64)
+- Agent Run: [`c3794f6e-354f-4542-a8b2-923a959fe6c2`](https://agent-commerce-six.vercel.app/runs/c3794f6e-354f-4542-a8b2-923a959fe6c2)
+- receipt: [`dcbe6294-e3b0-4ea6-b71f-988585a6b17e`](https://agent-commerce-six.vercel.app/receipts/dcbe6294-e3b0-4ea6-b71f-988585a6b17e)
+- paid: `0.001 USDC`
+- proof transaction: [`0xe7332e50d471a73ca1a5943464d96322023921046894c916d14f2aab62cdb3a2`](https://testnet.arcscan.app/tx/0xe7332e50d471a73ca1a5943464d96322023921046894c916d14f2aab62cdb3a2)
+- proof block: `52412095`
+
+The smoke launched the CTA in Chromium, observed `Verified on Arc`, and replayed
+the exact browser idempotency key. The replay returned the original job, receipt,
+and proof transaction; the registry still exposed exactly one matching
+`ProofRegistered` event.
 
 ## Core User Flows
 
