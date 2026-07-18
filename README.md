@@ -1,984 +1,393 @@
-# Arc Agent Commerce / API Store Demo
+# Arc Agent Commerce
 
-Arc Agent Commerce is an early builder prototype for an x402-powered API Store where AI agents can discover paid services, pay with USDC on Arc, and receive API responses instantly.
+> A one-click hosted buyer-agent that purchases x402-protected API services with USDC on Arc and publishes a public, onchain-verifiable proof trail.
 
-The project direction expands the official Arc Nanopayments sample from a premium endpoint demo into an agent-commerce marketplace pattern: API discovery, per-request payments, buyer-agent reasoning, seller analytics, Gateway balance visibility, and spending policy controls.
+**Arc Agent Commerce is no longer positioned primarily as an API marketplace demo.**
+The current product direction is a hosted agent execution and verification layer:
 
-## Reviewer Quick Start
+1. a user launches an agent from the browser;
+2. the agent selects an allowlisted paid API;
+3. a project-owned server wallet pays through x402 and Circle Gateway;
+4. the response becomes a public run, receipt, and Agent Passport update;
+5. a compact proof is registered in the app-owned contract on Arc Testnet.
 
-One-sentence pitch: **Arc Agent Commerce turns Arc Nanopayments into an API marketplace where buyer-agents discover paid services, pay with USDC through x402/Gateway, and leave public proof through timelines, receipts, Agent Passports, and seller analytics.**
+The API Store remains the service discovery layer, but the main product is now the complete **task → payment → result → receipt → onchain proof** workflow.
 
-Live links:
+## Live Product
 
-- Production: https://agent-commerce-six.vercel.app
-- Review Pack: https://agent-commerce-six.vercel.app/review
-- Launch Pack: https://agent-commerce-six.vercel.app/launch
-- Guided Demo: https://agent-commerce-six.vercel.app/demo
-- Hosted Buyer-Agent: https://agent-commerce-six.vercel.app/agent-runner
-- API Store: https://agent-commerce-six.vercel.app/store
-- Agent Control: https://agent-commerce-six.vercel.app/agent-control
-- Agent Launch: https://agent-commerce-six.vercel.app/agent-launch
-- Local Agent Setup: https://agent-commerce-six.vercel.app/agent-setup
-- Receipts: https://agent-commerce-six.vercel.app/receipts
+| Surface | Link |
+| --- | --- |
+| Production app | https://agent-commerce-six.vercel.app |
+| One-click hosted agent | https://agent-commerce-six.vercel.app/agent-runner |
+| Reviewer status | https://agent-commerce-six.vercel.app/review |
+| API Store | https://agent-commerce-six.vercel.app/store |
+| Agent runs | https://agent-commerce-six.vercel.app/runs |
+| Commerce receipts | https://agent-commerce-six.vercel.app/receipts |
+| Agent Passports | https://agent-commerce-six.vercel.app/agents |
+| Public status API | https://agent-commerce-six.vercel.app/api/review/status |
 
-How to review in 2 minutes:
+**Network:** Arc Testnet  
+**Chain ID:** `5042002`  
+**Status:** experimental testnet prototype; contracts are not audited.
 
-1. Open `/review` for health/status, proof links, and reviewer notes.
-2. Open `/launch` for submission copy, X thread outline, and recording checklist.
-3. Open `/agent-runner`, enter a task, and launch a real paid Arc Testnet run with one click.
-4. Open `/agent-setup` for the advanced local CLI flow using your own buyer-agent wallet.
-5. Open `/store` to confirm this is a marketplace, not just one protected endpoint.
-6. Open the latest run, receipt, Agent Passport, and seller analytics links from `/review`.
-7. Verify unpaid protection with `curl -i https://agent-commerce-six.vercel.app/api/premium/quote` and expect HTTP 402.
-8. Run `npm run review:smoke` to verify public pages, JSON endpoints, and the decoded x402 challenge.
+## Why This Product Exists
 
-Latest demo command:
+Autonomous agents should not need a human to create an account, enter card details, purchase a subscription, and manually provision an API key before every service can be used.
 
-```bash
-AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
+Arc Agent Commerce explores a different model:
+
+- services publish a price per request;
+- the agent sees the cost before purchasing;
+- payment is made in USDC through the x402 HTTP flow;
+- the protected response is returned immediately;
+- the purchase leaves a shareable receipt and a verifiable Arc proof;
+- spending limits and service allowlists are enforced by the operator.
+
+For the end user, the hosted flow requires no repository clone, no private key, and no local CLI setup.
+
+## One-Click Hosted Flow
+
+Open [`/agent-runner`](https://agent-commerce-six.vercel.app/agent-runner) and launch the demo agent.
+
+The application then:
+
+1. creates a durable Agent DB job;
+2. applies idempotency, cooldown, rate-limit, and active-job checks;
+3. plans the purchase through the shared agent execution core;
+4. calls an allowlisted x402-protected service;
+5. pays with the project-owned Arc Testnet payer wallet;
+6. records the Agent Run, purchase step, payment event, and receipt;
+7. updates the payer wallet's Agent Passport and seller analytics;
+8. publishes a compact post-settlement proof to Arc;
+9. returns links to every public proof surface.
+
+The UI exposes progress states such as:
+
+- queued;
+- planning;
+- purchasing;
+- generating receipt;
+- publishing onchain proof;
+- completed or failed.
+
+A connected browser wallet is optional and is used only as a requester label. It never pays, signs, or authorizes the hosted purchase.
+
+## Verified Production Example
+
+Phase 19 was validated with a real browser-triggered production run:
+
+| Proof | Value |
+| --- | --- |
+| Hosted payer | [`0x7df1b81bB463Ddf263c1c470F7C1f3a68FE30df3`](https://testnet.arcscan.app/address/0x7df1b81bB463Ddf263c1c470F7C1f3a68FE30df3) |
+| Hosted job | [`95b0bf32-0b84-4014-bfdb-91c923422c64`](https://agent-commerce-six.vercel.app/agent-runner?job=95b0bf32-0b84-4014-bfdb-91c923422c64) |
+| Agent Run | [`c3794f6e-354f-4542-a8b2-923a959fe6c2`](https://agent-commerce-six.vercel.app/runs/c3794f6e-354f-4542-a8b2-923a959fe6c2) |
+| Receipt | [`dcbe6294-e3b0-4ea6-b71f-988585a6b17e`](https://agent-commerce-six.vercel.app/receipts/dcbe6294-e3b0-4ea6-b71f-988585a6b17e) |
+| Amount paid | `0.001 USDC` |
+| Arc proof transaction | [`0xe7332e50d471a73ca1a5943464d96322023921046894c916d14f2aab62cdb3a2`](https://testnet.arcscan.app/tx/0xe7332e50d471a73ca1a5943464d96322023921046894c916d14f2aab62cdb3a2) |
+| Proof block | `52412095` |
+
+The production Playwright smoke launched the CTA in Chromium, observed `Verified on Arc`, and replayed the same idempotency key. The replay returned the original job, receipt, and proof transaction without making another payment or registering another proof.
+
+## Core Capabilities
+
+### Hosted buyer-agent
+
+- one-click browser launch;
+- durable Agent DB job state;
+- shared execution core with the local CLI;
+- server-owned Arc Testnet payer wallet;
+- public progress and result links;
+- explicit recovery for safe pre-payment failures.
+
+### x402 payments on Arc
+
+- HTTP 402 payment challenge;
+- USDC-denominated per-request pricing;
+- Circle Gateway batching flow;
+- protected API response after settlement;
+- request ID and payment event persistence.
+
+### Public proof trail
+
+Every successful paid execution can produce:
+
+- an Agent Run timeline;
+- one or more commerce receipts;
+- payment metadata;
+- an Agent Passport update;
+- seller analytics updates;
+- an onchain receipt proof on Arc Testnet.
+
+### API Store
+
+The API Store remains the service catalog and discovery layer. It includes official sample services and safe seller-created mock services. Arbitrary external API proxying is intentionally disabled.
+
+### Advanced local mode
+
+Developers can still fund and run their own buyer-agent wallet through the local CLI. This is an advanced operator flow; it is not required for the hosted end-user demo.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    U[Browser user] --> R[/agent-runner]
+    R --> J[Hosted Agent Job API]
+    J --> D[(Agent DB)]
+    J --> E[Shared Agent Execution Core]
+    E --> P[Planner and policy]
+    P --> S[Allowlisted API Store service]
+    S --> X[x402 + Circle Gateway]
+    X --> A[Paid API response]
+    A --> D
+    D --> T[Run timeline]
+    D --> C[Commerce receipt]
+    D --> I[Agent Passport]
+    D --> N[Seller analytics]
+    A -. post-settlement attestation .-> O[AgentCommerceProofRegistry]
+    O --> V[Verified on Arc]
 ```
 
-What makes this different from `arc-nanopayments`:
+Key implementation boundaries:
 
-- API marketplace instead of one protected endpoint.
-- Buyer-agent planner with task, budget, selected/skipped reasoning, and public timeline.
-- Seller-created safe mock services that expand the marketplace without an arbitrary proxy.
-- Wallet-funded agent launch for Arc Testnet users while x402 signing remains local.
-- Public commerce receipts, Agent Passports, and seller analytics as audit surfaces.
-- Compact onchain receipt proofs on Arc, written only after x402 settlement.
-- Production smoke tooling for reviewer confidence.
+- `lib/agent/execution.ts` is shared by hosted and local execution;
+- `lib/x402.ts` remains the payment foundation;
+- Supabase through the Vercel integration is the Agent DB;
+- the proof publisher runs only after the paid response is available;
+- the proof registry never receives or transfers funds.
 
-Current testnet limitations:
+## Onchain Proof Registry
 
-- Arc Testnet only.
-- A connected browser wallet is an optional requester label only; it never pays or signs the hosted x402 purchase.
-- The hosted runner pays from a project-owned, server-only Arc Testnet wallet with a 0.005 USDC hard cap.
-- Hosted and CLI runs share the same server execution core for planning, x402/Gateway payment, persistence, and proofs.
-- Seller-created external API proxying is intentionally disabled; Phase 4 uses safe mock fulfillment.
-
-Next possible extensions:
-
-- ERC-8004 Agent Identity primitives.
-- ERC-8183 job / escrow style service workflows.
-- Real seller auth, seller-owned settlement configuration, and production service publishing.
-- Safer external fulfillment adapters with allowlists, schema enforcement, and execution logs.
-- A public proof dashboard that aggregates receipts, passports, service revenue, and payment events.
-
-## Vision
-
-AI agents are becoming real users of APIs. They need a way to buy useful services without human account setup, card billing, subscriptions, or long-lived API keys.
-
-Arc Agent Commerce explores a simpler flow:
-
-1. An agent discovers a service.
-2. It inspects the endpoint, category, price, and expected result.
-3. It pays a small amount in USDC through x402/nanopayments on Arc.
-4. It receives the API response immediately.
-5. The purchase is logged for budget, reasoning, and seller analytics.
-
-## Problem
-
-Traditional API billing is optimized for companies and human operators:
-
-- create an account
-- add a billing card
-- manage API keys
-- choose a subscription tier
-- reconcile invoices
-- monitor usage separately from the product workflow
-
-That model is awkward for autonomous agents that need to buy small units of utility while completing a task.
-
-## Solution
-
-Arc Agent Commerce presents an API Store where services can be priced per request and protected by x402 payment requirements.
-
-The demo is shaped around three surfaces:
-
-- **API Store**: a service catalog that agents and builders can inspect.
-- **Buyer Agent**: a local agent flow that chooses and buys services with a spending policy.
-- **Seller Dashboard**: a seller view for API revenue, agent purchases, Gateway balance, and withdrawals.
-
-## Why Arc
-
-Arc is a strong fit for agent commerce because USDC is the native gas token. Builders can design payment flows where both the purchase amount and transaction fees are denominated in USDC.
-
-Arc Testnet chain config for this project:
+The app owns a custom `AgentCommerceProofRegistry` deployment on Arc Testnet.
 
 | Field | Value |
 | --- | --- |
+| Contract | [`0x92dC1aFC126F755ba5d5254e8D697CAe10474851`](https://testnet.arcscan.app/address/0x92dC1aFC126F755ba5d5254e8D697CAe10474851) |
 | Network | Arc Testnet |
-| Chain ID | `5042002` |
-| Hex Chain ID | `0x4CEF52` |
-| Native Currency | USDC |
-| RPC URL | `https://rpc.testnet.arc.network` |
-| WebSocket URL | `wss://rpc.testnet.arc.network` |
-| Explorer | `https://testnet.arcscan.app` |
-| Faucet | `https://faucet.circle.com` |
-| CCTP Domain | `26` |
-| ERC-20 USDC | `0x3600000000000000000000000000000000000000` |
-| ERC-20 USDC Decimals | `6` |
-
-Important implementation note: Arc native gas uses 18 decimals, while ERC-20 USDC uses 6 decimals.
-
-## Why x402 / Nanopayments
-
-x402 gives paid APIs a web-native payment handshake. Instead of requiring a separate account or billing relationship, an endpoint can describe the payment required for access, the buyer can satisfy it, and the API can return the protected response.
-
-For AI agents, this creates a useful primitive:
-
-- discover a paid endpoint
-- understand price before calling
-- pay only when needed
-- keep a purchase log
-- stop when policy limits are reached
-
-Nanopayments make low-value, per-request services practical, especially for mocked data, routing signals, small analysis jobs, and utility APIs.
-
-## Demo Concept
-
-The first version is a compact API marketplace for agents. The API Store starts with five demo services:
-
-| Service | Endpoint | Price | Purpose |
-| --- | --- | --- | --- |
-| Premium Quote | `/api/premium/quote` | 0.001 USDC | Simple paid response test |
-| Market Snapshot | `/api/premium/dataset` | 0.01 USDC | Mock market data |
-| Text Analyzer | `/api/premium/compute` | 0.0003 USDC | Analyze submitted text |
-| Weather Signal | `/api/store/weather-signal` | 0.002 USDC | Planned weather signal |
-| Agent Task | `/api/premium/agent-task` | 0.03 USDC | Multi-step task for a buyer agent |
-
-The service registry is the source of truth for the API Store. It maps live services to existing premium x402 endpoints and includes planned services for future expansion. Existing premium endpoints are intentionally retained.
-
-## Phase 2 — API Store
-
-`/store` is now a marketplace-style UI for agent-buyable APIs. Each service is described in `lib/services/registry.ts` with pricing, method, endpoint, schemas, examples, and an agent reasoning hint.
-
-The public discovery endpoint `GET /api/store/services` exposes the registry as machine-readable JSON so future buyer-agent flows can discover services dynamically.
-
-Each service detail page under `/store/[slug]` documents the endpoint contract, example request and response, cURL call, and the fact that unpaid direct calls to live services return HTTP 402 until the x402 payment requirement is satisfied.
-
-Phase 3 connects buyer-agent reasoning and purchase timelines to this registry.
-
-## Phase 3 — Buyer Agent Reasoning + Purchase Timeline
-
-The buyer-agent now discovers services from `GET /api/store/services` instead of running a hardcoded endpoint loop.
-
-The default `scripted` planner chooses services from the task and budget, records why each service was selected or skipped, pays selected live endpoints through the existing x402/Gateway flow, and saves a public timeline to Supabase.
-
-Public timeline views:
-
-- `/runs`: recent agent runs
-- `/runs/[id]`: ordered reasoning and purchase timeline for one run
-
-Usage:
-
-Reviewer-safe default:
-
-```bash
-AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
-```
-
-Higher-budget market context run, only after confirming Gateway balance:
-
-```bash
-npm run agent -- --task "Prepare a market context report" --limit 0.05
-```
-
-Reuse an existing funded Gateway balance:
-
-```bash
-AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
-```
-
-For a full run including Agent Task, Gateway balance must be large enough. Quote + dataset + compute + agent-task costs about `0.0413 USDC`.
-
-Supabase stores the public run timeline, service choices, reasoning, request IDs, and response previews. It does not store private keys, bearer tokens, or full signed payment authorizations. Local `.agent-runs/` logs remain available for debugging and wallet retry flows.
-
-## Phase 4 — Seller Creator Mode
-
-Builders can now create API service listings from `/seller`. Seller-created services are stored in Supabase, merged into `/store`, and included in the machine-readable `GET /api/store/services` discovery response.
-
-Phase 4 intentionally uses safe MVP fulfillment:
-
-- `seller_mock` services return a protected mock response from stored metadata.
-- `external_placeholder` services can be listed, but external fulfillment is not enabled.
-- the app does not proxy arbitrary external URLs.
-- private keys and signed payment authorizations are not stored in Supabase.
-- the existing x402/Gateway payment core remains unchanged.
-
-Seller flow:
-
-1. Open `/seller`.
-2. Create a service listing.
-3. Mark it `live`.
-4. Open `/store` and inspect the listing.
-5. Run the buyer-agent with a task that matches the listing.
-
-Buyer-agent discovery now includes seller-created services. The scripted planner skips coming-soon, disabled, and external-placeholder listings, and only selects live `seller_mock` services when the task matches the listing metadata and the price fits the remaining budget.
-
-## Phase 5 — Agent Identity + Reputation Passport
-
-Agent wallets now get public off-chain Agent Passports derived from real run and purchase history.
-
-Public passport views:
-
-- `/agents`: recent buyer-agent wallet profiles
-- `/agents/[wallet]`: one wallet's Agent Passport, usage stats, trust score, recent runs, and reputation events
-- `GET /api/agents`: machine-readable agent profile list
-- `GET /api/agents/[wallet]`: profile detail, recent runs, and reputation events
-
-Each completed buyer-agent run recalculates the wallet profile from `agent_runs` and `agent_purchase_steps`. The profile tracks total runs, completed runs, paid requests, skipped requests, failed requests, total USDC spent, seller-created services used, official services used, and a deterministic demo trust score.
-
-The trust score is intentionally simple for the prototype: completed runs, paid requests, seller-created service usage, and budget-respected runs increase the score; failed requests and failed runs reduce it. Reputation events are written idempotently per wallet/run/status so retries do not duplicate events.
-
-No private keys, payment signatures, bearer tokens, or service role keys are stored in Agent Passport tables. This phase is an off-chain identity and reputation layer; ERC-8004 agent identity remains a future phase.
-
-Recovery command: if a post-run Agent Passport update fails because Supabase or the network times out, rebuild profiles from historical run data:
-
-```bash
-npm run agents:rebuild
-npm run agents:rebuild -- --wallet 0x...
-```
-
-## Phase 6 — Seller Analytics + Revenue Dashboard
-
-Sellers now have a public/demo analytics surface for seeing how API Store services perform.
-
-Seller analytics views:
-
-- `/seller/analytics`: screenshot-friendly analytics dashboard
-- `GET /api/seller/analytics`: aggregate JSON for seller-created and official service usage
-- `GET /api/seller/services/[id]/analytics`: service-scoped analytics JSON
-
-The dashboard aggregates from existing tables:
-
-- `store_services` for seller-created listings
-- `agent_runs` for buyer-agent wallets and run links
-- `agent_purchase_steps` for selected, skipped, failed, and paid service decisions
-- `payment_events` when a paid step can be linked to a settled x402 payment
-
-Metrics include total services, live services, seller-created services, paid calls, skipped calls, failed calls, estimated USDC revenue, top services, recent purchases, buyer-agent wallets, source type breakdown, request IDs, run timeline links, and Agent Passport links.
-
-Payment event linking is best-effort and non-blocking. New runs try to store `payment_event_id` directly; analytics and timeline pages also retro-match older paid steps by endpoint, buyer wallet, amount, and run time window. If no match is available, the UI keeps showing the paid request and request ID with the payment event as `n/a`.
-
-No private keys, signed payment authorizations, Circle secrets, or service role keys are exposed. The x402/Gateway verification and settlement core remains unchanged.
-
-## Phase 7 — Buyer Agent Control Center
-
-`/agent-control` adds a safe web planning surface for configuring a buyer-agent run before executing the local CLI agent.
-
-Control Center features:
-
-- task input
-- budget in USDC
-- preferred category filters
-- max service price guardrail
-- seller-created service toggle
-- official sample service toggle
-- dry-run / local-command mode
-- copyable local command
-
-The planning API `POST /api/agent/plan` fetches the same API Store services that the CLI agent discovers, applies the selected policy, and returns selected/skipped services with deterministic reasoning and estimated spend.
-
-No paid request happens in the browser. The route does not receive or store private keys, does not move funds, does not deposit into Gateway, and does not call protected x402 endpoints. Live payments still run through:
-
-```bash
-AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze the sentiment and tone of an Arc Agent Commerce demo" --limit 0.005
-```
-
-`agent.mts` and `/api/agent/plan` now share the same scripted planner helper, so CLI runs and web dry-runs make consistent service-selection decisions.
-
-## Phase 8 — Public Commerce Receipts / Audit Trail
-
-Paid agent purchases now produce public commerce receipts derived from existing run-step and payment metadata.
-
-Receipt views:
-
-- `/receipts`: recent paid API purchase receipts
-- `/receipts/[id]`: one shareable receipt for a paid purchase step
-- `GET /api/receipts`: machine-readable recent receipts
-- `GET /api/receipts/[id]`: one receipt as JSON
-
-Each receipt links together the buyer-agent wallet, Agent Passport, service purchased, official or seller-created source type, method, endpoint, price paid, request ID, run timeline, matched payment event when available, timestamp, and safe response preview.
-
-Receipts are an audit-trail projection over public metadata in `agent_purchase_steps`, `agent_runs`, `payment_events`, and `store_services`. They do not store private keys, payment signatures, bearer tokens, Circle secrets, or service role keys. The existing x402/Gateway verification and settlement core remains unchanged.
-
-## Phase 9 — UI Polish and Global Navigation
-
-The app now has a consistent top navigation bar, shared cream/off-white and blue-accent styling, and cleaner page structure across the public and seller surfaces.
-
-Polished surfaces include:
-
-- landing page
-- `/store` and service detail pages
-- `/agent-control`
-- `/runs` and run details
-- `/agents` and Agent Passports
-- `/receipts` and receipt details
-- `/seller`, `/seller/analytics`, and seller service forms
-- `/login`
-
-Seller auth remains email/password. The login page is positioned as the protected seller entrypoint, while public pages remain publicly readable.
-
-## Phase 10 — Wallet Connect and Arc Token UX
-
-Browser wallet support now lets users connect an injected EVM wallet, inspect the connected address and current network, switch/add Arc Testnet, and view Arc Testnet balances.
-
-Wallet UX features:
-
-- Arc Testnet chain config in `lib/wallet/arc.ts`
-- connect wallet button and connected wallet badge
-- network status and switch-to-Arc action
-- native gas USDC balance
-- ERC-20 USDC balance
-- quick links to Circle faucet, Arc explorer, Agent Passport, and related receipts
-
-This phase is read/display/navigation focused. It does not move private keys into the browser, does not replace the CLI buyer-agent payment flow, and does not modify x402/Gateway settlement logic.
-
-## Phase 11 — Wallet-Funded Agent Launch
-
-`/agent-launch` adds a safe funding bridge between a user's browser wallet and the existing local buyer-agent CLI flow.
-
-The page lets a user:
-
-- connect an Arc Testnet wallet
-- inspect source wallet native gas and ERC-20 USDC balances
-- enter or prefill a buyer-agent wallet destination from `NEXT_PUBLIC_DEMO_BUYER_ADDRESS`
-- send native gas USDC to the buyer-agent wallet
-- send ERC-20 USDC to the buyer-agent wallet
-- inspect transaction status, tx hash, and explorer links
-- copy a local `npm run agent` command after funding
-- jump to Agent Control, receipts, and Agent Passport pages
-
-Browser funding actions require user wallet confirmation and only run on Arc Testnet. The browser never receives private keys and never runs paid API purchases. x402 signing, Gateway payment behavior, and service calls remain in the local CLI buyer-agent flow.
-
-## Phase 12 — Demo Story / Guided Showcase
-
-`/demo` turns the technical surfaces into a two-minute guided product story.
-
-The guided demo uses one real scenario:
-
-> An AI agent analyzes the tone and sentiment of a short builder update by discovering paid APIs, selecting useful services, paying with USDC on Arc through x402/Gateway, and producing public receipts and Agent Passport updates.
-
-The page walks through:
-
-1. browsing the API Store
-2. planning a buyer-agent run
-3. funding the buyer-agent wallet
-4. running the local CLI agent
-5. inspecting the public timeline
-6. inspecting commerce receipts
-7. inspecting the Agent Passport
-8. inspecting seller analytics
-
-It also shows a copyable demo command:
-
-```bash
-AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
-```
-
-Live proof cards link to the latest successful run, latest receipt, main Agent Passport, and seller analytics when data is available. If no live data is available, the page shows a helpful empty state instead of failing.
-
-## Phase 13 — Reviewer Readiness / Public Submission Pack
-
-`/review` is the public reviewer entrypoint for Arc/Circle/community review.
-
-It includes:
-
-- short project summary
-- two-minute review checklist
-- live production links for demo, store, planner, launcher, latest run, latest receipt, Agent Passport, and seller analytics/login
-- status cards for latest successful run, latest receipt, seller-created live services, and API Store availability
-- explanation of how this differs from the official Arc Nanopayments sample
-- technical proof checklist
-- known Arc Testnet notes
-
-The page is public and read-only. It does not move funds, does not run paid browser purchases, does not expose private keys, and does not modify x402/Gateway payment verification or settlement.
-
-## Phase 14 — Production QA and Review Smoke Toolkit
-
-The project now includes a lightweight production QA toolkit for reviewer confidence.
-
-Run:
-
-```bash
-npm run review:smoke
-```
-
-The script checks the configured `BASE_URL` or defaults to the production deployment. It verifies public pages, service discovery JSON, receipt JSON, unpaid `/api/premium/quote` HTTP 402 behavior, the `payment-required` header, and decoded x402 challenge details for Arc Testnet:
-
-- network: `eip155:5042002`
-- asset: `0x3600000000000000000000000000000000000000`
-
-It prints a reviewer-friendly summary with passed checks, failed checks, production URL, latest run URL, latest receipt URL, and main Agent Passport URL.
-
-The public read-only endpoint `GET /api/review/status` exposes high-level health data used by `/review` and the smoke script: latest successful run, latest receipt, seller-created live service availability, API Store service count, receipt count, and proof links.
-
-## Phase 15 — Final Launch / Submission Content Pack
-
-`/launch` is the final launch-ready submission page for public sharing and Arc/Circle/community review.
-
-It includes screenshot-friendly sections for:
-
-- product pitch
-- key features
-- live demo links
-- technical proof
-- reviewer checklist
-- latest proof links
-- submission copy for Arc House / Discord
-- X thread outline
-- demo recording checklist
-
-The page also includes copyable commands for the sentiment/tone demo and production smoke script:
-
-```bash
-AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
-npm run review:smoke
-```
-
-This phase is content/UI only. It does not add payment flows, does not move private keys into the browser, and does not modify x402/Gateway verification or settlement.
-
-## Phase 16 — Local Agent Setup Guide and CLI Onboarding
-
-`/agent-setup` explains how reviewers and developers run the buyer-agent locally from the correct repository after funding the buyer-agent wallet from `/agent-launch`.
-
-The flow is:
-
-1. Open the project repository.
-2. Clone the repository locally.
-3. Install dependencies.
-4. Create `.env.local` from `.env.example`.
-5. Set `BASE_URL=https://agent-commerce-six.vercel.app`.
-6. Set or generate a buyer-agent private key locally only.
-7. Fund the buyer-agent wallet on Arc Testnet from `/agent-launch`.
-8. Run the generated `npm run agent` command.
-9. Open the resulting run timeline, receipt, and Agent Passport.
-
-Repository:
-
-```bash
-git clone https://github.com/mioku50/Agent-Commerce.git
-cd Agent-Commerce
-npm install
-```
-
-Required local environment checklist:
-
-- `BASE_URL`
-- `AGENT_PRIVATE_KEY`
-- `AGENT_MAX_IN_FLIGHT`
-- optional `AGENT_SKIP_FUNDING`
-- optional `AGENT_SKIP_DEPOSIT`
-- optional `AGENT_DEPOSIT_USDC`
-- `NEXT_PUBLIC_AGENT_DB_SUPABASE_URL`
-- `NEXT_PUBLIC_AGENT_DB_SUPABASE_PUBLISHABLE_KEY`
-- `AGENT_DB_SUPABASE_URL`
-- operator-only `AGENT_DB_SUPABASE_SECRET_KEY` for CLI timeline/passport persistence
-
-The legacy Supabase variable names remain supported temporarily during the
-database transition. New environments should use the `AGENT_DB` names above.
-
-Security boundary:
-
-- never paste private keys into the browser
-- `.env.local` stays local and must not be committed
-- browser wallet only funds the buyer-agent wallet
-- local CLI signs x402 payments
-
-Local CLI limitation: its persistence flow requires private Supabase server
-credentials for run timeline/passport/receipt metadata. The public hosted flow
-keeps those credentials on the server and never sends them to the browser.
-
-## Phase 17 — Onchain Agent Commerce Proof Registry
-
-Successfully settled x402 calls can now create a compact receipt proof in
-`AgentCommerceProofRegistry` on Arc Testnet. The contract lives in the isolated
-`contracts/` Foundry workspace and stores only the receipt hash, service hash,
-buyer, seller, USDC amount in 6-decimal atomic units, request hash, response
-hash, and block timestamp.
-
-The proof layer is intentionally non-custodial:
-
-- Circle Gateway remains responsible for x402 verification and settlement.
-- The registry never receives or transfers funds.
-- Only the operator or an operator-approved attester can register a proof.
-- A receipt hash can be registered only once.
-- Attestation runs after the paid response is produced. A failed onchain write
-  leaves the already-paid API response intact and records `pending` or `failed`
-  status in Supabase.
-
-`AgentCommerceProofRegistry` is a custom, unaudited testnet prototype. Review
-and audit it before any production use.
-
-Receipt proof surfaces:
-
-- `/receipts/[id]` shows the proof status, registry, transaction hash, and
-  Arcscan links.
-- `GET /api/proofs/[receiptId]` reads the corresponding registry proof without
-  signing or submitting a transaction.
-
-Test and deploy the contract:
-
-```bash
-cd contracts
-forge test
-
-# Use a Foundry encrypted keystore; do not pass a private key on the CLI.
-cast wallet import arc-proof-deployer --interactive
-export ARC_TESTNET_RPC_URL=https://rpc.testnet.arc.network
-export PROOF_REGISTRY_OPERATOR_ADDRESS=0x...
-export PROOF_REGISTRY_ATTESTER_ADDRESS=0x...
-forge script script/DeployAgentCommerceProofRegistry.s.sol \
-  --rpc-url arc_testnet \
-  --account arc-proof-deployer \
-  --sender 0xYourDeployerAddress \
-  --broadcast
-```
-
-After deployment, configure `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS` and the
-server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY`. Never use a
-`NEXT_PUBLIC_` variable for the attester key. Apply the Supabase migration in
-`supabase/migrations/20260717190000_add_onchain_proof_metadata.sql` before
-enabling writes.
-
-## Phase 17.1 — Vercel AGENT_DB Supabase Migration
-
-The application now prefers the new Vercel Supabase integration variables for
-all browser and server database clients:
-
-- browser: `NEXT_PUBLIC_AGENT_DB_SUPABASE_URL` and
-  `NEXT_PUBLIC_AGENT_DB_SUPABASE_PUBLISHABLE_KEY`
-- server: `AGENT_DB_SUPABASE_URL` and preferably
-  `AGENT_DB_SUPABASE_SECRET_KEY`
-- server compatibility fallback: `AGENT_DB_SUPABASE_SERVICE_ROLE_KEY`
-- migrations: `AGENT_DB_POSTGRES_URL_NON_POOLING`
-
-The old variable names remain as temporary runtime fallbacks. The x402 payment
-and Gateway core keep their existing variables and must receive aliases that
-point to the same new database during the transition. The public review status
-API reports only the selected provider and environment variable names; it never
-returns URLs or credentials.
-
-Apply every migration in lexical order and rebuild the fresh demo seed with:
-
-```bash
-npx vercel env run -e production -- npm run db:migrate
-npx vercel env run -e production -- npm run db:verify
-```
-
-`db:migrate` records applied versions, uses the non-pooling Postgres connection,
-and always reruns the idempotent `supabase/seed.sql`. `db:verify` checks public
-read access, public write RLS, server writes, and fresh run, receipt, payment
-event, Agent Passport, and onchain proof-metadata records, then removes its
-temporary verification data.
-
-This is a schema plus fresh-seed migration. The unavailable legacy Supabase
-project is not read, and historical runs, receipts, passports, payment events,
-or analytics are not copied.
-
-## Phase 18 — Active Onchain Commerce Proofs
-
-The app-owned `AgentCommerceProofRegistry` is deployed and source-verified on
-Arc Testnet:
-
-- contract: [`0x92dC1aFC126F755ba5d5254e8D697CAe10474851`](https://testnet.arcscan.app/address/0x92dC1aFC126F755ba5d5254e8D697CAe10474851)
-- deployment transaction: [`0x7efc6fc86e96781030f79f5ef8e2b1169e8a38b8f9d3395b905cee687bef2ab2`](https://testnet.arcscan.app/tx/0x7efc6fc86e96781030f79f5ef8e2b1169e8a38b8f9d3395b905cee687bef2ab2)
-- deployment block: `52324595`
-- operator: `0x7cE65e573463B83164FFc282a0556D5542defefA`
-- authorized attester: `0x90ceE92dC33647763881DDF830aDFC17217Dfe4A`
-
-Phase 18 production paid smoke proof:
-
-- receipt: [`ee1e67b1-f019-4789-b3cb-f03a5eac76df`](https://agent-commerce-six.vercel.app/receipts/ee1e67b1-f019-4789-b3cb-f03a5eac76df)
-- proof ID: `0xbf474905cb57d74e2d2d43953ddcdd42a0b0f05faf68fa0b111c75e0e6435c58`
-- proof transaction: [`0x02d8dd4ee9f28762e7673e269409ebeebedc59398f9b3f005b0b5a89292c0c29`](https://testnet.arcscan.app/tx/0x02d8dd4ee9f28762e7673e269409ebeebedc59398f9b3f005b0b5a89292c0c29)
-- proof block: `52326627`
-
-Reprocessing that payment event retained the same transaction and the registry
-reported exactly one `ProofRegistered` event for the receipt hash.
-
-These are application-owned addresses. USDC, CCTP, Gateway, and other
-infrastructure contract addresses are not presented as proof of this app.
-
-After x402 settlement and response fulfillment, the Next.js `after()` hook
-hashes the request and response and publishes the compact receipt proof. The
-paid response is not blocked by the Arc transaction. Agent DB tracks:
-
-- `Onchain proof pending`
-- `Verified on Arc`
-- `Proof failed`
-
-Verified records include the proof ID, contract, transaction hash, block,
-attester, and verification timestamp. Before every write, the publisher reads
-`isRegistered(receiptId)` and validates any existing proof field-by-field. The
-contract rejects duplicate receipt IDs, so retries and concurrent persistence
-cannot create a second onchain receipt.
+| Role | Immutable post-settlement receipt proofs |
+| Custody | None |
+
+The contract stores compact proof data only:
+
+- receipt hash;
+- service hash;
+- buyer and seller addresses;
+- amount in 6-decimal USDC atomic units;
+- request hash;
+- response hash;
+- block timestamp.
+
+Safety properties:
+
+- only the operator or an approved attester can register proofs;
+- every receipt ID can be registered only once;
+- duplicate and concurrent retries are rejected;
+- proof publication cannot reverse or block an already completed x402 purchase;
+- the attester private key remains server-only.
 
 Read-only proof APIs:
 
 - `GET /api/proofs/<receipt-step-id-or-proof-id>`
 - `GET /api/proofs/transactions/<transaction-hash>`
 
-Recovery is intentionally server-only. Run it only in an environment that
-provides the attester secret without printing or writing it to a file:
+The registry is an unaudited testnet prototype and must not be treated as production financial infrastructure.
+
+## Hosted Runner Guardrails
+
+The hosted payer is protected by server-side and database-enforced controls:
+
+- exact service slug, endpoint, and HTTP method allowlist;
+- no arbitrary URLs;
+- `0.005 USDC` maximum spend per job;
+- one queued or running job globally for the demo payer;
+- requester cooldown;
+- rolling rate limit;
+- HMAC-protected idempotency keys;
+- replay returns the original job;
+- recovery is allowed only before payment when recorded spend is zero;
+- payer and attester keys are stored only as Vercel Sensitive environment variables.
+
+## Public Surfaces
+
+| Route | Purpose |
+| --- | --- |
+| `/agent-runner` | Launch and follow a hosted paid agent job |
+| `/store` | Browse agent-buyable services |
+| `/agent-control` | Dry-run planning and policy preview |
+| `/runs` | Public agent execution timelines |
+| `/receipts` | Shareable paid commerce receipts |
+| `/agents` | Agent wallet identity and reputation profiles |
+| `/review` | Reviewer health, live proof, and technical status |
+| `/agent-setup` | Advanced local buyer-agent setup |
+| `/seller/analytics` | Protected seller usage and revenue analytics |
+
+Useful public APIs:
+
+| Endpoint | Purpose |
+| --- | --- |
+| `GET /api/store/services` | Machine-readable service discovery |
+| `POST /api/hosted-agent/jobs` | Create or replay a hosted job |
+| `GET /api/hosted-agent/jobs/<id>` | Read hosted job progress and proof links |
+| `GET /api/receipts` | Recent commerce receipts |
+| `GET /api/receipts/<id>` | One receipt |
+| `GET /api/agents` | Agent Passport list |
+| `GET /api/agents/<wallet>` | Agent Passport detail |
+| `GET /api/review/status` | Public production health and latest proof links |
+
+## Review the Project in Two Minutes
+
+1. Open the [hosted runner](https://agent-commerce-six.vercel.app/agent-runner).
+2. Launch the default paid demo task.
+3. Watch the job progress to `completed` and `Verified on Arc`.
+4. Open the generated Agent Run, receipt, Passport, and Arcscan transaction.
+5. Open the [review page](https://agent-commerce-six.vercel.app/review) for the current production status.
+6. Confirm that an unpaid protected request returns HTTP 402:
 
 ```bash
-npm run proofs:recover -- --dry-run
-npm run proofs:recover -- --limit 25
-npm run proofs:recover -- --payment-event <payment-event-uuid>
+curl -i https://agent-commerce-six.vercel.app/api/premium/quote
 ```
 
-The second processing of an already verified payment event performs an onchain
-read/reconciliation and retains the original proof transaction.
-
-## Phase 19 — One-Click Hosted Buyer-Agent
-
-`/agent-runner` lets a reviewer launch a real paid buyer-agent run from the web
-without cloning the repository or supplying a wallet key. A durable Agent DB
-job is queued first, and Next.js continues the execution after the launch HTTP
-response has returned. The page polls the read-only job endpoint and displays:
-
-- `queued`
-- `planning`
-- `purchasing`
-- `generating receipt`
-- `publishing onchain proof`
-- `completed` or `failed`
-
-The thin local `agent.mts` CLI and hosted runner both call
-`lib/agent/execution.ts`; x402 payment code is not duplicated. The hosted payer
-is a dedicated project-owned Arc Testnet wallet. Its private key and the
-rate-limit HMAC secret are server-only Sensitive environment variables. A
-connected browser wallet is stored only as an optional requester address and
-is never used to pay, sign, or authorize the agent.
-
-Hosted wallet safeguards are enforced on the server and in Agent DB:
-
-- exact slug, endpoint, and HTTP-method allowlist; no arbitrary URLs
-- 0.005 USDC maximum per job
-- one queued/running job globally for the demo payer wallet
-- requester cooldown and rolling rate limit
-- HMAC-protected idempotency keys checked before all other launch limits
-- recovery only for failed jobs that have no paid step and zero recorded spend
-
-Repeated launches with the same idempotency key return the original job and do
-not start another payment. A completed job links to its Agent Run, commerce
-receipt, Agent Passport, and Arcscan proof transaction. Public job reads use
-`GET /api/hosted-agent/jobs/<job-id>`; direct public table access remains
-blocked by RLS.
-
-Apply the hosted job migration and run its policy tests with:
+7. Run the public production smoke:
 
 ```bash
-npx vercel env run -e production -- npm run db:migrate
-npx vercel env run -e production -- npm run hosted:test
-npx playwright install chromium
-npm run hosted:browser-smoke -- --confirm-paid-run
+npm run review:smoke
 ```
-
-Operator recovery for a pre-payment failure is explicit and server-only:
-
-```bash
-npm run hosted:recover -- --job <hosted-job-uuid>
-```
-
-Phase 19 production browser smoke:
-
-- hosted payer: [`0x7df1b81bB463Ddf263c1c470F7C1f3a68FE30df3`](https://testnet.arcscan.app/address/0x7df1b81bB463Ddf263c1c470F7C1f3a68FE30df3)
-- hosted job: [`95b0bf32-0b84-4014-bfdb-91c923422c64`](https://agent-commerce-six.vercel.app/agent-runner?job=95b0bf32-0b84-4014-bfdb-91c923422c64)
-- Agent Run: [`c3794f6e-354f-4542-a8b2-923a959fe6c2`](https://agent-commerce-six.vercel.app/runs/c3794f6e-354f-4542-a8b2-923a959fe6c2)
-- receipt: [`dcbe6294-e3b0-4ea6-b71f-988585a6b17e`](https://agent-commerce-six.vercel.app/receipts/dcbe6294-e3b0-4ea6-b71f-988585a6b17e)
-- paid: `0.001 USDC`
-- proof transaction: [`0xe7332e50d471a73ca1a5943464d96322023921046894c916d14f2aab62cdb3a2`](https://testnet.arcscan.app/tx/0xe7332e50d471a73ca1a5943464d96322023921046894c916d14f2aab62cdb3a2)
-- proof block: `52412095`
-
-The smoke launched the CTA in Chromium, observed `Verified on Arc`, and replayed
-the exact browser idempotency key. The replay returned the original job, receipt,
-and proof transaction; the registry still exposed exactly one matching
-`ProofRegistered` event.
-
-## Core User Flows
-
-### Agent Buyer Flow
-
-The buyer agent should eventually be able to:
-
-- list available paid services
-- choose services based on a task
-- inspect endpoint price and metadata
-- pay with USDC through x402
-- receive the protected API response
-- log what it bought and why
-- stop when a spending policy is reached
-- dry-run a task and budget in `/agent-control` before running the local CLI
-
-### Seller Flow
-
-The seller should be able to:
-
-- publish paid API endpoints
-- view API revenue
-- monitor agent purchases
-- check Gateway balance
-- withdraw earnings
-- understand which services agents buy most often
-
-### Builder Flow
-
-A builder should be able to:
-
-- run the app locally
-- open the API Store
-- inspect the seller dashboard
-- add services to the registry
-- extend the sample into real x402-protected APIs
-
-## MVP Scope
-
-The current MVP keeps the payment foundation intact and adds the marketplace layer:
-
-- Arc Agent Commerce naming and metadata
-- README and roadmap
-- landing page
-- typed service registry
-- API Store marketplace UI
-- public service discovery endpoint
-- service detail pages
-- light dashboard service-name mapping
-- buyer-agent reasoning timeline
-- public `/runs` pages
-- seller-created service listings
-- safe protected mock services for marketplace expansion
-- public Agent Passport profiles and reputation events
-- seller analytics for paid calls, estimated revenue, buyer wallets, and request IDs
-- buyer-agent control center for dry-run planning and command generation
-- public commerce receipts for paid x402 API purchases
-- global navigation and polished demo styling
-- browser wallet connect and Arc Testnet balance visibility
-- wallet-funded agent launch for funding the local buyer-agent wallet
-- guided demo story with live proof cards
-- reviewer-ready public submission pack with health/status checks
-- production review smoke script and `/api/review/status`
-- launch submission pack with copy, proof links, and recording checklist
-- local buyer-agent setup guide and CLI onboarding
-- one-click hosted buyer-agent with durable progress and Arc proof links
-
-This scope intentionally avoids deep changes to payment verification, Gateway balance, or withdrawal. Phase 17 adds an isolated post-settlement proof hook and receipt metadata migration without changing the existing x402 verification or settlement decisions.
-
-## Architecture
-
-Planned architecture:
-
-- **Frontend**: Next.js App Router, TypeScript, API Store UI, seller dashboard.
-- **Demo Story**: guided `/demo` page linking the full proof loop.
-- **Hosted Buyer-Agent**: `/agent-runner` plus durable, rate-limited Agent DB jobs using the shared execution core.
-- **Review Pack**: `/review` page with production links, health checks, proof links, and reviewer notes.
-- **Launch Pack**: `/launch` page with submission copy, X thread outline, live demo links, and recording checklist.
-- **Local Agent Setup**: `/agent-setup` page for repo clone, env setup, funding, and CLI run instructions.
-- **QA Toolkit**: `npm run review:smoke` plus `/api/review/status` for production health checks.
-- **Service Registry**: typed metadata in `lib/services/registry.ts`.
-- **Seller Services**: Supabase-backed listings in `store_services`, merged with the static registry for public discovery.
-- **API Routes**: x402-protected service endpoints in later phases.
-- **Payments**: x402/nanopayments on Arc using USDC.
-- **Gateway**: balance and withdrawal flows for seller earnings.
-- **Storage**: Supabase for payment events, purchases, agent runs, Agent Passports, reputation events, and dashboard data.
-- **Receipts**: public audit trail derived from paid purchase steps, run metadata, service metadata, and matched payment events.
-- **Onchain Proofs**: a non-custodial Arc registry attested after settlement, with status and transaction metadata in Supabase.
-- **Wallet UX**: browser wallet connect, Arc Testnet balance display, and explicit user-confirmed testnet funding actions.
-- **Agent**: shared server execution core used by the hosted runner and advanced local CLI, with service selection, x402 payment, spending policy, and purchase reasoning.
-
-Suggested future structure:
-
-```txt
-app/
-  page.tsx
-  review/
-    page.tsx
-  launch/
-    page.tsx
-  demo/
-    page.tsx
-  agent-control/
-    page.tsx
-  agent-launch/
-    page.tsx
-  agent-setup/
-    page.tsx
-  store/
-    page.tsx
-  seller/
-    page.tsx
-    analytics/
-      page.tsx
-  runs/
-    page.tsx
-  agents/
-    page.tsx
-  receipts/
-    page.tsx
-  dashboard/
-    page.tsx
-  api/
-    agent/
-      plan/
-      runs/
-    receipts/
-    store/
-      quote/
-      market/
-      analyze/
-      weather/
-      agent-task/
-
-lib/
-  services/
-  x402/
-  gateway/
-  supabase/
-  agent/
-
-agent/
-  buyer-agent.mts
-  tools/
-  prompts/
-
-supabase/
-  migrations/
-```
-
-## Development Phases
-
-1. **Product Rebrand**: complete.
-2. **API Store**: complete.
-3. **Buyer Agent Reasoning + Purchase Timeline**: complete.
-4. **Seller Creator Mode**: complete / active prototype.
-5. **Agent Identity + Reputation Passport**: complete / active prototype.
-6. **Seller Analytics + Revenue Dashboard**: complete / active prototype.
-7. **Buyer Agent Control Center**: complete / active prototype.
-8. **Public Commerce Receipts / Audit Trail**: complete / active prototype.
-9. **UI Polish and Global Navigation**: complete / active prototype.
-10. **Wallet Connect and Arc Token UX**: complete / active prototype.
-11. **Wallet-Funded Agent Launch**: complete / active prototype.
-12. **Demo Story / Guided Showcase**: complete / active prototype.
-13. **Reviewer Readiness / Public Submission Pack**: complete / active prototype.
-14. **Production QA and Review Smoke Toolkit**: complete / active prototype.
-15. **Final Launch / Submission Content Pack**: complete / active prototype.
-16. **Local Agent Setup Guide and CLI Onboarding**: complete / active prototype.
-17. **Onchain Agent Commerce Proof Registry**: complete / active prototype.
-18. **ERC-8004 Agent Identity**: next, anchor agent identity primitives.
-19. **ERC-8183 Job / Escrow Flow**: add job-based coordination, escrow, deliverables, and settlement.
-20. **Public Demo / Proof Dashboard**: present live proof of purchases, settlement, API usage, reputation, and receipts.
-21. **Launch Polish + Arc House Submission**: refine demo quality, narrative, and submission materials.
-
-## Built on Arc Nanopayments
-
-This project is built on top of the official Arc Nanopayments sample app and expands it into an API Store / Agent Commerce use case.
-
-The original sample demonstrates the core payment primitives: x402-protected endpoints, a seller app, buyer-agent payment flow, Circle Gateway balance and withdrawal flows, and payment tracking.
-
-Arc Agent Commerce keeps those primitives as the foundation and shifts the product direction toward:
-
-- multiple paid API services
-- a browsable API Store
-- service metadata and categories
-- buyer-agent reasoning
-- spending policy controls
-- seller analytics for agent purchases
-
-The goal is not to hide the original sample, but to preserve attribution and show a new product direction for agentic commerce on Arc.
 
 ## Local Development
 
 ```bash
+git clone https://github.com/mioku50/Agent-Commerce.git
+cd Agent-Commerce
 npm install
+cp .env.example .env.local
 npm run dev
 ```
 
-Then open:
+Open `http://localhost:3000`.
 
-- `http://localhost:3000`
-- `http://localhost:3000/review`
-- `http://localhost:3000/launch`
-- `http://localhost:3000/demo`
-- `http://localhost:3000/agent-runner`
-- `http://localhost:3000/agent-control`
-- `http://localhost:3000/agent-launch`
-- `http://localhost:3000/agent-setup`
-- `http://localhost:3000/store`
-- `http://localhost:3000/seller`
-- `http://localhost:3000/seller/analytics`
-- `http://localhost:3000/runs`
-- `http://localhost:3000/agents`
-- `http://localhost:3000/receipts`
-- `http://localhost:3000/dashboard`
+The production hosted flow does not require local setup. Local development and the CLI flow require the relevant public and server environment variables.
 
-Useful checks:
+### Environment groups
+
+Do not commit `.env.local`, private keys, service-role keys, JWT secrets, or database passwords.
+
+| Group | Important variables |
+| --- | --- |
+| App and network | `BASE_URL`, `ARC_TESTNET_RPC_URL`, `NEXT_PUBLIC_ARC_CHAIN_ID`, `NEXT_PUBLIC_ARC_EXPLORER_URL` |
+| Public Agent DB | `NEXT_PUBLIC_AGENT_DB_SUPABASE_URL`, `NEXT_PUBLIC_AGENT_DB_SUPABASE_PUBLISHABLE_KEY` |
+| Server Agent DB | `AGENT_DB_SUPABASE_URL`, `AGENT_DB_SUPABASE_SECRET_KEY` or service-role fallback |
+| Database migrations | `AGENT_DB_POSTGRES_URL_NON_POOLING` |
+| Proof registry | `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS`, server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY` |
+| Local buyer agent | `AGENT_PRIVATE_KEY`, optional funding and Gateway reuse controls |
+
+The hosted payer key, rate-limit secret, Supabase privileged credentials, and proof attester key must exist only in server-side Sensitive environment variables.
+
+## Advanced Local Buyer-Agent
+
+The local runner uses the same planning and execution core as the hosted flow:
 
 ```bash
-(cd contracts && forge test)
-npm run lint
-npm run build
-npm run hosted:test
-npm run review:smoke
+AGENT_MAX_IN_FLIGHT=1 npm run agent -- \
+  --task "Analyze tone and sentiment for a short builder update" \
+  --limit 0.005
 ```
 
-Database migration and verification against the linked Vercel production
-environment:
+The local CLI signs payments with a local buyer-agent key and may require operator-level database credentials to persist public timelines, receipts, and Passport data. Never paste a private key into the browser.
+
+## Database Operations
+
+Apply migrations and verify the Agent DB through the linked Vercel production environment:
 
 ```bash
 npx vercel env run -e production -- npm run db:migrate
 npx vercel env run -e production -- npm run db:verify
 ```
 
-## Environment
+The migration runner applies files in lexical order, records applied versions, and reruns the idempotent demo seed. The unavailable legacy Supabase project is not used and its historical data was not copied.
 
-Copy `.env.example` to `.env.local` when local configuration is needed. Never commit `.env`, `.env.local`, private keys, Circle API keys, entity secrets, wallet secrets, or bearer tokens.
-
-Supabase configuration prefers
-`NEXT_PUBLIC_AGENT_DB_SUPABASE_URL`/`NEXT_PUBLIC_AGENT_DB_SUPABASE_PUBLISHABLE_KEY`
-in the browser and `AGENT_DB_SUPABASE_URL`/`AGENT_DB_SUPABASE_SECRET_KEY` on the
-server. `AGENT_DB_SUPABASE_SERVICE_ROLE_KEY` and the legacy Supabase names are
-temporary fallbacks. Database migrations use
-`AGENT_DB_POSTGRES_URL_NON_POOLING`; diagnostic output includes only the provider
-and selected variable names.
-
-The onchain proof writer uses `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS` plus the
-server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY`. Contract deployment
-uses the public `PROOF_REGISTRY_OPERATOR_ADDRESS` and
-`PROOF_REGISTRY_ATTESTER_ADDRESS` inputs with an encrypted Foundry keystore.
-No proof-writer or deployer key is exposed to client components.
-
-The hosted runner uses `HOSTED_AGENT_ADDRESS`, `HOSTED_AGENT_BASE_URL`, and
-`HOSTED_AGENT_ALLOWED_SERVICE_SLUGS` as non-secret server configuration. Its
-`HOSTED_AGENT_PRIVATE_KEY` and `HOSTED_AGENT_RATE_LIMIT_SECRET` must be stored as
-server-only Sensitive values. Optional controls are
-`HOSTED_AGENT_COOLDOWN_SECONDS`, `HOSTED_AGENT_RATE_LIMIT_WINDOW_SECONDS`, and
-`HOSTED_AGENT_RATE_LIMIT_MAX_RUNS`. None of these variables use a
-`NEXT_PUBLIC_` prefix, and no hosted secret is returned by diagnostics or APIs.
-
-Production proof configuration also includes
-`AGENT_COMMERCE_PROOF_OPERATOR_ADDRESS`,
-`AGENT_COMMERCE_PROOF_ATTESTER_ADDRESS`, `ARC_TESTNET_RPC_URL`,
-`ARC_EXPLORER_URL`, and the public `NEXT_PUBLIC_ARC_EXPLORER_URL`. The operator
-and attester private keys are server-only Vercel secrets; neither uses a
-`NEXT_PUBLIC_` name.
-
-Agent runner examples:
+## Testing and Operations
 
 ```bash
-AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
-AGENT_PRIVATE_KEY=0x... AGENT_SKIP_FUNDING=1 AGENT_SKIP_DEPOSIT=1 npm run agent -- --task "Create a small proof of agent commerce" --limit 0.001
+# Application
+npm run lint
+npm run build
+npm run review:smoke
+
+# Hosted runner policy and database tests
+npm run hosted:test
+
+# Explicit paid browser smoke; spends Arc Testnet USDC
+npx playwright install chromium
+npm run hosted:browser-smoke -- --confirm-paid-run
+
+# Proof registry
+cd contracts && forge test
+cd ..
+npm run proofs:smoke
+
+# Server-only recovery
+npm run hosted:recover -- --job <hosted-job-uuid>
+npm run proofs:recover -- --dry-run
 ```
 
-For the guided sentiment/tone demo:
+A paid browser smoke must never run silently. It requires the explicit `--confirm-paid-run` flag.
 
-```bash
-AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005
-```
+## Technology
 
-After a run completes, open `/review` for reviewer-ready proof links, `/demo` for the guided proof path, `/runs` for the public timeline, `/agents` or `/agents/<wallet>` for the Agent Passport, and `/receipts` or `/receipts/<paid-step-id>` for shareable commerce receipts.
+- Next.js 16 App Router;
+- React 19 and TypeScript;
+- Arc Testnet;
+- USDC;
+- x402 core and EVM packages;
+- Circle x402 batching / Gateway flow;
+- viem;
+- Supabase through the Vercel integration;
+- Foundry for the proof registry;
+- Playwright for browser-level paid smoke tests.
 
-## Status
+## Current Limitations
 
-Early builder prototype. The project now has a marketplace-style API Store, public service discovery, service detail pages, buyer-agent reasoning timelines, seller-created mock services, public Agent Passports, seller analytics, public commerce receipts with an Arc Testnet proof registry, a one-click hosted Arc Testnet buyer-agent, browser wallet visibility/funding UX, a guided demo story, a reviewer-ready submission pack, and production smoke tooling while preserving the upstream x402 verification, Gateway settlement, and withdrawal layers.
+- Arc Testnet only;
+- hosted purchases use a project-owned payer wallet;
+- the hosted service set is allowlisted;
+- the registry is custom and unaudited;
+- seller-created external API proxying is disabled;
+- seller publishing and settlement configuration are still prototype-level;
+- the current hosted demo proves payment and verification, but richer multi-service user workflows and a composed final report are the next product step.
+
+## Next Direction
+
+The next phase moves from a proof-oriented hosted smoke into useful agent work:
+
+- input-driven workflows such as sentiment analysis and builder update review;
+- multiple selected paid services within one budget;
+- a structured final report combining purchased responses;
+- shareable hosted result pages;
+- clearer service-level proof and cost summaries;
+- production-grade seller authentication and settlement configuration;
+- future exploration of ERC-8004 identity and ERC-8183 job coordination.
+
+These items are roadmap targets and are not presented as completed features.
+
+## Built on Arc Nanopayments
+
+Arc Agent Commerce started from the official Circle sample:
+
+- [`circlefin/arc-nanopayments`](https://github.com/circlefin/arc-nanopayments)
+
+The original project demonstrates x402-protected endpoints, Arc USDC payments, Circle Gateway flows, seller balance and withdrawal surfaces, and a local buyer-agent.
+
+This repository preserves that payment foundation and extends it with:
+
+- hosted browser execution;
+- durable agent jobs;
+- service discovery and planning;
+- public run timelines;
+- commerce receipts;
+- Agent Passports;
+- seller analytics;
+- an app-owned onchain proof registry;
+- idempotent browser and contract verification.
+
+## License
+
+Apache-2.0. See [`LICENSE`](LICENSE).
