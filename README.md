@@ -1,5 +1,17 @@
 # Arc Agent Commerce
 
+
+> [!IMPORTANT]
+> ## License and attribution notice
+>
+> Arc Agent Commerce is licensed under the Apache License 2.0.
+>
+> You may use, modify, and distribute the source code only in compliance with the license. Redistributions and derivative works must retain the `LICENSE` file, copyright notices, attribution notices, and must clearly identify modified files.
+>
+> The **Arc Agent Commerce** project name, original branding, logo, screenshots, and visual identity are not licensed for reuse. Do not present a fork or derivative project as the original Arc Agent Commerce product or imply endorsement by its author.
+>
+> Copyright © 2026 Sergio Romanov ([@mioku50](https://github.com/mioku50)).
+
 > Submit real input → a hosted agent selects and purchases paid APIs through x402 → optionally synthesizes an AI-assisted Final Report → creates receipts → registers verified proofs on Arc.
 
 **Arc Agent Commerce is no longer positioned primarily as an API marketplace demo.**
