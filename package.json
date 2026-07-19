@@ -2,7 +2,7 @@
   "name": "arc-agent-commerce",
   "version": "0.1.0",
   "private": true,
-  "description": "Arc Agent Commerce API Store Demo for x402-powered USDC payments by AI agents.",
+  "description": "Hosted agent workflows that purchase x402 APIs, generate Final Reports, and verify receipts on Arc.",
   "license": "Apache-2.0",
   "scripts": {
     "dev": "next dev",

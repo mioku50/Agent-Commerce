@@ -26,7 +26,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   ExternalLink,
-  Fuel,
   ListChecks,
   ReceiptText,
   Rocket,
@@ -57,19 +56,19 @@ const reviewSmokeCommand = "npm run review:smoke";
 
 const reviewChecklist = [
   {
-    title: "Open the Guided Demo",
-    body: "Read the story and copy the sentiment/tone CLI command.",
-    href: "/demo",
+    title: "Run a hosted workflow",
+    body: "Submit real non-sensitive input, preview two paid APIs, and launch once.",
+    href: "/agent-runner",
   },
   {
-    title: "Open the API Store",
-    body: "Confirm this is a marketplace with official and seller-created APIs.",
-    href: "/store",
+    title: "Read the Final Report",
+    body: "Confirm it uses actual purchased API responses and exposes spend and reasoning.",
+    href: "/results",
   },
   {
-    title: "Check the latest proof",
-    body: "Open the latest run, receipt, Agent Passport, and seller analytics links.",
-    href: "/review#live-links",
+    title: "Verify the Arc proofs",
+    body: "Inspect receipt, transaction hash, block, registry contract, and Arcscan links.",
+    href: "/proofs",
   },
   {
     title: "Verify unpaid protection",
@@ -79,12 +78,12 @@ const reviewChecklist = [
 ];
 
 const differenceItems = [
-  "Marketplace instead of one endpoint.",
-  "Buyer-agent planner with task and budget decisions.",
-  "Wallet-funded agent launch for Arc Testnet users.",
+  "Hosted workflow outcomes instead of a fixed paid smoke.",
+  "Real user input with planner preview and budget decisions.",
+  "Actual purchased API responses assembled into Final Reports.",
   "Seller-created services with safe mock fulfillment.",
   "Public receipts for paid API purchases.",
-  "Agent Passports and reputation stats.",
+  "Agent Passports with workflows, reports, calls, proofs, spend, and success rate.",
   "Seller analytics for revenue-style usage proof.",
 ];
 
@@ -204,10 +203,10 @@ export default async function ReviewPage() {
               Review Arc Agent Commerce in under 2 minutes
             </h1>
             <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-              Arc Agent Commerce is an x402-powered API Store where AI agents
-              analyze real user-supplied text with allowlisted paid services,
-              pay with USDC on Arc, and leave public proof through dynamic
-              reports, timelines, receipts, Agent Passports, and seller analytics.
+              Submit real input and the hosted agent selects and purchases
+              allowlisted APIs through x402, generates a Final Report, creates
+              commerce receipts, updates its Passport, and registers verified
+              proofs in the app-owned registry on Arc.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
@@ -229,8 +228,8 @@ export default async function ReviewPage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/store">
-                  API Store
+                <Link href="/workflows">
+                  Workflow Templates
                   <Store />
                 </Link>
               </Button>
@@ -304,12 +303,14 @@ export default async function ReviewPage() {
             }
           />
           <StatusCard
-            title="Phase 21 real input"
+            title="Workflow-first product"
             ok={
               data.checks.hostedRealInputWorkflowsEnabled &&
-              data.checks.hostedInputPrivacyEnabled
+              data.checks.hostedInputPrivacyEnabled &&
+              data.checks.workflowFirstProductEnabled &&
+              data.checks.publicWorkflowPagesEnabled
             }
-            detail="Sentiment, builder, and market workflows accept ephemeral user input; Agent DB keeps only a redacted preview and SHA-256."
+            detail="Hosted browser execution is primary; templates, Final Reports, and Arc proofs have dedicated public pages while full input remains ephemeral."
           />
           <StatusCard
             title="Seller-created live service"
@@ -398,7 +399,7 @@ export default async function ReviewPage() {
                 <p>
                   Recent failed run(s) appear to be testnet/Gateway balance
                   failures. Use the stable sentiment command below or fund more
-                  Gateway balance from Agent Launch.
+                  Gateway balance through the advanced Developer Tools flow.
                 </p>
               ) : null}
               <div className="rounded-md border bg-muted/40 p-4">
@@ -470,22 +471,28 @@ export default async function ReviewPage() {
             icon={Rocket}
           />
           <LinkCard
-            title="API Store"
-            href="/store"
-            detail="Marketplace of official and seller-created services."
+            title="Workflow Templates"
+            href="/workflows"
+            detail="Supported inputs, estimated prices, paid services, and expected reports."
             icon={Store}
           />
           <LinkCard
-            title="Agent Control"
-            href="/agent-control"
-            detail="Dry-run buyer-agent planning."
+            title="Results"
+            href="/results"
+            detail="Hosted Final Reports assembled from paid API responses."
             icon={Bot}
           />
           <LinkCard
-            title="Agent Launch"
-            href="/agent-launch"
-            detail="Wallet-funded local buyer-agent launch flow."
-            icon={Fuel}
+            title="Arc Proofs"
+            href="/proofs"
+            detail="Verified, pending, and failed registry records with Arcscan links."
+            icon={ShieldCheck}
+          />
+          <LinkCard
+            title="Developer Tools"
+            href="/developer-tools"
+            detail="API Store, planner inspection, wallet launch, and local CLI setup."
+            icon={Store}
           />
           <LinkCard
             title="Latest Hosted Report"

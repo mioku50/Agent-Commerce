@@ -24,9 +24,9 @@ import {
   Bot,
   ChartNoAxesCombined,
   ClipboardCheck,
-  ClipboardList,
   ExternalLink,
-  Fuel,
+  FileText,
+  LayoutTemplate,
   ListChecks,
   ReceiptText,
   Rocket,
@@ -57,7 +57,7 @@ import { shortenHash } from "@/lib/utils";
 export const metadata = {
   title: "Guided Demo | Arc Agent Commerce",
   description:
-    "A two-minute guided showcase for Arc Agent Commerce, buyer-agent paid API purchases, public receipts, and Agent Passports.",
+    "A two-minute guided showcase of a hosted workflow purchasing paid APIs and publishing a Final Report with verified Arc proofs.",
 };
 
 const demoTask = "Analyze tone and sentiment for a short builder update";
@@ -75,38 +75,38 @@ type LiveProof = {
 const walkthrough = [
   {
     step: "Step 1",
-    title: "Browse API Store",
-    href: "/store",
-    icon: Store,
-    body: "Inspect official and seller-created APIs, prices, endpoints, schemas, and x402 payment expectations.",
+    title: "Choose a workflow template",
+    href: "/workflows",
+    icon: LayoutTemplate,
+    body: "Compare supported inputs, expected Final Reports, selected paid services, and estimated x402 cost.",
   },
   {
     step: "Step 2",
-    title: "Plan a buyer-agent run",
-    href: "/agent-control",
+    title: "Submit real input and preview",
+    href: "/agent-runner",
     icon: Bot,
-    body: "Dry-run the task and budget so the planner explains which services it would buy or skip.",
+    body: "Paste non-sensitive source text and preview the hosted planner's allowlisted API choices and budget.",
   },
   {
     step: "Step 3",
-    title: "Fund buyer-agent wallet",
-    href: "/agent-launch",
-    icon: Fuel,
-    body: "Connect an Arc Testnet wallet, check USDC balances, and send testnet USDC to the local buyer-agent wallet.",
+    title: "Run the hosted buyer-agent",
+    href: "/agent-runner",
+    icon: Bot,
+    body: "Launch once. The project-owned Arc Testnet wallet pays selected APIs while the browser follows durable progress.",
   },
   {
     step: "Step 4",
-    title: "Run local CLI agent",
-    href: "#demo-command",
-    icon: ClipboardList,
-    body: "Run the existing CLI flow locally. x402 signing, Gateway payment, and protected API calls stay outside the browser.",
+    title: "Read the Final Report",
+    href: "/results",
+    icon: FileText,
+    body: "Review the actual purchased API responses, deterministic findings, spend, service reasoning, and report links.",
   },
   {
     step: "Step 5",
-    title: "Inspect public timeline",
-    href: "/runs",
-    icon: ListChecks,
-    body: "Open the agent run timeline to see selected, paid, skipped, and failed decisions with reasoning.",
+    title: "Verify proofs on Arc",
+    href: "/proofs",
+    icon: ShieldCheck,
+    body: "Inspect verified, pending, or failed registry records with receipt, transaction, block, contract, and Arcscan links.",
   },
   {
     step: "Step 6",
@@ -132,13 +132,13 @@ const walkthrough = [
 ];
 
 const reviewerNotes = [
-  "API marketplace, not only one premium endpoint.",
-  "Buyer-agent planner with task and budget reasoning.",
+  "Useful hosted workflows, not only a paid endpoint smoke test.",
+  "Real user input with planner preview and budget reasoning.",
   "Seller-created services with safe mock fulfillment.",
-  "Wallet funding flow for Arc Testnet users.",
   "Public commerce receipts for paid API purchases.",
-  "Agent Passport reputation derived from run history.",
+  "Agent Passport workflow, report, call, proof, spend, and success metrics.",
   "Seller analytics for usage, revenue, wallets, and request IDs.",
+  "API Store and local CLI preserved as advanced developer tools.",
 ];
 
 async function getLiveProof(): Promise<LiveProof> {
@@ -375,14 +375,14 @@ export default async function DemoPage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/agent-launch">
-                  Fund buyer-agent
-                  <Fuel />
+                <Link href="/results">
+                  Recent Results
+                  <FileText />
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/agent-setup">
-                  Setup guide
+                <Link href="/proofs">
+                  Arc Proofs
                   <ShieldCheck />
                 </Link>
               </Button>
@@ -423,15 +423,15 @@ export default async function DemoPage() {
           {[
             [
               "Agent commerce",
-              "Agents can discover APIs, reason about utility, and spend tiny USDC budgets without account setup.",
+              "Users submit real input while the hosted agent selects APIs, reasons about utility, and spends a guarded USDC budget.",
             ],
             [
               "Public proof",
-              "Runs, receipts, Agent Passports, and seller analytics turn invisible API calls into audit-friendly artifacts.",
+              "Final Reports, receipts, Agent Passports, seller analytics, and registry transactions make paid work auditable.",
             ],
             [
               "Payment core preserved",
-              "The browser story is read-only. Paid x402 requests still happen through the existing CLI and Gateway flow.",
+              "Hosted execution and local CLI share the same planner, x402 payment, persistence, and post-settlement proof core.",
             ],
           ].map(([title, body]) => (
             <Card className="rounded-lg shadow-sm" key={title}>
@@ -452,14 +452,14 @@ export default async function DemoPage() {
           </CardHeader>
           <CardContent className="grid gap-3 text-sm leading-6 text-muted-foreground md:grid-cols-2">
             <p>
-              A real agent-commerce product needs more than a protected
-              endpoint. It needs discovery, planning, funding, receipts,
-              identity, and seller visibility.
+              A useful agent-commerce product starts with a user outcome: a
+              guarded workflow, actual purchased API responses, and a report
+              that can be independently inspected.
             </p>
             <p>
-              This flow shows the full loop: API Store discovery, buyer-agent
-              choice, x402/Gateway payment on Arc, public purchase timeline,
-              receipts, Agent Passport stats, and seller analytics.
+              This flow shows the full loop: real input, hosted planning,
+              x402/Gateway payment on Arc, Final Report, receipts, Passport
+              metrics, seller analytics, and app-owned Arc registry proofs.
             </p>
           </CardContent>
         </Card>

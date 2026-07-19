@@ -1,0 +1,101 @@
+/**
+ * Copyright 2026 Circle Internet Group, Inc.  All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import Link from "next/link";
+import {
+  ArrowRight,
+  Bot,
+  FlaskConical,
+  Fuel,
+  Store,
+  TerminalSquare,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+export const metadata = {
+  title: "Developer Tools | Arc Agent Commerce",
+  description:
+    "Advanced API Store, planner, wallet launch, and local CLI tools for Arc Agent Commerce operators.",
+};
+
+const tools = [
+  {
+    title: "API Store",
+    href: "/store",
+    icon: Store,
+    body: "Inspect the allowlisted paid services, schemas, x402 prices, and protected endpoints used by workflows.",
+  },
+  {
+    title: "Agent Control",
+    href: "/agent-control",
+    icon: Bot,
+    body: "Dry-run the shared planner and inspect service buy/skip reasoning without creating a payment.",
+  },
+  {
+    title: "Agent Launch",
+    href: "/agent-launch",
+    icon: Fuel,
+    body: "Inspect and fund an operator-owned Arc Testnet buyer wallet for the advanced local flow.",
+  },
+  {
+    title: "Agent Setup",
+    href: "/agent-setup",
+    icon: FlaskConical,
+    body: "Configure and run the local CLI with your own buyer-agent wallet and server-side secrets.",
+  },
+];
+
+export default function DeveloperToolsPage() {
+  return (
+    <main className="min-h-screen bg-background">
+      <section className="border-b bg-secondary/20">
+        <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
+          <Badge className="mb-4">Advanced / operator flow</Badge>
+          <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">Developer Tools</h1>
+          <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
+            The browser-hosted workflow is the primary product. These tools keep
+            the original API marketplace, planner inspection, wallet funding,
+            and local CLI available for developers who want direct control.
+          </p>
+        </div>
+      </section>
+      <section className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-8 sm:px-6 md:grid-cols-2">
+        {tools.map(({ title, href, icon: Icon, body }) => (
+          <Card key={href} className="command-card rounded-lg">
+            <CardHeader>
+              <div className="mb-3 flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
+                <Icon className="size-5" />
+              </div>
+              <CardTitle>{title}</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <p className="text-sm leading-6 text-muted-foreground">{body}</p>
+              <Button asChild variant="outline">
+                <Link href={href}>
+                  Open {title}
+                  <ArrowRight />
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+        ))}
+        <Card className="rounded-lg border-primary/25 md:col-span-2">
+          <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="flex items-center gap-3 text-sm text-muted-foreground">
+              <TerminalSquare className="size-5 shrink-0 text-primary" />
+              Local CLI is an advanced own-wallet/operator path. Hosted workflows
+              never ask for a user private key.
+            </p>
+            <Button asChild>
+              <Link href="/agent-runner">Return to Run Workflow</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </section>
+    </main>
+  );
+}

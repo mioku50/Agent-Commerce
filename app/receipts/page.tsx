@@ -228,8 +228,8 @@ async function ReceiptList({
         <EmptyState
           icon={FileSearch}
           title="No paid commerce receipts yet."
-          description="Run a buyer-agent purchase through the API Store to create the first public receipt."
-          action={{ label: "Open Agent Setup", href: "/agent-setup" }}
+          description="Run a hosted workflow with real input to create the first paid receipt and Arc proof."
+          action={{ label: "Run Workflow", href: "/agent-runner" }}
         />
       ) : (
         receipts.map((receipt) => (
@@ -270,9 +270,9 @@ export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) 
               Commerce Receipts
             </h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-              Shareable receipts for paid agent API purchases, linking buyer
-              wallets, Agent Passports, services, request IDs, run timelines,
-              and matched payment events where available.
+              Each hosted workflow turns successful paid API calls into
+              shareable receipts linked to its Final Report, buyer Passport,
+              activity timeline, payment event, and app-owned Arc proof.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -283,21 +283,21 @@ export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) 
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/agent-control">
+              <Link href="/agent-runner">
                 <Bot />
-                Agent Control
+                Run Workflow
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/runs">
                 <ListChecks />
-                Agent Runs
+                Activity
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/store">
+              <Link href="/proofs">
                 <Store />
-                API Store
+                Arc Proofs
               </Link>
             </Button>
           </div>

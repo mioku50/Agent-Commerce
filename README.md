@@ -1,27 +1,31 @@
 # Arc Agent Commerce
 
-> A one-click hosted buyer-agent that purchases x402-protected API services with USDC on Arc and publishes a public, onchain-verifiable proof trail.
+> Submit real input → a hosted agent selects and purchases paid APIs through x402 → generates a Final Report → creates receipts → registers verified proofs on Arc.
 
 **Arc Agent Commerce is no longer positioned primarily as an API marketplace demo.**
-The current product direction is a hosted agent execution and verification layer:
+The workflow-first product direction is a hosted agent execution and verification layer:
 
-1. a user launches an agent from the browser;
-2. the agent previews and selects up to three allowlisted paid APIs;
+1. a user chooses a workflow and submits real non-sensitive input in the browser;
+2. the hosted agent previews and selects up to three allowlisted paid APIs;
 3. a project-owned server wallet pays through x402 and Circle Gateway;
-4. the response becomes a public run, receipt, and Agent Passport update;
-5. a compact proof is registered in the app-owned contract on Arc Testnet.
+4. actual service responses become a shareable Final Report;
+5. paid calls become public activity, receipts, Passport and seller analytics updates;
+6. compact proofs are registered in the app-owned contract on Arc Testnet.
 
-The API Store remains the service discovery layer, but the main product is now the complete **task → payment → result → receipt → onchain proof** workflow.
+The API Store, Agent Launch, Agent Setup, and local CLI remain available under **Developer Tools**. They are secondary advanced/operator surfaces, while browser-hosted workflow execution is the primary product.
 
 ## Live Product
 
 | Surface | Link |
 | --- | --- |
 | Production app | https://agent-commerce-six.vercel.app |
-| One-click hosted agent | https://agent-commerce-six.vercel.app/agent-runner |
+| Run Workflow | https://agent-commerce-six.vercel.app/agent-runner |
+| Workflow Templates | https://agent-commerce-six.vercel.app/workflows |
+| Hosted Final Reports | https://agent-commerce-six.vercel.app/results |
+| Arc Proofs | https://agent-commerce-six.vercel.app/proofs |
+| Developer Tools | https://agent-commerce-six.vercel.app/developer-tools |
 | Reviewer status | https://agent-commerce-six.vercel.app/review |
-| API Store | https://agent-commerce-six.vercel.app/store |
-| Agent runs | https://agent-commerce-six.vercel.app/runs |
+| Activity | https://agent-commerce-six.vercel.app/runs |
 | Commerce receipts | https://agent-commerce-six.vercel.app/receipts |
 | Agent Passports | https://agent-commerce-six.vercel.app/agents |
 | Public status API | https://agent-commerce-six.vercel.app/api/review/status |
@@ -85,6 +89,23 @@ The UI exposes progress states such as:
 A connected browser wallet is optional and is used only as a requester label. It never pays, signs, or authorizes the hosted purchase.
 
 The original workflow input exists only in the launch request and the in-memory background execution closure. Public status, history, result pages, and Agent DB expose only the redacted preview and SHA-256. Failed pre-payment recovery therefore requires the operator to re-submit the original text from a local file whose hash matches the job.
+
+## Workflow-First Product Surfaces
+
+The primary navigation is organized around the user outcome:
+
+- **Dashboard** — Run Workflow CTA, Workflow Templates, and Recent Results;
+- **Run Workflow** — real input, safe plan preview, live hosted execution, and Final Report;
+- **Workflow Templates** — supported inputs, selected APIs, prices, and expected report shape;
+- **Results** — completed hosted Final Reports rather than low-level database run rows;
+- **Activity** — the technical execution and purchase timeline;
+- **Arc Proofs** — verified, pending, and failed registry records with receipt, transaction, block, contract, and Arcscan links;
+- **Agent Passports** — workflows, reports, successful calls, verified proofs, spent USDC, and success rate;
+- **Commerce Receipts** — paid calls linked to workflow results and proof metadata;
+- **Developer Tools** — API Store, Agent Control, Agent Launch, and Agent Setup;
+- **Seller** — service publishing and seller analytics.
+
+Legacy routes remain live so existing reviewer links, API clients, and smoke tests do not break.
 
 ## Verified Production Example
 
@@ -170,7 +191,7 @@ Every successful paid execution can produce:
 - seller analytics updates;
 - an onchain receipt proof on Arc Testnet.
 
-### API Store
+### API Store (developer tool)
 
 The API Store remains the service catalog and discovery layer. It includes official sample services and safe seller-created mock services. Arbitrary external API proxying is intentionally disabled.
 

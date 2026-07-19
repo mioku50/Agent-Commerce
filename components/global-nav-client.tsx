@@ -125,7 +125,7 @@ export function GlobalNavClient({ loggedIn }: GlobalNavClientProps) {
                 Arc Agent Commerce
               </span>
               <span className="mt-1 block text-xs text-muted-foreground">
-                x402 API Store
+                Hosted paid API workflows
               </span>
             </span>
           </Link>

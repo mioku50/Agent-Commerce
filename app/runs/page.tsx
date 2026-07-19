@@ -33,8 +33,8 @@ import { fetchRecentAgentRuns, type PublicAgentRun } from "@/lib/agent/runs-publ
 import { RunsListClient } from "./runs-client";
 
 export const metadata = {
-  title: "Agent Runs | Arc Agent Commerce",
-  description: "Public buyer-agent purchase timelines for Arc Agent Commerce.",
+  title: "Workflow Activity | Arc Agent Commerce",
+  description: "Public hosted and operator buyer-agent activity timelines.",
 };
 
 async function RunsList() {
@@ -75,12 +75,12 @@ export default function RunsPage() {
               <Badge variant="outline">Public purchase timeline</Badge>
             </div>
             <h1 className="text-4xl font-bold tracking-normal text-foreground sm:text-5xl">
-              Agent Runs
+              Activity
             </h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-              Inspect how the scripted buyer-agent discovers services, explains
-              each purchase decision, pays through x402/Gateway, and records a
-              timeline.
+              Inspect how hosted and advanced operator workflows plan, select
+              and purchase services through x402/Gateway, publish receipts,
+              and record post-settlement Arc proof progress.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -91,15 +91,15 @@ export default function RunsPage() {
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/agent-control">
+              <Link href="/agent-runner">
                 <Bot />
-                Agent Control
+                Run Workflow
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/store">
+              <Link href="/results">
                 <Store />
-                Open API Store
+                Final Reports
               </Link>
             </Button>
             <Button asChild variant="outline">

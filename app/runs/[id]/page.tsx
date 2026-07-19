@@ -293,7 +293,7 @@ async function RunDetail({ params }: RunDetailPageProps) {
           <Button asChild variant="ghost" className="mb-6 px-0">
             <Link href="/runs">
               <ArrowLeft />
-              Back to Agent Runs
+              Back to Activity
             </Link>
           </Button>
           {result.run.agent_wallet ? (
@@ -333,7 +333,7 @@ function RunDetailFallback() {
           <Button asChild variant="ghost" className="mb-6 px-0">
             <Link href="/runs">
               <ArrowLeft />
-              Back to Agent Runs
+              Back to Activity
             </Link>
           </Button>
           <Card className="rounded-lg">

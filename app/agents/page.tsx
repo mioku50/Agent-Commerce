@@ -34,6 +34,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { USDCAmount } from "@/components/wallet/USDCAmount";
 import { WalletAddress } from "@/components/wallet/WalletAddress";
 import {
+  countVerifiedAgentProofs,
   listAgentProfiles,
   type PublicAgentProfile,
 } from "@/lib/agent/passport-persistence";
@@ -52,7 +53,13 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
-function ProfileCard({ profile }: { profile: PublicAgentProfile }) {
+function ProfileCard({
+  profile,
+  verifiedProofs,
+}: {
+  profile: PublicAgentProfile;
+  verifiedProofs: number;
+}) {
   const trustColor =
     profile.trust_score >= 67
       ? "bg-emerald-400"
@@ -87,22 +94,34 @@ function ProfileCard({ profile }: { profile: PublicAgentProfile }) {
         </p>
       </CardHeader>
       <CardContent className="grid gap-5">
-        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3">
           <div>
-            <dt className="text-muted-foreground">Runs</dt>
+            <dt className="text-muted-foreground">Workflows</dt>
             <dd className="font-mono">{profile.total_runs}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Paid</dt>
+            <dt className="text-muted-foreground">Reports</dt>
+            <dd className="font-mono">{profile.completed_runs}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Successful calls</dt>
             <dd className="font-mono">{profile.paid_requests}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Seller APIs</dt>
-            <dd className="font-mono">{profile.seller_created_services_used}</dd>
+            <dt className="text-muted-foreground">Arc proofs</dt>
+            <dd className="font-mono">{verifiedProofs}</dd>
           </div>
           <div>
             <dt className="text-muted-foreground">Spent</dt>
             <dd><USDCAmount value={profile.total_usdc_spent} /></dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Success rate</dt>
+            <dd className="font-mono">
+              {profile.total_runs
+                ? `${Math.round((profile.completed_runs / profile.total_runs) * 100)}%`
+                : "0%"}
+            </dd>
           </div>
         </dl>
         <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
@@ -126,9 +145,13 @@ async function AgentsList() {
 
   let profiles: PublicAgentProfile[] = [];
   let error: string | null = null;
+  let proofCounts = new Map<string, number>();
 
   try {
     profiles = await listAgentProfiles(30);
+    proofCounts = await countVerifiedAgentProofs(
+      profiles.map((profile) => profile.wallet),
+    );
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
   }
@@ -146,12 +169,16 @@ async function AgentsList() {
         <EmptyState
           icon={Bot}
           title="No agent passports yet."
-          description="Run the buyer-agent after applying the Phase 5 migration to create the first public wallet passport."
-          action={{ label: "Open Agent Setup", href: "/agent-setup" }}
+          description="Run a hosted workflow to create the first public buyer-agent Passport."
+          action={{ label: "Run Workflow", href: "/agent-runner" }}
         />
       ) : (
         profiles.map((profile) => (
-          <ProfileCard key={profile.wallet} profile={profile} />
+          <ProfileCard
+            key={profile.wallet}
+            profile={profile}
+            verifiedProofs={proofCounts.get(profile.wallet.toLowerCase()) ?? 0}
+          />
         ))
       )}
     </section>
@@ -184,22 +211,22 @@ export default function AgentsPage() {
               Agent Passports
             </h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-              Public buyer-agent profiles derived from real API Store runs,
-              paid x402 requests, seller-created service usage, and budget
-              discipline.
+              Public buyer-agent identities derived from hosted workflows,
+              completed Final Reports, successful x402 calls, verified Arc
+              proofs, spend, and execution success rate.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Button asChild variant="outline">
-              <Link href="/agent-control">
+              <Link href="/agent-runner">
                 <Bot />
-                Agent Control
+                Run Workflow
               </Link>
             </Button>
             <Button asChild variant="outline">
               <Link href="/runs">
                 <ListChecks />
-                View Runs
+                Activity
               </Link>
             </Button>
             <Button asChild variant="outline">
@@ -209,9 +236,9 @@ export default function AgentsPage() {
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/store">
+              <Link href="/proofs">
                 <Store />
-                Open Store
+                Arc Proofs
               </Link>
             </Button>
           </div>
@@ -221,8 +248,8 @@ export default function AgentsPage() {
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8 sm:px-6 md:grid-cols-3">
         {[
           ["Trust score", "Deterministic demo score from activity"],
-          ["Usage stats", "Runs, paid requests, skipped and failed calls"],
-          ["Service mix", "Official sample and seller-created APIs used"],
+          ["Workflow history", "Reports, paid calls, spend, and success rate"],
+          ["Arc verification", "Registry proofs linked to successful receipts"],
         ].map(([title, body]) => (
           <Card key={title} className="rounded-lg">
             <CardHeader>

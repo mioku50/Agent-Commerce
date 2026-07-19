@@ -124,9 +124,9 @@ function TrustScore({ profile }: { profile: PublicAgentProfile }) {
           />
         </div>
         <p className="text-sm leading-6 text-muted-foreground">
-          Score is deterministic for the demo: completed runs, paid requests,
-          seller-created services used, and budget-respected runs raise it;
-          failed requests and failed runs reduce it.
+          Score is deterministic for the demo: completed workflows, successful
+          paid calls, and budget-respected execution raise it; failed calls and
+          failed workflows reduce it.
         </p>
       </CardContent>
     </Card>
@@ -286,9 +286,11 @@ function ReceiptsPanel({ receipts }: { receipts: CommerceReceipt[] }) {
 function PassportContent({
   detail,
   receipts,
+  verifiedProofs,
 }: {
   detail: AgentPassportDetail;
   receipts: CommerceReceipt[];
+  verifiedProofs: number;
 }) {
   const { profile } = detail;
 
@@ -308,20 +310,22 @@ function PassportContent({
 
       <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total runs" value={profile.total_runs} />
-          <StatCard label="Completed runs" value={profile.completed_runs} />
-          <StatCard label="Paid requests" value={profile.paid_requests} />
-          <StatCard label="Skipped requests" value={profile.skipped_requests} />
-          <StatCard label="Failed requests" value={profile.failed_requests} />
+          <StatCard label="Workflows" value={profile.total_runs} />
+          <StatCard label="Final Reports" value={profile.completed_runs} />
+          <StatCard label="Successful calls" value={profile.paid_requests} />
+          <StatCard label="Verified Arc proofs" value={verifiedProofs} />
           <StatCard
-            label="Total spent"
+            label="Spent"
             value={`${profile.total_usdc_spent} USDC`}
           />
           <StatCard
-            label="Seller-created APIs"
-            value={profile.seller_created_services_used}
+            label="Success rate"
+            value={
+              profile.total_runs
+                ? `${Math.round((profile.completed_runs / profile.total_runs) * 100)}%`
+                : "0%"
+            }
           />
-          <StatCard label="Official APIs" value={profile.official_services_used} />
         </div>
 
         <Card className="rounded-lg">
@@ -358,12 +362,20 @@ async function AgentPassport({ params }: AgentPassportPageProps) {
   const { wallet } = await params;
   const [detail, receipts] = await Promise.all([
     fetchAgentPassport(wallet).catch(() => null),
-    fetchReceiptsByAgentWallet(wallet, 6).catch(() => [] as CommerceReceipt[]),
+    fetchReceiptsByAgentWallet(wallet, 100).catch(() => [] as CommerceReceipt[]),
   ]);
 
   if (!detail) notFound();
 
-  return <PassportContent detail={detail} receipts={receipts} />;
+  return (
+    <PassportContent
+      detail={detail}
+      receipts={receipts.slice(0, 6)}
+      verifiedProofs={
+        receipts.filter((receipt) => receipt.onchainProof?.status === "verified").length
+      }
+    />
+  );
 }
 
 function AgentPassportFallback() {

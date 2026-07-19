@@ -27,7 +27,8 @@ import {
   ClipboardCheck,
   Clapperboard,
   ExternalLink,
-  Fuel,
+  FileText,
+  LayoutTemplate,
   ListChecks,
   Megaphone,
   ReceiptText,
@@ -62,20 +63,20 @@ const submissionCopy =
   "Arc Agent Commerce turns Arc Nanopayments into a hosted x402 workflow product: users submit real text, preview an allowlisted plan, and launch paid API calls from the browser with a project-owned Arc Testnet wallet. Each run produces a privacy-safe dynamic report, receipts, an Agent Passport update, seller analytics, and app-owned onchain proofs. The browser never handles private keys or x402 signing.";
 
 const xThreadOutline = [
-  "1/ Arc Agent Commerce is an API Store for AI agents on Arc.",
-  "2/ Agents discover paid APIs, plan around a budget, and pay with USDC through x402/Gateway.",
-  "3/ Sellers can publish safe mock API services, then inspect usage and revenue-style analytics.",
-  "4/ Every paid call becomes public proof: run timeline, receipt, buyer Agent Passport, and seller analytics.",
-  "5/ Browser wallet UX is limited to Arc Testnet visibility and funding; private keys and x402 signing stay local.",
+  "1/ Arc Agent Commerce turns real user input into a hosted, verifiable agent workflow on Arc.",
+  "2/ The agent previews and purchases allowlisted paid APIs through x402 within a 0.005 USDC cap.",
+  "3/ Actual API responses become a shareable Final Report with service reasoning and spend.",
+  "4/ Every paid call creates a receipt, Passport update, seller analytics, and app-owned Arc registry proof.",
+  "5/ The project payer and attester keys stay server-only; the local CLI remains an advanced operator flow.",
   "6/ Review the live demo: https://agent-commerce-six.vercel.app/review",
 ].join("\n");
 
 const featureItems = [
   "Hosted real-input workflows for sentiment, builder updates, and market context.",
-  "API marketplace instead of a single paid endpoint.",
+  "Workflow templates with prices, selected services, and expected results.",
   "Buyer-agent planner with task, budget, and skip/buy reasoning.",
   "Seller-created safe mock services for marketplace expansion.",
-  "Wallet-funded local agent launch on Arc Testnet.",
+  "API Store and wallet-funded local agent launch preserved as developer tools.",
   "Public run timelines, receipts, Agent Passports, and seller analytics.",
   "Production smoke script that verifies public pages and decoded x402 challenges.",
 ];
@@ -83,7 +84,7 @@ const featureItems = [
 const proofItems = [
   "Full workflow input is ephemeral; public jobs retain only a redacted preview and SHA-256.",
   "Unpaid protected endpoints return HTTP 402 with a payment-required challenge.",
-  "Paid CLI runs create public timelines with selected, paid, skipped, and failed steps.",
+  "Paid hosted and CLI workflows create public timelines with selected, paid, skipped, and failed steps.",
   "Paid steps become shareable receipts with service, wallet, endpoint, request ID, and payment-event status.",
   "Agent Passports rebuild reputation from public run and purchase history.",
   "Seller analytics aggregates paid calls, estimated USDC revenue, buyer wallets, and request IDs.",
@@ -92,22 +93,23 @@ const proofItems = [
 const reviewerChecklist = [
   "Open the hosted runner, paste a real non-sensitive input, preview two paid services, and launch.",
   "Open the Review Pack and confirm live health cards.",
-  "Open the Guided Demo and copy the sentiment/tone command.",
-  "Open the API Store and inspect official plus seller-created services.",
-  "Run Agent Control as a dry-run planner with a 0.005 USDC budget.",
-  "Open Agent Launch and confirm browser wallet funding stays separate from x402 signing.",
-  "Open latest run, latest receipt, Agent Passport, and seller analytics proof links.",
+  "Open Results and confirm the Final Report contains actual purchased API responses.",
+  "Open Arc Proofs and inspect receipt, transaction, block, contract, and Arcscan links.",
+  "Open Workflow Templates and compare services, expected output, and estimated price.",
+  "Open Developer Tools and confirm API Store, Agent Launch, and Agent Setup remain available as advanced flows.",
+  "Open Activity, Commerce Receipts, Agent Passport, and seller analytics proof links.",
   "Run npm run review:smoke and confirm the x402 challenge decodes for Arc Testnet.",
 ];
 
 const recordingChecklist = [
   { label: "Run /agent-runner with real input", href: "/agent-runner" },
+  { label: "Show /workflows templates", href: "/workflows" },
+  { label: "Show /results Final Reports", href: "/results" },
+  { label: "Show /proofs Arc registry records", href: "/proofs" },
   { label: "Open /review", href: "/review" },
   { label: "Open /demo", href: "/demo" },
-  { label: "Show /store", href: "/store" },
-  { label: "Show /agent-control dry-run", href: "/agent-control" },
-  { label: "Show /agent-launch", href: "/agent-launch" },
-  { label: "Show latest /runs", href: "/runs" },
+  { label: "Show /developer-tools", href: "/developer-tools" },
+  { label: "Show /runs Activity", href: "/runs" },
   { label: "Show latest /receipts", href: "/receipts" },
   { label: "Show /agents passport", href: "/agents" },
   { label: "Show /seller/analytics", href: "/seller/analytics" },
@@ -115,14 +117,15 @@ const recordingChecklist = [
 ];
 
 const demoLinks = [
-  { title: "Hosted Agent Runner", href: "/agent-runner", icon: Bot },
+  { title: "Run Workflow", href: "/agent-runner", icon: Bot },
+  { title: "Workflow Templates", href: "/workflows", icon: LayoutTemplate },
+  { title: "Results", href: "/results", icon: FileText },
+  { title: "Arc Proofs", href: "/proofs", icon: ShieldCheck },
   { title: "Review Pack", href: "/review", icon: ClipboardCheck },
   { title: "Guided Demo", href: "/demo", icon: Sparkles },
-  { title: "API Store", href: "/store", icon: Store },
-  { title: "Agent Control", href: "/agent-control", icon: Bot },
-  { title: "Agent Launch", href: "/agent-launch", icon: Fuel },
-  { title: "Agent Runs", href: "/runs", icon: ListChecks },
-  { title: "Receipts", href: "/receipts", icon: ReceiptText },
+  { title: "Developer Tools", href: "/developer-tools", icon: Store },
+  { title: "Activity", href: "/runs", icon: ListChecks },
+  { title: "Commerce Receipts", href: "/receipts", icon: ReceiptText },
   { title: "Agent Passports", href: "/agents", icon: BadgeCheck },
   { title: "Seller Analytics", href: "/seller/analytics", icon: ChartNoAxesCombined },
 ];

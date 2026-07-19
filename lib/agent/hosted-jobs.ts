@@ -16,6 +16,7 @@ import {
   hashHostedWorkflowInput,
   hostedWorkflowInputMetadata,
   isHostedWorkflowType,
+  workflowLabel,
   type HostedFinalReport,
   type HostedPlannerSnapshot,
   type HostedWorkflowRequest,
@@ -536,4 +537,61 @@ export async function listRecentHostedAgentJobs(
       : 0,
     href: `/agent-runner/${row.id as string}`,
   }));
+}
+
+export type HostedFinalReportSummary = {
+  id: string;
+  workflowType: HostedWorkflowType;
+  workflowLabel: string;
+  inputPreview: string;
+  summary: string;
+  keyFindings: string[];
+  spentUsdc: string;
+  receiptCount: number;
+  proofCount: number;
+  completedWithWarnings: boolean;
+  generatedAt: string;
+  href: string;
+};
+
+export async function listHostedFinalReports(
+  limit = 12,
+  workflowType?: HostedWorkflowType | null,
+) {
+  const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 50));
+  let query = getHostedClient()
+    .from("hosted_agent_jobs")
+    .select("id,workflow_type,input_preview,structured_result,spent_usdc,completed_at,receipt_ids,proof_transaction_hashes")
+    .eq("status", "completed")
+    .not("structured_result", "is", null)
+    .order("completed_at", { ascending: false, nullsFirst: false });
+  if (workflowType && isHostedWorkflowType(workflowType)) {
+    query = query.eq("workflow_type", workflowType);
+  }
+  const { data, error } = await query.limit(safeLimit);
+  if (error) throw new Error("Unable to load hosted Final Reports.");
+
+  return (data ?? []).flatMap((row) => {
+    const report = row.structured_result as HostedFinalReport | null;
+    if (!report) return [];
+    const receiptIds = Array.isArray(row.receipt_ids) ? row.receipt_ids : [];
+    const proofHashes = Array.isArray(row.proof_transaction_hashes)
+      ? row.proof_transaction_hashes
+      : [];
+    return [{
+      id: row.id as string,
+      workflowType: row.workflow_type as HostedWorkflowType,
+      workflowLabel: workflowLabel(row.workflow_type as HostedWorkflowType),
+      inputPreview: report.input?.preview ?? String(row.input_preview ?? ""),
+      summary: report.summary,
+      keyFindings: Array.isArray(report.keyFindings) ? report.keyFindings.slice(0, 3) : [],
+      spentUsdc: report.spentUsdc ?? String(row.spent_usdc ?? "0"),
+      receiptCount: receiptIds.length,
+      proofCount: proofHashes.length,
+      completedWithWarnings: Boolean(report.completedWithWarnings),
+      generatedAt:
+        report.generatedAt ?? (row.completed_at as string | null) ?? new Date(0).toISOString(),
+      href: `/agent-runner/${row.id as string}`,
+    } satisfies HostedFinalReportSummary];
+  });
 }

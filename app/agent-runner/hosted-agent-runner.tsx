@@ -16,6 +16,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useArcWallet } from "@/components/wallet/use-arc-wallet";
 import { shortenHash } from "@/lib/utils";
+import {
+  getHostedWorkflowTemplate,
+  hostedWorkflowTemplates,
+} from "@/lib/agent/workflow-templates";
 import type {
   HostedPlannerSnapshot,
   HostedRunnerDiagnostic,
@@ -23,45 +27,8 @@ import type {
   RecentHostedJob,
 } from "./types";
 
-const WORKFLOWS: Array<{
-  value: HostedWorkflowType;
-  label: string;
-  description: string;
-  task: string;
-  placeholder: string;
-}> = [
-  {
-    value: "sentiment_tone",
-    label: "Sentiment & Tone Report",
-    description: "Analyze your submitted text with deterministic paid compute and traceable paid context.",
-    task: "Analyze this text and produce a sentiment and tone workflow report.",
-    placeholder: "Paste the real text whose sentiment and tone you want to inspect…",
-  },
-  {
-    value: "builder_update",
-    label: "Builder Update Summary",
-    description: "Turn a project update into a compact, traceable structured report.",
-    task: "Analyze this builder update and extract a concise structured progress report.",
-    placeholder: "Paste a real shipping update, changelog, or project status note…",
-  },
-  {
-    value: "market_context",
-    label: "Market Context Brief",
-    description: "Structure user-supplied market context without claiming a live feed or model analysis.",
-    task: "Analyze this submitted market context and produce an evidence-labeled brief.",
-    placeholder: "Paste a market note, metrics update, or research excerpt to contextualize…",
-  },
-  {
-    value: "custom_task",
-    label: "Custom Task",
-    description: "Let the deterministic planner select only relevant services from the server allowlist.",
-    task: "Analyze my text and prepare a concise structured report with useful paid API context.",
-    placeholder: "Paste the real source text for your custom allowlisted workflow…",
-  },
-];
-
 function workflowLabel(type: HostedWorkflowType) {
-  return WORKFLOWS.find((workflow) => workflow.value === type)?.label ?? type;
+  return getHostedWorkflowTemplate(type)?.label ?? type;
 }
 
 export function HostedAgentRunner({
@@ -73,7 +40,7 @@ export function HostedAgentRunner({
 }) {
   const router = useRouter();
   const wallet = useArcWallet();
-  const initial = WORKFLOWS[0];
+  const initial = hostedWorkflowTemplates[0];
   const [workflowType, setWorkflowType] = useState<HostedWorkflowType>(initial.value);
   const [task, setTask] = useState(initial.task);
   const [inputText, setInputText] = useState("");
@@ -94,7 +61,7 @@ export function HostedAgentRunner({
   }
 
   function selectWorkflow(value: HostedWorkflowType) {
-    const workflow = WORKFLOWS.find((item) => item.value === value) ?? WORKFLOWS[0];
+    const workflow = getHostedWorkflowTemplate(value) ?? hostedWorkflowTemplates[0];
     setWorkflowType(workflow.value);
     setTask(workflow.task);
     invalidatePlan();
@@ -202,9 +169,9 @@ export function HostedAgentRunner({
             <div className="grid gap-2">
               <Label htmlFor="workflow-type">Workflow</Label>
               <select id="workflow-type" value={workflowType} onChange={(event) => selectWorkflow(event.target.value as HostedWorkflowType)} className="h-10 rounded-md border bg-background px-3 text-sm">
-                {WORKFLOWS.map((workflow) => <option key={workflow.value} value={workflow.value}>{workflow.label}</option>)}
+                {hostedWorkflowTemplates.map((workflow) => <option key={workflow.value} value={workflow.value}>{workflow.label}</option>)}
               </select>
-              <p className="text-xs text-muted-foreground">{WORKFLOWS.find((workflow) => workflow.value === workflowType)?.description}</p>
+              <p className="text-xs text-muted-foreground">{getHostedWorkflowTemplate(workflowType)?.description}</p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="hosted-task">Task</Label>
@@ -213,7 +180,7 @@ export function HostedAgentRunner({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="hosted-input">Input text</Label>
-              <textarea id="hosted-input" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} placeholder={WORKFLOWS.find((workflow) => workflow.value === workflowType)?.placeholder} minLength={20} maxLength={5000} required className="min-h-36 rounded-md border bg-background px-3 py-2 text-sm" />
+              <textarea id="hosted-input" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder} minLength={20} maxLength={5000} required className="min-h-36 rounded-md border bg-background px-3 py-2 text-sm" />
               <p className="text-xs text-muted-foreground">{inputText.length}/5000 · Required. Obvious credentials and private keys are rejected. Only a redacted preview and SHA-256 are published.</p>
             </div>
             <div className="grid gap-2">
@@ -252,7 +219,7 @@ export function HostedAgentRunner({
           </Card>
 
           <Card className="rounded-lg">
-            <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>Recent hosted workflows</CardTitle><select aria-label="Filter hosted results by workflow" value={historyFilter} onChange={(event) => void filterHistory(event.target.value as HostedWorkflowType | "all")} disabled={historyLoading} className="h-9 rounded-md border bg-background px-3 text-sm"><option value="all">All workflows</option>{WORKFLOWS.map((workflow) => <option key={workflow.value} value={workflow.value}>{workflow.label}</option>)}</select></div></CardHeader>
+            <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>Recent hosted workflows</CardTitle><select aria-label="Filter hosted results by workflow" value={historyFilter} onChange={(event) => void filterHistory(event.target.value as HostedWorkflowType | "all")} disabled={historyLoading} className="h-9 rounded-md border bg-background px-3 text-sm"><option value="all">All workflows</option>{hostedWorkflowTemplates.map((workflow) => <option key={workflow.value} value={workflow.value}>{workflow.label}</option>)}</select></div></CardHeader>
             <CardContent className="grid gap-3">
               {historyLoading ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Filtering history…</p> : history.length ? history.map((job) => <Link key={job.id} href={job.href} className="rounded-md border p-3 transition-colors hover:bg-secondary/30"><div className="flex items-center justify-between gap-3"><p className="font-medium">{workflowLabel(job.workflowType)}</p><Badge variant={job.status === "failed" ? "destructive" : "secondary"}>{job.status}</Badge></div><p className="mt-1 line-clamp-1 text-sm text-muted-foreground">{job.inputPreview || job.task}</p><p className="mt-2 text-xs text-muted-foreground">{job.spentUsdc} USDC · {job.receiptCount} receipts · {job.proofCount} Arc proofs</p></Link>) : <p className="text-sm text-muted-foreground">No hosted workflow history for this filter.</p>}
             </CardContent>

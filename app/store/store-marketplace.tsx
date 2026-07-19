@@ -136,16 +136,16 @@ export function StoreMarketplace({
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-12 sm:px-6 lg:py-16">
           <div className="flex flex-wrap items-center gap-2">
             <Badge variant="secondary">Arc Agent Commerce</Badge>
-            <Badge variant="outline">x402 API marketplace</Badge>
+            <Badge variant="outline">Developer service catalog</Badge>
           </div>
           <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">
             <div>
               <h1 className="text-4xl font-bold tracking-normal text-foreground sm:text-5xl">
-                API Store for AI Agents
+                API Store · Developer Tool
               </h1>
               <p className="mt-4 max-w-3xl text-lg leading-8 text-muted-foreground">
-                Discover x402-powered paid APIs that AI agents can buy with
-                USDC on Arc.
+                Inspect the allowlisted x402-powered APIs used by hosted
+                workflows, plus safe seller-created service listings.
               </p>
               <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
                 Each live service returns HTTP 402 until an agent pays the
@@ -156,7 +156,7 @@ export function StoreMarketplace({
               <div className="rounded-lg border bg-background p-4">
                 <div className="flex items-center gap-2 text-sm font-semibold">
                   <ShieldCheck className="size-4 text-primary" />
-                  Live marketplace layer
+                  Workflow service layer
                 </div>
                 <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
                   <div>

@@ -11,15 +11,12 @@ import {
 } from "./hosted-policy.ts";
 import { planAgentPurchases } from "./planner.ts";
 import type { ApiService, ServiceMethod } from "../services/registry.ts";
+import {
+  HOSTED_WORKFLOW_TYPES,
+  type HostedWorkflowType,
+} from "./workflow-templates.ts";
 
-export const HOSTED_WORKFLOW_TYPES = [
-  "sentiment_tone",
-  "builder_update",
-  "market_context",
-  "custom_task",
-] as const;
-
-export type HostedWorkflowType = (typeof HOSTED_WORKFLOW_TYPES)[number];
+export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType };
 
 export const HOSTED_WORKFLOW_MAX_INPUT_LENGTH = 5_000;
 export const HOSTED_WORKFLOW_MIN_INPUT_LENGTH = 20;

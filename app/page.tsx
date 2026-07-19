@@ -1,18 +1,5 @@
 /**
  * Copyright 2026 Circle Internet Group, Inc.  All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -22,98 +9,87 @@ import {
   ArrowRight,
   BadgeCheck,
   Bot,
-  ChartNoAxesCombined,
-  ClipboardCheck,
-  Fuel,
-  ListChecks,
+  CheckCircle2,
+  FileText,
+  LayoutTemplate,
   ReceiptText,
-  Sparkles,
+  ShieldCheck,
   Store,
+  Wrench,
 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { USDCAmount } from "@/components/wallet/USDCAmount";
-import { fetchRecentAgentRuns } from "@/lib/agent/runs-public";
+import { listHostedFinalReports } from "@/lib/agent/hosted-jobs";
 import { listAgentProfiles } from "@/lib/agent/passport-persistence";
-import { listAllStoreServices } from "@/lib/services/store-service-persistence";
-import { shortenHash } from "@/lib/utils";
-
-const quickActions = [
-  { href: "/agent-runner", label: "Run a real-input agent workflow", icon: Bot },
-  { href: "/demo", label: "Start guided demo", icon: Sparkles },
-  { href: "/agent-launch", label: "Fund buyer-agent", icon: Fuel },
-  { href: "/agents", label: "Agent Passports", icon: BadgeCheck },
-  { href: "/receipts", label: "Commerce Receipts", icon: ReceiptText },
-  { href: "/seller/analytics", label: "Seller Analytics", icon: ChartNoAxesCombined },
-];
+import { hostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
+import { fetchRecentReceipts } from "@/lib/commerce/receipts";
 
 export default async function Home() {
   await connection();
 
-  const [servicesResult, runsResult, profilesResult] = await Promise.allSettled([
-    listAllStoreServices(),
-    fetchRecentAgentRuns(5),
-    listAgentProfiles(5),
+  const [reportsResult, receiptsResult, profilesResult] = await Promise.allSettled([
+    listHostedFinalReports(12),
+    fetchRecentReceipts({ limit: 100 }),
+    listAgentProfiles(30),
   ]);
-
-  const services =
-    servicesResult.status === "fulfilled" ? servicesResult.value.services : [];
-  const runs = runsResult.status === "fulfilled" ? runsResult.value : [];
+  const reports = reportsResult.status === "fulfilled" ? reportsResult.value : [];
+  const receipts = receiptsResult.status === "fulfilled" ? receiptsResult.value : [];
   const profiles = profilesResult.status === "fulfilled" ? profilesResult.value : [];
-  const completedRuns = runs.filter((run) => run.status === "completed").length;
-  const spent = runs.reduce((sum, run) => sum + Number(run.spent_usdc || 0), 0);
+  const verifiedProofs = receipts.filter(
+    (receipt) => receipt.onchainProof?.status === "verified",
+  ).length;
+  const spent = reports.reduce(
+    (sum, report) => sum + Number(report.spentUsdc || 0),
+    0,
+  );
 
   return (
     <main className="min-h-screen bg-background">
       <section className="border-b bg-secondary/20">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-12 sm:px-6 xl:grid-cols-[1.08fr_0.92fr] xl:items-center">
+        <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-12 sm:px-6 xl:grid-cols-[1.12fr_0.88fr] xl:items-center">
           <div className="min-w-0">
-            <p className="mb-4 text-xs font-bold uppercase tracking-[0.18em] text-primary">
-              Arc Command Center
-            </p>
+            <Badge className="mb-4">Workflow-first agent commerce</Badge>
             <h1 className="max-w-4xl text-4xl font-bold leading-[1.05] tracking-normal text-foreground sm:text-6xl">
-              Agent commerce control center for paid APIs on Arc
+              Real input in. Verified agent work out.
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">
-              Submit real text to a guarded hosted buyer-agent, or use
-              the advanced local wallet flow, and inspect the public proof trail:
-              timelines, receipts, passports, and seller analytics.
+              Submit real input → the hosted agent selects and purchases paid APIs
+              through x402 → a Final Report is generated → receipts are created →
+              proofs are verified in the app-owned registry on Arc.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
                 <Link href="/agent-runner">
                   <Bot />
-                  Run a real-input agent workflow
+                  Run Workflow
                 </Link>
               </Button>
               <Button asChild size="lg" variant="secondary">
-                <Link href="/demo">
-                  <Sparkles />
-                  Guided demo
+                <Link href="/workflows">
+                  <LayoutTemplate />
+                  Browse templates
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
-                <Link href="/store">
-                  <Store />
-                  Open Store
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href="/agent-setup">
-                  <ClipboardCheck />
-                  Local setup
+                <Link href="/results">
+                  <FileText />
+                  View Final Reports
                 </Link>
               </Button>
             </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              Arc Testnet · project-owned payer wallet · maximum 0.005 USDC ·
+              local CLI available as an advanced operator flow.
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             {[
-              ["API Store", services.length.toString(), "services"],
-              ["Agent Runs", `${runs.length} total`, `${completedRuns} done`],
-              ["Spent", spent.toFixed(4), "USDC tracked"],
-              ["Agents", profiles.length.toString(), "active passports"],
+              ["Final Reports", reports.length.toString(), "hosted workflows"],
+              ["Paid calls", receipts.length.toString(), "commerce receipts"],
+              ["Arc proofs", verifiedProofs.toString(), "verified on Arc"],
+              ["Tracked spend", spent.toFixed(4), "USDC in reports"],
             ].map(([label, value, detail]) => (
               <Card className="command-card rounded-lg" key={label}>
                 <CardContent className="p-5">
@@ -129,38 +105,41 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6 xl:grid-cols-[1fr_0.85fr]">
+      <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6 xl:grid-cols-[1fr_0.9fr]">
         <Card className="command-card rounded-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Store className="size-5" />
-              API Store Preview
-            </CardTitle>
+            <div className="flex items-center justify-between gap-3">
+              <CardTitle className="flex items-center gap-2">
+                <LayoutTemplate className="size-5" />
+                Workflow Templates
+              </CardTitle>
+              <Badge variant="secondary">real input</Badge>
+            </div>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {(services.length > 0 ? services.slice(0, 5) : []).map((service) => (
+            {hostedWorkflowTemplates.slice(0, 3).map((template) => (
               <Link
-                key={service.slug}
-                href={`/store/${service.slug}`}
+                key={template.value}
+                href="/agent-runner"
                 className="grid min-w-0 gap-3 rounded-md border bg-background/60 p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:grid-cols-[1fr_auto]"
               >
                 <div className="min-w-0">
-                  <p className="truncate font-semibold">{service.name}</p>
-                  <p className="mt-1 truncate text-xs text-muted-foreground">
-                    {service.endpoint}
+                  <p className="font-semibold">{template.label}</p>
+                  <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">
+                    {template.description}
+                  </p>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {template.services.map((service) => service.name).join(" + ")}
                   </p>
                 </div>
-                <div className="flex items-center gap-3 md:justify-end">
-                  <span className="rounded-md border px-2 py-1 font-mono text-xs">
-                    {service.method}
-                  </span>
-                  <USDCAmount value={service.priceUsd} />
-                </div>
+                <span className="font-mono text-xs text-muted-foreground md:text-right">
+                  est. {template.estimatedSpendUsdc.toFixed(4)} USDC
+                </span>
               </Link>
             ))}
             <Button asChild variant="outline">
-              <Link href="/store">
-                Browse all services
+              <Link href="/workflows">
+                View all templates
                 <ArrowRight />
               </Link>
             </Button>
@@ -170,34 +149,39 @@ export default async function Home() {
         <Card className="command-card rounded-lg">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <ListChecks className="size-5" />
-              Recent Agent Runs
+              <FileText className="size-5" />
+              Recent Results
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
-            {runs.slice(0, 3).map((run) => (
-              <Link
-                key={run.id}
-                href={`/runs/${run.id}`}
-                className="grid min-w-0 gap-3 rounded-md border bg-background/60 p-4 transition-colors hover:border-primary/40 hover:bg-primary/5"
-              >
-                <div className="flex min-w-0 items-center justify-between gap-3">
-                  <StatusBadge status={run.status} />
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {shortenHash(run.id, 4)}
-                  </span>
-                </div>
-                <p className="line-clamp-2 text-sm font-medium">{run.task}</p>
-                <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                  <span>{run.spent_usdc} USDC</span>
-                  <span>{run.paid_count ?? 0} paid</span>
-                  <span>{run.step_count ?? 0} steps</span>
-                </div>
-              </Link>
-            ))}
+            {reports.length ? (
+              reports.slice(0, 3).map((report) => (
+                <Link
+                  key={report.id}
+                  href={report.href}
+                  className="grid min-w-0 gap-3 rounded-md border bg-background/60 p-4 transition-colors hover:border-primary/40 hover:bg-primary/5"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <Badge variant="secondary">{report.workflowLabel}</Badge>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {report.spentUsdc} USDC
+                    </span>
+                  </div>
+                  <p className="line-clamp-2 text-sm font-medium">{report.summary}</p>
+                  <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+                    <span>{report.receiptCount} receipts</span>
+                    <span>{report.proofCount} Arc proofs</span>
+                  </div>
+                </Link>
+              ))
+            ) : (
+              <p className="rounded-md border p-4 text-sm text-muted-foreground">
+                The first completed hosted workflow will appear here as a Final Report.
+              </p>
+            )}
             <Button asChild variant="outline">
-              <Link href="/runs">
-                View all runs
+              <Link href="/results">
+                View all results
                 <ArrowRight />
               </Link>
             </Button>
@@ -207,15 +191,24 @@ export default async function Home() {
 
       <section className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6">
         <Card className="rounded-lg">
-          <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:flex-wrap">
-            {quickActions.map(({ href, label, icon: Icon }) => (
-              <Button key={href} asChild variant="outline">
-                <Link href={href}>
-                  <Icon className="size-4" />
-                  {label}
-                </Link>
-              </Button>
-            ))}
+          <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
+            <div>
+              <p className="flex items-center gap-2 font-semibold">
+                <CheckCircle2 className="size-5 text-primary" />
+                Proof trail included
+              </p>
+              <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                Every successful paid call contributes to Results, Activity,
+                Commerce Receipts, Agent Passports, seller analytics, and Arc Proofs.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline"><Link href="/proofs"><ShieldCheck />Arc Proofs</Link></Button>
+              <Button asChild variant="outline"><Link href="/receipts"><ReceiptText />Receipts</Link></Button>
+              <Button asChild variant="outline"><Link href="/agents"><BadgeCheck />Passports ({profiles.length})</Link></Button>
+              <Button asChild variant="outline"><Link href="/developer-tools"><Wrench />Developer Tools</Link></Button>
+              <Button asChild variant="outline"><Link href="/seller"><Store />Seller</Link></Button>
+            </div>
           </CardContent>
         </Card>
       </section>

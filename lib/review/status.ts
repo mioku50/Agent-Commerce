@@ -57,6 +57,16 @@ export type ReviewHealthStatus = {
     latestHostedWorkflowVerified: boolean;
     hostedRealInputWorkflowsEnabled: boolean;
     hostedInputPrivacyEnabled: boolean;
+    workflowFirstProductEnabled: boolean;
+    publicWorkflowPagesEnabled: boolean;
+  };
+  productPositioning: {
+    mode: "workflow-first";
+    primaryRoute: "/agent-runner";
+    templatesRoute: "/workflows";
+    resultsRoute: "/results";
+    proofsRoute: "/proofs";
+    developerToolsRoute: "/developer-tools";
   };
   recommendedCommand: string;
   recentFailedRuns: PublicAgentRun[];
@@ -192,6 +202,16 @@ export async function getReviewHealthStatus(
         hostedRunner.supportedWorkflows.includes("market_context"),
       hostedInputPrivacyEnabled:
         hostedRunner.inputPersistence === "redacted_preview_and_sha256_only",
+      workflowFirstProductEnabled: true,
+      publicWorkflowPagesEnabled: true,
+    },
+    productPositioning: {
+      mode: "workflow-first",
+      primaryRoute: "/agent-runner",
+      templatesRoute: "/workflows",
+      resultsRoute: "/results",
+      proofsRoute: "/proofs",
+      developerToolsRoute: "/developer-tools",
     },
     recommendedCommand: RECOMMENDED_REVIEWER_COMMAND,
     recentFailedRuns,

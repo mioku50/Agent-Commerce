@@ -39,6 +39,16 @@ type ReviewStatus = {
     failedProofCount?: number;
     hostedRealInputWorkflowsEnabled?: boolean;
     hostedInputPrivacyEnabled?: boolean;
+    workflowFirstProductEnabled?: boolean;
+    publicWorkflowPagesEnabled?: boolean;
+  };
+  productPositioning?: {
+    mode?: string;
+    primaryRoute?: string;
+    templatesRoute?: string;
+    resultsRoute?: string;
+    proofsRoute?: string;
+    developerToolsRoute?: string;
   };
   proofRegistry?: {
     registryAddress?: string | null;
@@ -256,6 +266,19 @@ async function checkReviewStatus(baseUrl: string) {
         json.checks?.hostedInputPrivacyEnabled === true,
       detail: `workflows=${json.checks?.hostedRealInputWorkflowsEnabled === true ? "ready" : "missing"} privacy=${json.checks?.hostedInputPrivacyEnabled === true ? "ready" : "missing"}`,
     },
+    {
+      name: "review status exposes the workflow-first product surfaces",
+      ok:
+        json.checks?.workflowFirstProductEnabled === true &&
+        json.checks?.publicWorkflowPagesEnabled === true &&
+        json.productPositioning?.mode === "workflow-first" &&
+        json.productPositioning?.primaryRoute === "/agent-runner" &&
+        json.productPositioning?.templatesRoute === "/workflows" &&
+        json.productPositioning?.resultsRoute === "/results" &&
+        json.productPositioning?.proofsRoute === "/proofs" &&
+        json.productPositioning?.developerToolsRoute === "/developer-tools",
+      detail: `mode=${json.productPositioning?.mode ?? "missing"} primary=${json.productPositioning?.primaryRoute ?? "missing"}`,
+    },
   ] satisfies CheckResult[];
 
   if (requiresVerifiedProof()) {
@@ -414,6 +437,10 @@ async function main() {
     "/review",
     "/demo",
     "/agent-runner",
+    "/workflows",
+    "/results",
+    "/proofs",
+    "/developer-tools",
     "/store",
     "/agent-control",
     "/agent-launch",

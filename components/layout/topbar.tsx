@@ -37,7 +37,7 @@ export function Topbar({
                 Arc Agent Commerce
               </span>
               <span className="mt-1 inline-flex max-w-full items-center gap-2 text-xs text-muted-foreground">
-                <span className="truncate">x402 API Store</span>
+                <span className="truncate">Hosted paid API workflows</span>
                 <span className="hidden rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 font-semibold text-emerald-300 sm:inline-flex">
                   <span className="mr-1.5 size-1.5 rounded-full bg-emerald-300" />
                   Arc Testnet

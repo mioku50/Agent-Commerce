@@ -800,6 +800,28 @@ export async function listAgentProfiles(limit = 30) {
   return (data ?? []) as unknown as PublicAgentProfile[];
 }
 
+export async function countVerifiedAgentProofs(wallets: string[]) {
+  const normalizedWallets = new Set(wallets.map(normalizeAgentWallet));
+  const counts = new Map<string, number>();
+  if (normalizedWallets.size === 0) return counts;
+
+  const client = getPublicSupabase();
+  const { data, error } = await client
+    .from("payment_events")
+    .select("payer,onchain_status")
+    .eq("onchain_status", "verified")
+    .limit(5_000);
+  if (error) throw new Error(error.message);
+
+  for (const row of (data ?? []) as Array<{ payer: string | null }>) {
+    if (!row.payer) continue;
+    const wallet = normalizeAgentWallet(row.payer);
+    if (!normalizedWallets.has(wallet)) continue;
+    counts.set(wallet, (counts.get(wallet) ?? 0) + 1);
+  }
+  return counts;
+}
+
 async function fetchFallbackPassport(
   client: SupabaseClient,
   wallet: string,

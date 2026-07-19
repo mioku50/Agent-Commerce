@@ -3,18 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   BadgeCheck,
   Bot,
-  ChartNoAxesCombined,
-  FlaskConical,
-  Fuel,
+  FileText,
   Github,
   House,
-  KeyRound,
-  ListChecks,
-  PlusCircle,
+  LayoutTemplate,
   ReceiptText,
+  ShieldCheck,
   Store,
+  Wrench,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -28,32 +27,18 @@ type NavItem = {
 
 const navSections: Array<{ label: string; items: NavItem[] }> = [
   {
-    label: "Home",
-    items: [{ href: "/", label: "Dashboard", icon: House }],
-  },
-  {
-    label: "Marketplace",
+    label: "Workflow Product",
     items: [
-      { href: "/store", label: "API Store", icon: Store },
-      { href: "/agent-control", label: "Agent Control", icon: Bot },
-      { href: "/agent-launch", label: "Agent Launch", icon: Fuel },
-      { href: "/agent-setup", label: "Agent Setup", icon: FlaskConical, badge: "CLI" },
-    ],
-  },
-  {
-    label: "History",
-    items: [
-      { href: "/runs", label: "Agent Runs", icon: ListChecks },
+      { href: "/", label: "Dashboard", icon: House },
+      { href: "/agent-runner", label: "Run Workflow", icon: Bot },
+      { href: "/workflows", label: "Workflow Templates", icon: LayoutTemplate },
+      { href: "/results", label: "Results", icon: FileText },
+      { href: "/runs", label: "Activity", icon: Activity },
+      { href: "/proofs", label: "Arc Proofs", icon: ShieldCheck },
       { href: "/agents", label: "Agent Passports", icon: BadgeCheck },
-      { href: "/receipts", label: "Receipts", icon: ReceiptText },
-    ],
-  },
-  {
-    label: "Seller",
-    items: [
-      { href: "/seller/analytics", label: "Analytics", icon: ChartNoAxesCombined },
-      { href: "/seller/services/new", label: "Create Service", icon: PlusCircle },
-      { href: "/login", label: "Seller Login", icon: KeyRound },
+      { href: "/receipts", label: "Commerce Receipts", icon: ReceiptText },
+      { href: "/developer-tools", label: "Developer Tools", icon: Wrench },
+      { href: "/seller", label: "Seller", icon: Store },
     ],
   },
 ];
@@ -180,7 +165,7 @@ export function MobileSidebar({
           </span>
           <div>
             <p className="text-sm font-semibold">Arc Agent Commerce</p>
-            <p className="text-xs text-muted-foreground">Command Center</p>
+            <p className="text-xs text-muted-foreground">Hosted workflow reports</p>
           </div>
         </div>
         <div className="grid gap-5">
