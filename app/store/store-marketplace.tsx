@@ -66,9 +66,10 @@ const methodLabels: Record<ServiceMethod, string> = {
 };
 
 const sourceLabels: Record<ServiceSourceType, string> = {
-  static: "Official sample",
-  seller_mock: "Seller-created",
-  external_placeholder: "External placeholder",
+  static: "Internal deterministic",
+  provider_backed: "Live Provider",
+  seller_mock: "Seller-created mock",
+  external_placeholder: "Seller-created placeholder",
 };
 
 const howItWorks = [
@@ -114,7 +115,8 @@ export function StoreMarketplace({
         (method === "all" || service.method === method) &&
         (source === "all" ||
           (source === "official" && service.sourceType === "static") ||
-          (source === "seller" && service.sourceType !== "static"))
+          (source === "provider" && service.sourceType === "provider_backed") ||
+          (source === "seller" && (service.sourceType === "seller_mock" || service.sourceType === "external_placeholder")))
       );
     });
   }, [category, method, search, services, source, status]);
@@ -166,7 +168,7 @@ export function StoreMarketplace({
                   <div>
                     <dt className="text-muted-foreground">Seller-created</dt>
                     <dd className="font-mono text-lg">
-                      {services.filter((service) => service.sourceType !== "static").length}
+                      {services.filter((service) => service.sourceType === "seller_mock" || service.sourceType === "external_placeholder").length}
                     </dd>
                   </div>
                 </dl>
@@ -266,7 +268,8 @@ export function StoreMarketplace({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All sources</SelectItem>
-              <SelectItem value="official">Official</SelectItem>
+              <SelectItem value="official">Internal deterministic</SelectItem>
+              <SelectItem value="provider">Live Provider</SelectItem>
               <SelectItem value="seller">Seller-created</SelectItem>
             </SelectContent>
           </Select>

@@ -57,7 +57,7 @@ Available hosted workflows:
 
 - **Sentiment & Tone Report** — deterministic keyword and punctuation heuristics over user text, plus traceable paid API results;
 - **Builder Update Summary** — deterministic delivery/risk signal extraction from a project update;
-- **Market Context Brief** — an evidence-labeled brief limited to user-supplied market context and actual paid API responses;
+- **Market Context Brief** — combines user context with a normalized live BTC/USD, ETH/USD, or SOL/USD price sourced from Pyth Network;
 - **Custom Task** — the shared planner selects relevant services from the fixed server allowlist.
 
 When no LLM is configured, the result is explicitly labeled **Structured workflow result (no LLM configured)**. The application never presents deterministic aggregation as model-generated analysis.
@@ -69,7 +69,7 @@ The application then:
 3. binds idempotency to the key plus workflow, input hash, task, and budget;
 4. applies cooldown, rate-limit, and active-job checks;
 5. plans the purchase through the shared agent execution core;
-6. calls up to three allowlisted x402-protected services within the `0.005 USDC` total cap, passing the ephemeral source text to the Text Analyzer instead of a fixed demo value;
+6. calls up to three allowlisted x402-protected services within the `0.005 USDC` total cap, passing ephemeral source text to the Text Analyzer and an allowlisted symbol to the Pyth-backed service;
 7. pays with the project-owned Arc Testnet payer wallet;
 8. records the Agent Run, purchase step, payment event, and receipt;
 9. updates the payer wallet's Agent Passport and seller analytics;
@@ -108,6 +108,26 @@ The primary navigation is organized around the user outcome:
 Legacy routes remain live so existing reviewer links, API clients, and smoke tests do not break.
 
 ## Verified Production Example
+
+Phase 23 was validated with a real browser-triggered **Market Context Brief** that selected the allowlisted Pyth-backed service. Arc Agent Commerce charged the hosted buyer-agent through x402; the normalized underlying price came from authenticated Pyth Hermes. Idempotency replay returned the same job, receipts, and proof transactions without another payment.
+
+| Proof | Value |
+| --- | --- |
+| Hosted result | [`e0b9cdd0-314f-4d1a-90e2-6aaaf65632d2`](https://agent-commerce-six.vercel.app/agent-runner/e0b9cdd0-314f-4d1a-90e2-6aaaf65632d2) |
+| Agent Run | [`f9a092b5-b418-4fd9-a26f-885b810dbcbd`](https://agent-commerce-six.vercel.app/runs/f9a092b5-b418-4fd9-a26f-885b810dbcbd) |
+| Pyth receipt | [`6667cce0-854b-4560-ab39-530dd0e46615`](https://agent-commerce-six.vercel.app/receipts/6667cce0-854b-4560-ab39-530dd0e46615) |
+| Symbol | `BTC/USD` |
+| Live price · confidence | `64436.01519547` · `±20.9096521` |
+| Provider publish time | `2026-07-19T14:00:20.000Z` |
+| Server fetch time | `2026-07-19T14:00:20.524Z` |
+| Pyth service payment | `0.001 USDC` |
+| Total workflow spend | `0.0013 USDC` |
+| Pyth Arc proof | [`0xdfb03cf91b61ed07d21bb7d9076cc31b85dc78e60cfae75c606befa9581f82e2`](https://testnet.arcscan.app/tx/0xdfb03cf91b61ed07d21bb7d9076cc31b85dc78e60cfae75c606befa9581f82e2) |
+| Registry read | `verified`, block `52618688`, receipt hash `0x4ffd…24a8` |
+
+The provider receipt appears in Results, the Agent Run timeline, the hosted payer Passport, and seller analytics. `GET /api/proofs/6667cce0-854b-4560-ab39-530dd0e46615` and `GET /api/proofs/transactions/0xdfb…f82e2` both return the same verified registry record.
+
+Historical Phase 21 real-input validation:
 
 Phase 21 was validated with a real browser-submitted **Market Context Brief**. The paid Text Analyzer measured the exact normalized user input (`20` words, `136` characters), while the status API and Agent DB exposed only its safe preview and SHA-256.
 
@@ -193,7 +213,7 @@ Every successful paid execution can produce:
 
 ### API Store (developer tool)
 
-The API Store remains the service catalog and discovery layer. It includes official sample services and safe seller-created mock services. Arbitrary external API proxying is intentionally disabled.
+The API Store remains the service catalog and discovery layer. It explicitly labels **Live Provider**, **Internal deterministic**, and **Seller-created mock** services. `Live Market Price` is the first provider-backed listing: Arc Agent Commerce charges the agent `0.001 USDC` through x402, then obtains and normalizes the underlying market data from Pyth Network. The agent does not pay Pyth directly. Arbitrary URLs, feed IDs, upstream hosts, and external API proxying remain disabled.
 
 ### Advanced local mode
 
@@ -211,6 +231,9 @@ flowchart LR
     P --> S[Allowlisted API Store service]
     S --> X[x402 + Circle Gateway]
     X --> A[Paid API response]
+    X --> H[Arc Agent Commerce Pyth adapter]
+    H --> Y[Pyth Hermes authenticated API]
+    Y --> A
     A --> F[Deterministic Final Report]
     F --> D
     D --> T[Run timeline]
@@ -305,6 +328,7 @@ Useful public APIs:
 | `GET /api/store/services` | Machine-readable service discovery |
 | `POST /api/hosted-agent/plan` | Validate input and preview the exact allowlisted plan/cost |
 | `POST /api/hosted-agent/jobs` | Create or replay a hosted job |
+| `POST /api/provider/pyth/price` | x402-protected normalized Pyth price for BTC/USD, ETH/USD, or SOL/USD |
 | `GET /api/hosted-agent/jobs?workflowType=<type>` | Recent hosted workflow history, optionally filtered by workflow |
 | `GET /api/hosted-agent/jobs/<id>` | Read hosted job progress and proof links |
 | `GET /api/receipts` | Recent commerce receipts |
@@ -316,14 +340,16 @@ Useful public APIs:
 ## Review the Project in Two Minutes
 
 1. Open the [hosted runner](https://agent-commerce-six.vercel.app/agent-runner).
-2. Choose Sentiment & Tone, Builder Update Summary, or Market Context Brief; paste a real non-sensitive input; preview the two-service `0.0013 USDC` plan; and launch it.
+2. Choose Market Context Brief, ask for BTC/USD, ETH/USD, or SOL/USD with real non-sensitive context, preview the two-service `0.0013 USDC` plan, and launch it.
 3. Watch the job progress to `completed`, inspect the Final Report, and confirm every receipt is `Verified on Arc`.
 4. Open the generated Agent Run, receipt, Passport, and Arcscan transaction.
 5. Open the [review page](https://agent-commerce-six.vercel.app/review) for the current production status.
 6. Confirm that an unpaid protected request returns HTTP 402:
 
 ```bash
-curl -i https://agent-commerce-six.vercel.app/api/premium/quote
+curl -i -X POST https://agent-commerce-six.vercel.app/api/provider/pyth/price \
+  -H 'Content-Type: application/json' \
+  -d '{"symbol":"BTC/USD"}'
 ```
 
 7. Run the public production smoke:
@@ -358,9 +384,14 @@ Do not commit `.env.local`, private keys, service-role keys, JWT secrets, or dat
 | Database migrations | `AGENT_DB_POSTGRES_URL_NON_POOLING` |
 | Proof registry | `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS`, server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY` |
 | Proof recovery | server-only `AGENT_COMMERCE_PROOF_RECOVERY_TOKEN` |
+| External provider | server-only Vercel Sensitive `PYTH_API_KEY` |
 | Local buyer agent | `AGENT_PRIVATE_KEY`, optional funding and Gateway reuse controls |
 
-The hosted payer key, rate-limit secret, Supabase privileged credentials, and proof attester key must exist only in server-side Sensitive environment variables.
+The hosted payer key, rate-limit secret, Supabase privileged credentials, proof attester key, and `PYTH_API_KEY` must exist only in server-side Sensitive environment variables. The public status API reports only whether Pyth is configured and its fixed symbol allowlist; it never returns the key, authorization header, upstream raw response, or credential-bearing metadata.
+
+### Pyth provider boundary
+
+The authenticated Hermes adapter uses a fixed upstream host and the server-side feed mapping for `BTC/USD`, `ETH/USD`, and `SOL/USD`. It applies a request timeout, limited retry/backoff for provider failures and rate limits, a five-second server cache, response-shape checks, and stale-data detection. Provider retries happen only after the x402 request reaches the Arc Agent Commerce server; the buyer's paid request is never automatically retried, avoiding duplicate settlement. A provider failure is reported honestly and does not erase useful results from other services.
 
 ## Advanced Local Buyer-Agent
 
@@ -389,6 +420,7 @@ The migration runner applies files in lexical order, records applied versions, a
 
 ```bash
 # Application
+npm run provider:test
 npm run lint
 npm run build
 npm run review:smoke
@@ -420,6 +452,7 @@ A paid browser smoke must never run silently. It requires the explicit `--confir
 - USDC;
 - x402 core and EVM packages;
 - Circle x402 batching / Gateway flow;
+- authenticated Pyth Hermes provider adapter;
 - viem;
 - Supabase through the Vercel integration;
 - Foundry for the proof registry;
@@ -433,12 +466,12 @@ A paid browser smoke must never run silently. It requires the explicit `--confir
 - the registry is custom and unaudited;
 - seller-created external API proxying is disabled;
 - seller publishing and settlement configuration are still prototype-level;
-- deterministic aggregation is intentionally limited and does not replace an LLM or live market feed;
+- deterministic aggregation is intentionally limited and does not replace an LLM; Market Context uses a real provider response but does not invent analysis or prices;
 - full source input cannot be recovered from Agent DB by design.
 
 ## Next Direction
 
-Phase 21 completes the real-input hosted workflow layer. Future work can focus on:
+Phase 23 adds the first real external data provider. Future work can focus on:
 
 - optional model-backed synthesis that is explicitly labeled and never implied when unavailable;
 - additional low-cost allowlisted data and compute services;

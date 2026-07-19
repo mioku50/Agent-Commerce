@@ -5,9 +5,10 @@ export const DEFAULT_AGENT_TASK =
 export const DEFAULT_AGENT_BUDGET_USDC = 0.0113;
 
 const PURCHASE_ORDER = [
+  "text-analyzer",
+  "pyth-market-price",
   "premium-quote",
   "market-snapshot",
-  "text-analyzer",
   "agent-task",
 ] as const;
 
@@ -129,7 +130,11 @@ function serviceReasonForSelection(service: ApiService, task: string) {
   }
 
   if (service.slug === "market-snapshot") {
-    return "The task asks for market, data, context, research, or report material, and this service provides paid market data at a reasonable cost.";
+    return "The compatibility dataset is useful only for deterministic developer testing.";
+  }
+
+  if (service.slug === "pyth-market-price") {
+    return "The task requires current crypto market context, so the agent buys a normalized live price sourced from Pyth Network.";
   }
 
   if (service.slug === "text-analyzer") {
@@ -152,9 +157,14 @@ function shouldSelectLiveService(service: ApiService, task: string, budget: numb
     return false;
   }
 
-  if (service.slug === "premium-quote") return true;
+  if (service.slug === "premium-quote") {
+    return !matches(task, /\b(market|crypto|bitcoin|btc|ethereum|ether|eth|solana|sol|token price)\b/);
+  }
+  if (service.slug === "pyth-market-price") {
+    return matches(task, /\b(market|crypto|bitcoin|btc|ethereum|ether|eth|solana|sol|price|token)\b/);
+  }
   if (service.slug === "market-snapshot") {
-    return matches(task, /\b(market|data|context|report|research|snapshot|financial)\b/);
+    return matches(task, /\b(demo dataset|fixture|integration test)\b/);
   }
   if (service.slug === "text-analyzer") {
     return matches(task, /\b(text|summary|summarize|analysis|analyze|report|draft|write|sentiment|tone)\b/);
@@ -176,7 +186,7 @@ function hasPreferredCategory(service: ApiService, preferredCategories: string[]
 }
 
 function isSellerCreated(service: ApiService) {
-  return service.sourceType !== "static";
+  return service.sourceType === "seller_mock" || service.sourceType === "external_placeholder";
 }
 
 export function planAgentPurchases(input: AgentPlanInput): AgentPlanResult {

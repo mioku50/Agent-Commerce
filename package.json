@@ -17,6 +17,7 @@
     "db:verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/agent-db-verify.mts",
     "proofs:recover": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/recover-onchain-proofs.mts",
     "proofs:smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/proof-registry-smoke.mts",
+    "provider:test": "node --experimental-transform-types --no-warnings scripts/pyth-provider-tests.mts",
     "hosted:test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/hosted-runner-db-tests.mts",
     "hosted:workflow-test": "node --experimental-transform-types --no-warnings scripts/hosted-workflow-tests.mts",
     "hosted:recover": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/recover-hosted-agent-job.mts",

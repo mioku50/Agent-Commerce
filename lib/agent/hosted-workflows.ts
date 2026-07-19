@@ -222,7 +222,7 @@ export function defaultWorkflowTask(workflowType: HostedWorkflowType) {
     return "Analyze the submitted builder update and produce a concise structured report.";
   }
   if (workflowType === "market_context") {
-    return "Analyze the submitted market context and produce a concise evidence-labeled brief.";
+    return "Analyze the submitted crypto market context with live provider-backed data and produce a concise evidence-labeled brief.";
   }
   return "Analyze the request with useful allowlisted paid API services.";
 }
@@ -235,7 +235,7 @@ export function effectiveWorkflowTask(input: HostedWorkflowRequest) {
     return `${input.task} Use paid text analysis and concise research context for the builder update report.`;
   }
   if (input.workflowType === "market_context") {
-    return `${input.task} Use paid text analysis and concise context for a market report based only on the submitted source.`;
+    return `${input.task} Use paid text analysis and a current BTC, ETH, or SOL price sourced from Pyth Network. Never invent provider data.`;
   }
   return input.task;
 }
@@ -313,6 +313,9 @@ function findingForResult(result: BuyerAgentServiceResult) {
   if (result.serviceSlug === "premium-quote" && response?.quote) {
     return `Premium Quote returned: ${String(response.quote)}`;
   }
+  if (result.serviceSlug === "pyth-market-price" && response) {
+    return `Pyth Network returned ${String(response.symbol ?? "the requested symbol")} at ${String(response.price ?? "unavailable")} ± ${String(response.confidence ?? "unavailable")}, published ${String(response.publishTime ?? "unknown")} and fetched ${String(response.fetchedAt ?? "unknown")}; Arc Agent Commerce charged ${String(result.amountUsdc ?? response.paidAmountUsdc ?? "unknown")} USDC.`;
+  }
   return `${result.serviceName} returned a structured paid API result.`;
 }
 
@@ -369,7 +372,7 @@ function deterministicWorkflowFindings(request: HostedWorkflowRequest) {
     return [
       `Input-supplied market context contains ${numericSignals.length} numeric signal(s) and ${directionalSignals.length} directional marker(s).`,
       `Deterministic risk scan found ${riskSignals.length} market-risk marker(s)${riskSignals.length ? `: ${riskSignals.join(", ")}` : "."}`,
-      "No live market feed or model inference was used; conclusions are limited to the submitted source and paid API responses.",
+      "Deterministic aggregation combines the submitted context with actual paid API responses; no model inference is claimed.",
     ];
   }
   return [

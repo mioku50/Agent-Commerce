@@ -25,6 +25,7 @@ export type ServiceStatus =
   | "disabled";
 export type ServiceSourceType =
   | "static"
+  | "provider_backed"
   | "seller_mock"
   | "external_placeholder";
 
@@ -99,11 +100,11 @@ export const serviceRegistry = [
   {
     id: "market-snapshot",
     slug: "market-snapshot",
-    name: "Market Snapshot",
-    shortDescription: "A paid market dataset for lightweight analysis flows.",
+    name: "Demo Dataset",
+    shortDescription: "An internal deterministic dataset retained for compatibility.",
     longDescription:
-      "Market Snapshot returns a compact dataset that an agent can use as paid context before producing a recommendation, report, or routing decision. It represents the store pattern for data APIs sold by request instead of by subscription.",
-    category: "Market Data",
+      "Demo Dataset returns a fixed internal dataset for integration testing. It is not live market data and is retained so existing routes and links continue to work.",
+    category: "Demo Data",
     method: "GET",
     endpoint: "/api/premium/dataset",
     priceLabel: "0.01 USDC",
@@ -144,9 +145,78 @@ export const serviceRegistry = [
       generated_at: "2026-05-18T10:00:00.000Z",
     },
     exampleUseCase:
-      "An agent purchases a market context snapshot before deciding what to summarize, compare, or escalate to a human operator.",
+      "A developer purchases a deterministic fixture while testing an x402 integration.",
     agentReasoningHint:
-      "Use this service when fresh paid data is more valuable than relying on cached or guessed market context.",
+      "Use only for deterministic developer testing; never present this response as live market data.",
+  },
+  {
+    id: "pyth-market-price",
+    slug: "pyth-market-price",
+    name: "Live Market Price",
+    shortDescription: "Provider-backed BTC, ETH, and SOL prices from Pyth Network.",
+    longDescription:
+      "Arc Agent Commerce charges the agent for a provider-backed API service through x402. The server then fetches and normalizes current price data sourced from Pyth Network. The agent pays Arc Agent Commerce, not Pyth Network.",
+    category: "Market Data",
+    method: "POST",
+    endpoint: "/api/provider/pyth/price",
+    priceLabel: "0.001 USDC",
+    priceUsd: 0.001,
+    status: "live",
+    sourceType: "provider_backed",
+    isPaid: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        symbol: {
+          type: "string",
+          enum: ["BTC/USD", "ETH/USD", "SOL/USD"],
+        },
+      },
+      required: ["symbol"],
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        provider: { type: "string", const: "Pyth Network" },
+        symbol: { type: "string" },
+        price: { type: "string" },
+        confidence: { type: "string" },
+        publishTime: { type: "string", format: "date-time" },
+        fetchedAt: { type: "string", format: "date-time" },
+        sourceStatus: { type: "string", const: "live" },
+        paidAmountUsdc: { type: "string", const: "0.001" },
+      },
+      required: [
+        "provider",
+        "symbol",
+        "price",
+        "confidence",
+        "publishTime",
+        "fetchedAt",
+        "sourceStatus",
+        "paidAmountUsdc",
+      ],
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/provider/pyth/price",
+      body: { symbol: "BTC/USD" },
+    },
+    exampleResponse: {
+      provider: "Pyth Network",
+      symbol: "BTC/USD",
+      price: "68432.12",
+      confidence: "1.25",
+      publishTime: "2026-07-19T12:00:00.000Z",
+      fetchedAt: "2026-07-19T12:00:02.000Z",
+      sourceStatus: "live",
+      paidAmountUsdc: "0.001",
+    },
+    exampleUseCase:
+      "A hosted agent buys current BTC, ETH, or SOL context before producing a market brief with traceable receipts and Arc proofs.",
+    agentReasoningHint:
+      "Use for tasks that require current BTC, ETH, SOL, crypto price, or market context. Never invent a price if the provider is unavailable.",
   },
   {
     id: "text-analyzer",

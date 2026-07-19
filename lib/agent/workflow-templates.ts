@@ -21,7 +21,7 @@ export type HostedWorkflowTemplate = {
   placeholder: string;
   estimatedSpendUsdc: number;
   services: Array<{
-    slug: "text-analyzer" | "premium-quote";
+    slug: "text-analyzer" | "premium-quote" | "pyth-market-price";
     name: string;
     priceUsdc: number;
     purpose: string;
@@ -41,6 +41,21 @@ const commonServices: HostedWorkflowTemplate["services"] = [
     name: "Premium Quote",
     priceUsdc: 0.001,
     purpose: "Adds a paid, traceable research-context result to the report.",
+  },
+];
+
+const marketServices: HostedWorkflowTemplate["services"] = [
+  {
+    slug: "text-analyzer",
+    name: "Text Analyzer",
+    priceUsdc: 0.0003,
+    purpose: "Measures the submitted source text for deterministic report context.",
+  },
+  {
+    slug: "pyth-market-price",
+    name: "Live Market Price",
+    priceUsdc: 0.001,
+    purpose: "Returns a normalized live BTC, ETH, or SOL price sourced from Pyth Network.",
   },
 ];
 
@@ -82,14 +97,14 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
     label: "Market Context Brief",
     shortLabel: "Market Context",
     description:
-      "Structure a user-supplied market note without claiming a live feed or hidden model analysis.",
-    task: "Analyze this submitted market context and produce an evidence-labeled brief.",
-    placeholder: "Paste a market note, metrics update, or research excerpt to contextualize…",
+      "Combine a user-supplied market question with a paid live price sourced from Pyth Network.",
+    task: "Analyze this submitted crypto market context using a live provider-backed price and produce an evidence-labeled brief.",
+    placeholder: "Ask about BTC/USD, ETH/USD, or SOL/USD and include the context you want analyzed…",
     estimatedSpendUsdc: 0.0013,
-    services: commonServices,
+    services: marketServices,
     expectedResult: [
-      "Evidence-labeled context signals",
-      "Paid API output tied to the supplied source",
+      "Live Pyth Network price and confidence",
+      "Provider publish and server fetch timestamps",
       "Receipts and a verified Arc proof for every paid call",
     ],
   },

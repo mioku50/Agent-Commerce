@@ -60,7 +60,7 @@ const demoCommand = `AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "${demoTask}"
 const reviewSmokeCommand = "npm run review:smoke";
 
 const submissionCopy =
-  "Arc Agent Commerce turns Arc Nanopayments into a hosted x402 workflow product: users submit real text, preview an allowlisted plan, and launch paid API calls from the browser with a project-owned Arc Testnet wallet. Each run produces a privacy-safe dynamic report, receipts, an Agent Passport update, seller analytics, and app-owned onchain proofs. The browser never handles private keys or x402 signing.";
+  "Arc Agent Commerce turns Arc Nanopayments into a hosted x402 workflow product: users submit real text, preview an allowlisted plan, and launch paid API calls from the browser with a project-owned Arc Testnet wallet. Market Context can purchase Arc Agent Commerce's provider-backed API, which normalizes live Pyth Network data. Each run produces a privacy-safe dynamic report, receipts, an Agent Passport update, seller analytics, and app-owned onchain proofs. The browser never handles private keys or x402 signing.";
 
 const xThreadOutline = [
   "1/ Arc Agent Commerce turns real user input into a hosted, verifiable agent workflow on Arc.",
@@ -74,6 +74,7 @@ const xThreadOutline = [
 const featureItems = [
   "Hosted real-input workflows for sentiment, builder updates, and market context.",
   "Workflow templates with prices, selected services, and expected results.",
+  "Live BTC/USD, ETH/USD, and SOL/USD data sourced from Pyth Network behind an Arc Agent Commerce x402 service.",
   "Buyer-agent planner with task, budget, and skip/buy reasoning.",
   "Seller-created safe mock services for marketplace expansion.",
   "API Store and wallet-funded local agent launch preserved as developer tools.",

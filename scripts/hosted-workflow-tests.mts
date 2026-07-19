@@ -30,6 +30,7 @@ function expectInvalid(label: string, input: Parameters<typeof validateHostedWor
 const allowlist = [
   { slug: "premium-quote", endpoint: "/api/premium/quote", method: "GET" as const },
   { slug: "text-analyzer", endpoint: "/api/premium/compute", method: "POST" as const },
+  { slug: "pyth-market-price", endpoint: "/api/provider/pyth/price", method: "POST" as const },
 ];
 
 const request = validateHostedWorkflowRequest({
@@ -95,6 +96,34 @@ assert(
   analyzerRequest.text === request.inputText,
   "The paid Text Analyzer request did not receive the real normalized user input.",
 );
+
+const marketPlan = createHostedWorkflowPlan({
+  request: normalizedRequest,
+  services: serviceRegistry,
+  allowlist,
+});
+const pythService = serviceRegistry.find((service) => service.slug === "pyth-market-price");
+assert(pythService, "Pyth live market service is missing from the registry.");
+const pythRequest = requestBodyForService(
+  pythService,
+  normalizedRequest.task,
+  "SOL/USD market context with elevated volatility.",
+  [],
+) as { symbol?: string };
+assert(pythRequest.symbol === "SOL/USD", "Pyth request did not use the allowlisted symbol inferred from real input.");
+const btcRequest = requestBodyForService(
+  pythService,
+  "Use a current BTC, ETH, or SOL price sourced from Pyth Network.",
+  "BTC/USD is the real user-requested symbol even though the effective task lists all supported assets.",
+  [],
+) as { symbol?: string };
+assert(btcRequest.symbol === "BTC/USD", "Real input did not take priority over generic planner text.");
+assert(
+  marketPlan.selectedServices.map((service) => service.slug).join(",") ===
+    "text-analyzer,pyth-market-price",
+  "Market Context Brief did not select deterministic text analysis plus Pyth.",
+);
+assert(marketPlan.estimatedSpendUsdc === 0.0013, "Market workflow estimated cost is incorrect.");
 
 assert(plan.selectedServices.length === 2, "Multi-service workflow did not select two paid APIs.");
 assert(plan.selectedServices.length <= 3, "Hosted plan exceeded the three-call cap.");
@@ -182,9 +211,9 @@ const report = buildHostedFinalReport({
       error: null,
     },
     {
-      serviceId: "text-analyzer",
-      serviceSlug: "text-analyzer",
-      serviceName: "Text Analyzer",
+      serviceId: "pyth-market-price",
+      serviceSlug: "pyth-market-price",
+      serviceName: "Live Market Price",
       status: "failed",
       amountUsdc: null,
       stepId: "00000000-0000-4000-8000-000000000024",

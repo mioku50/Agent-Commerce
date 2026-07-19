@@ -34,6 +34,7 @@ import { getServerDatabaseDiagnostic } from "../supabase/server-env";
 import { getProofRegistryDiagnostic } from "../commerce/onchain-proof";
 import { getHostedRunnerDiagnostic } from "../agent/hosted-policy";
 import { listRecentHostedAgentJobs } from "../agent/hosted-jobs";
+import { getPythProviderDiagnostic } from "../providers/pyth";
 
 export const RECOMMENDED_REVIEWER_COMMAND =
   'AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005';
@@ -59,6 +60,7 @@ export type ReviewHealthStatus = {
     hostedInputPrivacyEnabled: boolean;
     workflowFirstProductEnabled: boolean;
     publicWorkflowPagesEnabled: boolean;
+    liveProviderEnabled: boolean;
   };
   productPositioning: {
     mode: "workflow-first";
@@ -81,6 +83,7 @@ export type ReviewHealthStatus = {
   database: ReturnType<typeof getServerDatabaseDiagnostic>;
   proofRegistry: ReturnType<typeof getProofRegistryDiagnostic>;
   hostedRunner: ReturnType<typeof getHostedRunnerDiagnostic>;
+  provider: ReturnType<typeof getPythProviderDiagnostic>;
   latestHostedWorkflow: Awaited<ReturnType<typeof listRecentHostedAgentJobs>>[number] | null;
 };
 
@@ -169,7 +172,10 @@ export async function getReviewHealthStatus(
   const recentInsufficientBalanceFailures =
     recentFailedRuns.filter(isInsufficientBalanceRun).length;
   const sellerCreatedLiveServices = services.filter(
-    (service) => service.sourceType !== "static" && service.status === "live",
+    (service) =>
+      (service.sourceType === "seller_mock" ||
+        service.sourceType === "external_placeholder") &&
+      service.status === "live",
   );
   const warnings = [
     resultWarning("Runs", runsResult),
@@ -204,6 +210,9 @@ export async function getReviewHealthStatus(
         hostedRunner.inputPersistence === "redacted_preview_and_sha256_only",
       workflowFirstProductEnabled: true,
       publicWorkflowPagesEnabled: true,
+      liveProviderEnabled:
+        getPythProviderDiagnostic().configured &&
+        hostedRunner.allowedServices.includes("pyth-market-price"),
     },
     productPositioning: {
       mode: "workflow-first",
@@ -232,6 +241,7 @@ export async function getReviewHealthStatus(
     database: getServerDatabaseDiagnostic(),
     proofRegistry: getProofRegistryDiagnostic(),
     hostedRunner,
+    provider: getPythProviderDiagnostic(),
     latestHostedWorkflow,
   };
 }

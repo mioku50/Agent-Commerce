@@ -23,6 +23,11 @@ const SAFE_HOSTED_SERVICES = [
     endpoint: "/api/premium/compute",
     method: "POST" as const,
   },
+  {
+    slug: "pyth-market-price",
+    endpoint: "/api/provider/pyth/price",
+    method: "POST" as const,
+  },
 ] as const;
 
 function boundedInteger(
@@ -76,7 +81,7 @@ function hostedBaseUrl() {
 
 export function hostedServiceAllowlist() {
   const requested = new Set(
-    (process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS ?? "premium-quote,text-analyzer")
+    (process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS ?? "premium-quote,text-analyzer,pyth-market-price")
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),
@@ -261,6 +266,7 @@ export function safeHostedError(error: unknown) {
     process.env.HOSTED_AGENT_RATE_LIMIT_SECRET,
     process.env.AGENT_DB_SUPABASE_SECRET_KEY,
     process.env.AGENT_DB_SUPABASE_SERVICE_ROLE_KEY,
+    process.env.PYTH_API_KEY,
   ].filter((value): value is string => Boolean(value));
 
   let safe = message;

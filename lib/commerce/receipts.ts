@@ -115,7 +115,11 @@ export type CommerceReceipt = {
   serviceSlug: string | null;
   serviceName: string;
   serviceSourceType: ServiceSourceType;
-  sourceLabel: "Official sample" | "Seller-created" | "External placeholder";
+  sourceLabel:
+    | "Internal deterministic"
+    | "Live Provider"
+    | "Seller-created mock"
+    | "Seller-created placeholder";
   method: ServiceMethod | string | null;
   endpoint: string | null;
   requestId: string | null;
@@ -218,14 +222,19 @@ function normalizedAmount(value: string | null | undefined) {
 }
 
 function sourceTypeFromValue(value: string | null | undefined): ServiceSourceType {
-  if (value === "seller_mock" || value === "external_placeholder") return value;
+  if (
+    value === "provider_backed" ||
+    value === "seller_mock" ||
+    value === "external_placeholder"
+  ) return value;
   return "static";
 }
 
 export function receiptSourceLabel(sourceType: ServiceSourceType) {
-  if (sourceType === "static") return "Official sample";
-  if (sourceType === "seller_mock") return "Seller-created";
-  return "External placeholder";
+  if (sourceType === "static") return "Internal deterministic";
+  if (sourceType === "provider_backed") return "Live Provider";
+  if (sourceType === "seller_mock") return "Seller-created mock";
+  return "Seller-created placeholder";
 }
 
 function safeLimit(limit: number | undefined) {

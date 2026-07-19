@@ -41,6 +41,7 @@ type ReviewStatus = {
     hostedInputPrivacyEnabled?: boolean;
     workflowFirstProductEnabled?: boolean;
     publicWorkflowPagesEnabled?: boolean;
+    liveProviderEnabled?: boolean;
   };
   productPositioning?: {
     mode?: string;
@@ -62,6 +63,13 @@ type ReviewStatus = {
     maxBudgetUsdc?: number;
     supportedWorkflows?: string[];
     inputPersistence?: string;
+  };
+  provider?: {
+    provider?: string;
+    configured?: boolean;
+    supportedSymbols?: string[];
+    paidEndpoint?: string;
+    priceUsdc?: string;
   };
 };
 
@@ -206,6 +214,16 @@ async function checkServiceDiscovery(baseUrl: string) {
       ok: services.length > 0,
       detail: `${services.length} service(s)`,
     },
+    {
+      name: "API Store exposes the live Pyth provider service",
+      ok: services.some((value) => {
+        const service = value as { slug?: string; sourceType?: string; endpoint?: string };
+        return service.slug === "pyth-market-price" &&
+          service.sourceType === "provider_backed" &&
+          service.endpoint === "/api/provider/pyth/price";
+      }),
+      detail: "slug=pyth-market-price source=provider_backed",
+    },
   ] satisfies CheckResult[];
 }
 
@@ -278,6 +296,17 @@ async function checkReviewStatus(baseUrl: string) {
         json.productPositioning?.proofsRoute === "/proofs" &&
         json.productPositioning?.developerToolsRoute === "/developer-tools",
       detail: `mode=${json.productPositioning?.mode ?? "missing"} primary=${json.productPositioning?.primaryRoute ?? "missing"}`,
+    },
+    {
+      name: "review status exposes the configured Pyth live provider without credentials",
+      ok:
+        json.checks?.liveProviderEnabled === true &&
+        json.provider?.provider === "Pyth Network" &&
+        json.provider?.configured === true &&
+        json.provider?.paidEndpoint === "/api/provider/pyth/price" &&
+        json.provider?.priceUsdc === "0.001" &&
+        json.provider?.supportedSymbols?.join(",") === "BTC/USD,ETH/USD,SOL/USD",
+      detail: `configured=${json.provider?.configured === true ? "yes" : "no"} endpoint=${json.provider?.paidEndpoint ?? "missing"}`,
     },
   ] satisfies CheckResult[];
 
@@ -374,6 +403,30 @@ async function checkPaymentRequiredChallenge(baseUrl: string) {
   }
 
   return checks;
+}
+
+async function checkPythPaymentRequiredChallenge(baseUrl: string) {
+  const response = await fetchWithTimeout(
+    urlFor(baseUrl, "/api/provider/pyth/price"),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ symbol: "BTC/USD" }),
+    },
+  );
+  const headerValue = response.headers.get("payment-required");
+  return [
+    {
+      name: "/api/provider/pyth/price returns 402 before provider execution",
+      ok: response.status === 402,
+      detail: `HTTP ${response.status}`,
+    },
+    {
+      name: "Pyth provider service includes an x402 payment challenge",
+      ok: Boolean(headerValue),
+      detail: headerValue ? "header present" : "header missing",
+    },
+  ] satisfies CheckResult[];
 }
 
 async function safelyRun(name: string, task: () => Promise<CheckResult | CheckResult[]>) {
@@ -490,6 +543,11 @@ async function main() {
     checkPaymentRequiredChallenge(baseUrl),
   );
   results.push(...(Array.isArray(paymentResults) ? paymentResults : [paymentResults]));
+
+  const providerPaymentResults = await safelyRun("Pyth provider 402 challenge checks", () =>
+    checkPythPaymentRequiredChallenge(baseUrl),
+  );
+  results.push(...(Array.isArray(providerPaymentResults) ? providerPaymentResults : [providerPaymentResults]));
 
   printResults(baseUrl, results, reviewStatus, reviewStatusWarning);
 

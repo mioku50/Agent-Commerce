@@ -55,6 +55,7 @@ import type {
   ServiceSourceType,
   ServiceStatus,
 } from "../services/registry.ts";
+import { inferPythSymbol } from "../providers/pyth.ts";
 
 type ServiceDiscoveryResponse = {
   services?: ApiService[];
@@ -267,6 +268,7 @@ function isServiceMethod(value: unknown): value is ServiceMethod {
 function isServiceSourceType(value: unknown): value is ServiceSourceType {
   return (
     value === "static" ||
+    value === "provider_backed" ||
     value === "seller_mock" ||
     value === "external_placeholder"
   );
@@ -372,6 +374,10 @@ export function requestBodyForService(
 
   if (service.slug === "text-analyzer") {
     return createTextAnalyzerBody(task, inputText, paidPreviews);
+  }
+
+  if (service.slug === "pyth-market-price") {
+    return { symbol: inferPythSymbol(inputText, task) };
   }
 
   const example = service.exampleRequest as { body?: Record<string, unknown> };
@@ -574,7 +580,9 @@ export async function executeBuyerAgent(
   }
 
   const restoreFetchWithRetry = installFetchWithRetry({
-    retries: fetchRetries,
+    // Gateway payments are intentionally single-attempt. Read-only preflight,
+    // balance, deposit, and provider retries are handled at their own boundary.
+    retries: 0,
     timeoutMs: fetchTimeoutMs,
     label: "agent HTTP request",
   });
@@ -1082,7 +1090,7 @@ export async function executeBuyerAgent(
       result = await withRetry(
         () => gateway.pay(url, { method: service.method, body }),
         {
-          retries: fetchRetries,
+          retries: 0,
           timeoutMs: fetchTimeoutMs,
           label: `Paid API request ${service.method} ${url}`,
         },

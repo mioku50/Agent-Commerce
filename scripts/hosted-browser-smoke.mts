@@ -18,7 +18,13 @@ type HostedStatus = {
     structuredResult: {
       aggregationMode: string;
       summary: string;
-      apiResults: unknown[];
+      apiResults: Array<{
+        serviceSlug: string;
+        status: "paid" | "failed";
+        amountUsdc: string | null;
+        stepId: string | null;
+        response: Record<string, unknown> | null;
+      }>;
       receiptIds: string[];
       proofTransactionHashes: string[];
       input: { preview: string; sha256: string };
@@ -73,7 +79,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   const submittedInput =
-    "Phase 21 market input: weekly payment volume rose 12% while latency declined 8%, although volatility and execution risk remain elevated.";
+    "Phase 23 Pyth BTC/USD request: return the current provider-backed price, confidence, data publish time, and server fetch time for an Arc builder. Do not invent market analysis.";
   let idempotencyKey: string | null = null;
   let launchBody: Record<string, unknown> | null = null;
 
@@ -138,7 +144,7 @@ async function main() {
     assert(status?.job.status === "completed", "Hosted browser job did not complete in time.");
     assert(status.job.workflowType === "market_context", "Hosted browser job used the wrong workflow type.");
     assert(status.job.inputText === undefined, "Hosted status API leaked full workflow input.");
-    assert(status.job.inputPreview.includes("Phase 21 market input"), "Safe input preview is missing from the hosted result.");
+    assert(status.job.inputPreview.includes("Phase 23 Pyth BTC/USD"), "Safe input preview is missing from the hosted result.");
     assert(/^[0-9a-f]{64}$/.test(status.job.inputSha256), "Hosted input SHA-256 is invalid.");
     assert(status.proofs.length >= 2, "Hosted workflow did not create a proof per paid service.");
     assert(status.receiptIds.length >= 2, "Hosted multi-service workflow created fewer than two receipts.");
@@ -147,6 +153,22 @@ async function main() {
     assert(status.job.structuredResult.input.sha256 === status.job.inputSha256, "Final Report input hash differs from the job metadata.");
     assert(status.job.structuredResult.apiResults.length >= 2, "Final Report is missing API results.");
     assert(status.links.agentRun && status.links.receipt && status.links.passport, "Hosted result links are incomplete.");
+
+    const providerResult = status.job.structuredResult.apiResults.find(
+      (result) => result.serviceSlug === "pyth-market-price",
+    );
+    assert(providerResult?.status === "paid", "Pyth provider service was not paid successfully.");
+    assert(providerResult.amountUsdc === "0.001", "Pyth provider paid amount is not 0.001 USDC.");
+    assert(providerResult.stepId, "Pyth provider receipt ID is missing.");
+    assert(providerResult.response?.provider === "Pyth Network", "Final Report does not identify Pyth Network.");
+    assert(providerResult.response.symbol === "BTC/USD", "Pyth provider returned the wrong symbol.");
+    assert(Number(providerResult.response.price) > 0, "Pyth provider price is not a positive live value.");
+    assert(Number(providerResult.response.confidence) >= 0, "Pyth provider confidence is invalid.");
+    const publishTime = Date.parse(String(providerResult.response.publishTime));
+    const fetchedAt = Date.parse(String(providerResult.response.fetchedAt));
+    assert(Number.isFinite(publishTime), "Pyth provider publish time is invalid.");
+    assert(Number.isFinite(fetchedAt) && fetchedAt >= publishTime, "Pyth provider fetch time is invalid.");
+    assert(Date.now() - publishTime < 5 * 60_000, "Pyth provider timestamp is not live.");
 
     await page.getByText("Final Report", { exact: true }).waitFor();
     const beforeRepeat = {
@@ -251,6 +273,17 @@ async function main() {
           spentUsdc: status.job.spentUsdc,
           receiptIds: status.receiptIds,
           proofTransactions: status.proofs.map((proof) => proof.transactionHash),
+          provider: {
+            symbol: providerResult.response.symbol,
+            price: providerResult.response.price,
+            confidence: providerResult.response.confidence,
+            publishTime: providerResult.response.publishTime,
+            fetchedAt: providerResult.response.fetchedAt,
+            receiptId: providerResult.stepId,
+            proofTransaction: status.proofs.find(
+              (proof) => proof.receiptId === providerResult.stepId,
+            )?.transactionHash ?? null,
+          },
           links: status.links,
         },
         null,

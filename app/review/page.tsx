@@ -57,7 +57,7 @@ const reviewSmokeCommand = "npm run review:smoke";
 const reviewChecklist = [
   {
     title: "Run a hosted workflow",
-    body: "Submit real non-sensitive input, preview two paid APIs, and launch once.",
+    body: "Choose Market Context, request BTC/USD, ETH/USD, or SOL/USD, preview the paid Pyth-backed service, and launch once.",
     href: "/agent-runner",
   },
   {
@@ -72,8 +72,8 @@ const reviewChecklist = [
   },
   {
     title: "Verify unpaid protection",
-    body: "Call `/api/premium/quote` without payment and confirm HTTP 402.",
-    href: "/api/premium/quote",
+    body: "Call `/api/provider/pyth/price` without payment and confirm HTTP 402.",
+    href: "/api/provider/pyth/price",
   },
 ];
 
@@ -81,6 +81,7 @@ const differenceItems = [
   "Hosted workflow outcomes instead of a fixed paid smoke.",
   "Real user input with planner preview and budget decisions.",
   "Actual purchased API responses assembled into Final Reports.",
+  "A live provider-backed crypto price service sourced from Pyth Network.",
   "Seller-created services with safe mock fulfillment.",
   "Public receipts for paid API purchases.",
   "Agent Passports with workflows, reports, calls, proofs, spend, and success rate.",
@@ -325,6 +326,11 @@ export default async function ReviewPage() {
             title="API Store services"
             ok={data.checks.apiStoreServiceCount > 0}
             detail={`${data.checks.apiStoreServiceCount} public service(s) available. Disabled smoke-test services are hidden from public discovery.`}
+          />
+          <StatusCard
+            title="Live Provider · Pyth Network"
+            ok={data.checks.liveProviderEnabled}
+            detail={data.checks.liveProviderEnabled ? "Authenticated server-side Hermes adapter is allowlisted for BTC/USD, ETH/USD, and SOL/USD. The agent pays Arc Agent Commerce through x402; Pyth supplies the underlying data." : "Pyth provider key or hosted service allowlist is not configured."}
           />
         </section>
 

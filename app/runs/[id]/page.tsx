@@ -53,9 +53,10 @@ function statusVariant(status: string) {
 }
 
 function sourceLabel(sourceType: string | null) {
-  if (sourceType === "static") return "Official sample";
-  if (sourceType === "seller_mock") return "Seller-created";
-  if (sourceType === "external_placeholder") return "External placeholder";
+  if (sourceType === "static") return "Internal deterministic";
+  if (sourceType === "provider_backed") return "Live Provider · Pyth Network";
+  if (sourceType === "seller_mock") return "Seller-created mock";
+  if (sourceType === "external_placeholder") return "Seller-created placeholder";
   return null;
 }
 

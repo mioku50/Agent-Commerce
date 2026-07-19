@@ -347,7 +347,9 @@ export default async function DemoPage() {
               Update Summary, or Market Context Brief. The hosted agent
               discovers paid APIs, selects useful services, pays with USDC on
               Arc through x402/Gateway, and produces public receipts, a dynamic
-              report, Agent Passport updates, and verified proofs.
+              report, Agent Passport updates, and verified proofs. Market
+              Context buys a provider-backed service from Arc Agent Commerce;
+              its underlying BTC, ETH, or SOL data is sourced from Pyth Network.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">

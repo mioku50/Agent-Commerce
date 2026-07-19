@@ -27,6 +27,22 @@ function prettyJson(value: unknown) {
   return JSON.stringify(value, null, 2);
 }
 
+function ProviderResult({ value }: { value: unknown }) {
+  if (!value || typeof value !== "object") return null;
+  const result = value as Record<string, unknown>;
+  if (result.provider !== "Pyth Network") return null;
+  return (
+    <dl className="mt-3 grid gap-2 rounded-md bg-secondary/40 p-3 text-xs sm:grid-cols-2">
+      <div><dt className="text-muted-foreground">Provider</dt><dd className="font-medium">Pyth Network</dd></div>
+      <div><dt className="text-muted-foreground">Requested symbol</dt><dd className="font-medium">{String(result.symbol ?? "—")}</dd></div>
+      <div><dt className="text-muted-foreground">Price</dt><dd className="font-mono">{String(result.price ?? "—")}</dd></div>
+      <div><dt className="text-muted-foreground">Confidence</dt><dd className="font-mono">± {String(result.confidence ?? "—")}</dd></div>
+      <div><dt className="text-muted-foreground">Data publish time</dt><dd>{String(result.publishTime ?? "—")}</dd></div>
+      <div><dt className="text-muted-foreground">Data fetched time</dt><dd>{String(result.fetchedAt ?? "—")}</dd></div>
+    </dl>
+  );
+}
+
 export function HostedJobResult({ initialView }: { initialView: HostedJobView }) {
   const [view, setView] = useState(initialView);
   const [pollError, setPollError] = useState<string | null>(null);
@@ -109,7 +125,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
           </CardContent></Card>
 
           <Card className="rounded-lg"><CardHeader><CardTitle>Services purchased</CardTitle></CardHeader><CardContent className="grid gap-4">
-            {view.services.filter((service) => service.status === "paid" || service.status === "failed").map((service) => <div key={service.serviceSlug} className="rounded-md border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><p className="font-medium">{service.serviceName}</p><Badge variant={service.status === "paid" ? "default" : "destructive"}>{service.status === "paid" ? `${service.priceUsdc} USDC` : "failed"}</Badge></div><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p>{service.response ? <pre className="mt-3 max-h-52 overflow-auto rounded-md bg-secondary/40 p-3 text-xs">{prettyJson(service.response)}</pre> : null}{service.error ? <p className="mt-2 text-sm text-destructive">{service.error}</p> : null}{service.receiptId ? <Button asChild size="sm" variant="outline" className="mt-3"><Link href={`/receipts/${service.receiptId}`}><ReceiptText />Receipt</Link></Button> : null}</div>)}
+            {view.services.filter((service) => service.status === "paid" || service.status === "failed").map((service) => <div key={service.serviceSlug} className="rounded-md border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><p className="font-medium">{service.serviceName}</p>{service.serviceSlug === "pyth-market-price" ? <Badge variant="secondary">Live Provider · Pyth Network</Badge> : null}</div><Badge variant={service.status === "paid" ? "default" : "destructive"}>{service.status === "paid" ? `${service.priceUsdc} USDC` : "failed"}</Badge></div><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p>{service.serviceSlug === "pyth-market-price" ? <ProviderResult value={service.response} /> : service.response ? <pre className="mt-3 max-h-52 overflow-auto rounded-md bg-secondary/40 p-3 text-xs">{prettyJson(service.response)}</pre> : null}{service.error ? <p className="mt-2 text-sm text-destructive">{service.error}</p> : null}{service.receiptId ? <Button asChild size="sm" variant="outline" className="mt-3"><Link href={`/receipts/${service.receiptId}`}><ReceiptText />Receipt</Link></Button> : null}</div>)}
             {!view.services.some((service) => service.status === "paid" || service.status === "failed") ? <p className="text-sm text-muted-foreground">Purchases have not started yet.</p> : null}
           </CardContent></Card>
 

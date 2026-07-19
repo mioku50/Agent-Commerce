@@ -223,9 +223,10 @@ function formatUsdc(value: number) {
 }
 
 function sourceLabel(sourceType: ServiceSourceType) {
-  if (sourceType === "static") return "Official sample";
+  if (sourceType === "static") return "Internal deterministic";
+  if (sourceType === "provider_backed") return "Live Provider";
   if (sourceType === "seller_mock") return "Seller-created mock";
-  return "External placeholder";
+  return "Seller-created placeholder";
 }
 
 function emptyAnalytics(warning: string | null): SellerAnalytics {

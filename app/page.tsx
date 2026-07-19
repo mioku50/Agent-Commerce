@@ -56,7 +56,9 @@ export default async function Home() {
             <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">
               Submit real input → the hosted agent selects and purchases paid APIs
               through x402 → a Final Report is generated → receipts are created →
-              proofs are verified in the app-owned registry on Arc.
+              proofs are verified in the app-owned registry on Arc. Market
+              Context uses a paid Arc Agent Commerce service backed by live
+              Pyth Network data.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">

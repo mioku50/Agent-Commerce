@@ -78,9 +78,10 @@ function parseNumberInput(value: string, fallback: number) {
 }
 
 function sourceLabel(sourceType: string) {
-  if (sourceType === "static") return "Official sample";
-  if (sourceType === "seller_mock") return "Seller-created";
-  return "External placeholder";
+  if (sourceType === "static") return "Internal deterministic";
+  if (sourceType === "provider_backed") return "Live Provider";
+  if (sourceType === "seller_mock") return "Seller-created mock";
+  return "Seller-created placeholder";
 }
 
 function DecisionCard({ decision }: { decision: PlanDecisionSummary }) {

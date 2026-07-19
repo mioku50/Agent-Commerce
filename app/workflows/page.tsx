@@ -87,7 +87,12 @@ export default function WorkflowsPage() {
                       className="grid gap-2 rounded-md border bg-background/60 p-3 sm:grid-cols-[1fr_auto]"
                     >
                       <div>
-                        <p className="font-medium">{service.name}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-medium">{service.name}</p>
+                          <Badge variant={service.slug === "pyth-market-price" ? "default" : "outline"}>
+                            {service.slug === "pyth-market-price" ? "Live Provider · Pyth Network" : "Internal deterministic"}
+                          </Badge>
+                        </div>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                           {service.purpose}
                         </p>

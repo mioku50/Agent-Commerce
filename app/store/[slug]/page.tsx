@@ -48,9 +48,10 @@ const statusLabels: Record<ServiceStatus, string> = {
 };
 
 const sourceLabels: Record<ServiceSourceType, string> = {
-  static: "Official sample",
-  seller_mock: "Seller-created demo service",
-  external_placeholder: "External placeholder",
+  static: "Internal deterministic",
+  provider_backed: "Live Provider",
+  seller_mock: "Seller-created mock",
+  external_placeholder: "Seller-created placeholder",
 };
 
 function getPublicBaseUrl() {
