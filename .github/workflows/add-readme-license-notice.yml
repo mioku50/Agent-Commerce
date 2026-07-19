@@ -1,0 +1,66 @@
+name: Add README license notice
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/add-readme-license-notice.yml
+
+permissions:
+  contents: write
+
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add license and attribution notice
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          readme = Path("README.md")
+          text = readme.read_text(encoding="utf-8")
+          marker = "## License and attribution notice"
+
+          if marker not in text:
+              title = "# Arc Agent Commerce\n"
+              notice = """
+
+          > [!IMPORTANT]
+          > ## License and attribution notice
+          >
+          > Arc Agent Commerce is licensed under the Apache License 2.0.
+          >
+          > You may use, modify, and distribute the source code only in compliance with the license. Redistributions and derivative works must retain the `LICENSE` file, copyright notices, attribution notices, and must clearly identify modified files.
+          >
+          > The **Arc Agent Commerce** project name, original branding, logo, screenshots, and visual identity are not licensed for reuse. Do not present a fork or derivative project as the original Arc Agent Commerce product or imply endorsement by its author.
+          >
+          > Copyright © 2026 Sergio Romanov ([@mioku50](https://github.com/mioku50)).
+          """
+              if not text.startswith(title):
+                  raise SystemExit("README title not found at the expected location")
+              text = text.replace(title, title + notice, 1)
+              readme.write_text(text, encoding="utf-8")
+
+          Path(".github/workflows/add-readme-license-notice.yml").unlink(missing_ok=True)
+          PY
+
+      - name: Commit README update
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md .github/workflows/add-readme-license-notice.yml
+          if git diff --cached --quiet; then
+            echo "No changes needed."
+            exit 0
+          fi
+          git commit -m "Add README license and attribution notice"
+          git push
