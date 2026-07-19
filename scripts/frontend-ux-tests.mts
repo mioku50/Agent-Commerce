@@ -11,7 +11,9 @@ import {
 } from "../lib/agent/results-filters.ts";
 import {
   HOSTED_REQUESTER_IDENTITY_LABEL,
+  HOSTED_REQUESTER_NOT_CHARGED_COPY,
   HOSTED_REQUESTER_PAYMENT_COPY,
+  hostedRequesterDisplayLine,
   hostedInputPreviewHelper,
 } from "../lib/agent/hosted-ui.ts";
 import {
@@ -68,6 +70,12 @@ assert.deepEqual(
 assert.equal(hostedInputPreviewHelper("short"), "Enter at least 20 characters to preview the workflow.");
 assert.equal(hostedInputPreviewHelper("This input is definitely long enough."), null);
 assert.equal(HOSTED_REQUESTER_IDENTITY_LABEL, "Requester identity");
+assert.equal(HOSTED_REQUESTER_NOT_CHARGED_COPY, "Your wallet will not be charged.");
+assert.equal(
+  hostedRequesterDisplayLine("0x1234567890abcdef1234567890abcdef12345678"),
+  "Requested by 0x1234567890abcdef1234567890abcdef12345678",
+);
+assert.equal(hostedRequesterDisplayLine(null), "No requester identity supplied.");
 assert.equal(
   HOSTED_REQUESTER_PAYMENT_COPY,
   "This wallet does not pay for hosted workflows. Payments are made by the project-owned Arc Testnet payer.",

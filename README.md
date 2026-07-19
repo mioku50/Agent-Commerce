@@ -1,6 +1,6 @@
 # Arc Agent Commerce
 
-> Submit real input → a hosted agent selects and purchases paid APIs through x402 → generates a Final Report → creates receipts → registers verified proofs on Arc.
+> Submit real input → a hosted agent selects and purchases paid APIs through x402 → optionally synthesizes an AI-assisted Final Report → creates receipts → registers verified proofs on Arc.
 
 **Arc Agent Commerce is no longer positioned primarily as an API marketplace demo.**
 The workflow-first product direction is a hosted agent execution and verification layer:
@@ -55,12 +55,14 @@ Open [`/agent-runner`](https://agent-commerce-six.vercel.app/agent-runner), choo
 
 Available hosted workflows:
 
-- **Sentiment & Tone Report** — deterministic keyword and punctuation heuristics over user text, plus traceable paid API results;
-- **Builder Update Summary** — deterministic delivery/risk signal extraction from a project update;
+- **Sentiment & Tone Report** — paid text analysis and traceable deterministic heuristics, optionally synthesized by FreeModel;
+- **Builder Update Summary** — deterministic delivery/risk signals and paid API evidence, optionally synthesized by FreeModel;
 - **Market Context Brief** — explicitly selects BTC/USD, ETH/USD, or SOL/USD and combines user context with a normalized live price sourced from Pyth Network;
 - **Custom Task** — the shared planner selects relevant services from the fixed server allowlist.
 
-When no LLM is configured, the result is explicitly labeled **Structured workflow result (no LLM configured)**. The application never presents deterministic aggregation as model-generated analysis.
+When the server-only `LLM_*` configuration is available, FreeModel generates only the report summary and findings after successful paid API calls. The Final Report is explicitly labeled **AI-generated synthesis**, names `FreeModel` and the configured model, and lists the paid API responses used. Planning, service allowlisting, budgets, idempotency, x402 execution, receipts, and proof registration stay deterministic.
+
+When FreeModel is absent, times out, is rate-limited, returns too much data, or returns an invalid response, the job completes with the existing deterministic report. The UI labels that path as a deterministic fallback; no successful receipt, paid API result, or Arc proof is rolled back.
 
 The application then:
 
@@ -74,8 +76,9 @@ The application then:
 8. records the Agent Run, purchase step, payment event, and receipt;
 9. updates the payer wallet's Agent Passport and seller analytics;
 10. publishes a compact post-settlement proof to Arc;
-11. persists a structured Final Report built from the actual API responses, safe input metadata, reasoning, spend, receipts, and proof transactions;
-12. publishes the result at the shareable read-only route `/agent-runner/<job-id>`.
+11. optionally sends the validated ephemeral input and successful paid API responses to the external FreeModel provider for bounded synthesis;
+12. persists either the explicitly labeled AI synthesis or the deterministic fallback with safe input metadata, reasoning, spend, receipts, and proof transactions;
+13. publishes the result at the shareable read-only route `/agent-runner/<job-id>`.
 
 The UI exposes progress states such as:
 
@@ -88,7 +91,7 @@ The UI exposes progress states such as:
 
 A connected browser wallet is optional and is used only as a requester label. It never pays, signs, or authorizes the hosted purchase.
 
-The original workflow input exists only in the launch request and the in-memory background execution closure. Public status, history, result pages, and Agent DB expose only the redacted preview and SHA-256. Failed pre-payment recovery therefore requires the operator to re-submit the original text from a local file whose hash matches the job.
+The original workflow input exists only in the launch request and the in-memory background execution closure, plus the transient FreeModel request when synthesis is configured. The runner warns users before launch that their validated text will be processed by an external LLM provider. Public status, history, result pages, and Agent DB expose only the redacted preview, SHA-256, bounded/redacted model output, and safe synthesis metadata. Full prompts, API keys, authorization headers, raw provider errors, and raw provider payloads are not persisted. Failed pre-payment recovery therefore requires the operator to re-submit the original text from a local file whose hash matches the job.
 
 ## Workflow-First Product Surfaces
 
@@ -118,7 +121,7 @@ Workflow templates open the hosted runner with a safe, allowlisted selection alr
 
 Market Context accepts only `BTC/USD`, `ETH/USD`, or `SOL/USD`; invalid workflow or symbol query values fall back to the default template. The runner still requires at least 20 input characters before the server can produce a plan. Its launch price comes only from that server-generated plan.
 
-Results search, workflow/status filters, and Newest/Oldest/Highest spend sorting are reflected in the `/results` query string, so filtered views can be bookmarked or shared. Hosted browser wallets are labeled **Requester identity** throughout the workflow UI: the separate project-owned Arc Testnet payer continues to pay hosted workflow calls.
+Results search, workflow/status filters, and Newest/Oldest/Highest spend sorting are reflected in the `/results` query string, so filtered views can be bookmarked or shared. Hosted browser wallets are connected through **Connect Identity** and labeled **Requester identity** throughout the workflow UI. **Your wallet will not be charged:** the separate project-owned Arc Testnet payer pays hosted workflow calls, and a connected requester appears as `Requested by 0x…` on the shareable result. Explicit wallet funding lives only under **Developer Tools → Fund Local CLI Agent** for the advanced local/operator flow.
 
 ## Verified Production Example
 
@@ -250,7 +253,10 @@ flowchart LR
     X --> H[Arc Agent Commerce Pyth adapter]
     H --> Y[Pyth Hermes authenticated API]
     Y --> A
-    A --> F[Deterministic Final Report]
+    A --> L[Optional FreeModel synthesis]
+    L --> F[AI-generated Final Report]
+    A -. fail-open fallback .-> F2[Deterministic Final Report]
+    F2 --> D
     F --> D
     D --> T[Run timeline]
     D --> C[Commerce receipt]
@@ -267,6 +273,7 @@ Key implementation boundaries:
 - Supabase through the Vercel integration is the Agent DB;
 - the proof publisher runs only after the paid response is available;
 - the proof registry never receives or transfers funds.
+- FreeModel receives no authority over planning, spend, settlement, receipts, or proofs and can fail without failing the hosted job.
 
 ## Onchain Proof Registry
 
@@ -401,9 +408,14 @@ Do not commit `.env.local`, private keys, service-role keys, JWT secrets, or dat
 | Proof registry | `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS`, server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY` |
 | Proof recovery | server-only `AGENT_COMMERCE_PROOF_RECOVERY_TOKEN` |
 | External provider | server-only Vercel Sensitive `PYTH_API_KEY` |
+| Optional LLM synthesis | server-only `LLM_PROVIDER=openai-compatible`, `LLM_BASE_URL`, Vercel Sensitive `LLM_API_KEY`, and `LLM_MODEL` |
 | Local buyer agent | `AGENT_PRIVATE_KEY`, optional funding and Gateway reuse controls |
 
-The hosted payer key, rate-limit secret, Supabase privileged credentials, proof attester key, and `PYTH_API_KEY` must exist only in server-side Sensitive environment variables. The public status API reports only whether Pyth is configured and its fixed symbol allowlist; it never returns the key, authorization header, upstream raw response, or credential-bearing metadata.
+The hosted payer key, rate-limit secret, Supabase privileged credentials, proof attester key, `PYTH_API_KEY`, and `LLM_API_KEY` must exist only in server-side Sensitive environment variables. The public status API reports only whether Pyth and FreeModel are configured, the fixed symbol allowlist, protocol, provider name, and model; it never returns keys, base URLs, authorization headers, full prompts, upstream raw responses, or credential-bearing metadata. `OPENAI_API_KEY` is not read or used.
+
+### FreeModel synthesis boundary
+
+The only supported `LLM_PROVIDER` value is `openai-compatible`. The current production target is [FreeModel](https://freemodel.dev/) at `https://api.freemodel.dev/v1` with `gpt-5.4-mini`. The server uses a 30-second per-attempt timeout, at most two attempts with limited backoff for timeouts/rate limits/transient failures, a 900-token completion cap, and a 24 KB response cap. Only validated input, workflow context, and safe projections of successful paid API responses enter the transient prompt. Failed-service errors, provider authorization fields, feed IDs, raw payloads, and secrets are excluded.
 
 ### Pyth provider boundary
 
@@ -437,6 +449,8 @@ The migration runner applies files in lexical order, records applied versions, a
 ```bash
 # Application
 npm run provider:test
+npm run llm:test
+npm run llm:live-smoke
 npm run hosted:workflow-test
 npm run frontend:ux-test
 npm run lint
@@ -474,6 +488,7 @@ A paid browser smoke must never run silently. It requires the explicit `--confir
 - x402 core and EVM packages;
 - Circle x402 batching / Gateway flow;
 - authenticated Pyth Hermes provider adapter;
+- OpenAI-compatible FreeModel synthesis with deterministic fallback;
 - viem;
 - Supabase through the Vercel integration;
 - Foundry for the proof registry;
@@ -487,15 +502,16 @@ A paid browser smoke must never run silently. It requires the explicit `--confir
 - the registry is custom and unaudited;
 - seller-created external API proxying is disabled;
 - seller publishing and settlement configuration are still prototype-level;
-- deterministic aggregation is intentionally limited and does not replace an LLM; Market Context uses a real provider response but does not invent analysis or prices;
+- FreeModel is an external processor for validated workflow text; users should submit only non-sensitive input;
+- model synthesis is bounded and explicitly labeled, while the deterministic report remains the authoritative fallback;
 - full source input cannot be recovered from Agent DB by design.
 
 ## Next Direction
 
-Phase 24 turns the first provider into an explicit multi-asset workflow source with transparent freshness, confidence, cost, receipt, and proof metadata. Future work can focus on:
+Phase 25 adds explicitly labeled FreeModel synthesis without granting the model control over commerce execution. Future work can focus on:
 
-- optional model-backed synthesis that is explicitly labeled and never implied when unavailable;
 - additional low-cost allowlisted data and compute services;
+- encrypted, user-controlled prompt/result storage and provider consent controls;
 - encrypted, user-controlled private result storage for use cases that should not be public;
 - richer service-level proof and cost comparisons;
 - production-grade seller authentication and settlement configuration;

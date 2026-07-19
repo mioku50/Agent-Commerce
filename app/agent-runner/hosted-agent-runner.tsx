@@ -19,6 +19,7 @@ import { useArcWallet } from "@/components/wallet/use-arc-wallet";
 import { shortenHash } from "@/lib/utils";
 import {
   HOSTED_REQUESTER_IDENTITY_LABEL,
+  HOSTED_REQUESTER_NOT_CHARGED_COPY,
   HOSTED_REQUESTER_PAYMENT_COPY,
   hostedInputPreviewHelper,
 } from "@/lib/agent/hosted-ui";
@@ -175,6 +176,7 @@ export function HostedAgentRunner({
               <div className="flex items-center gap-2 font-medium"><ShieldCheck className="size-4 text-primary" />Project-owned payer wallet</div>
               <p className="break-all font-mono text-xs">{diagnostic.payerAddress ?? "Hosted wallet not configured"}</p>
               <p className="text-muted-foreground">Arc Testnet only · max {diagnostic.maxBudgetUsdc} USDC · max 3 paid calls · one active run.</p>
+              <p className="font-semibold">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p>
               <p className="text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p>
             </CardContent>
           </Card>
@@ -199,8 +201,11 @@ export function HostedAgentRunner({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="hosted-input">Input text</Label>
-              <textarea id="hosted-input" aria-describedby="hosted-input-description hosted-input-helper" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder} minLength={20} maxLength={5000} required className="min-h-36 max-w-full rounded-md border bg-background px-3 py-2 text-sm" />
+              <textarea id="hosted-input" aria-describedby="hosted-input-description hosted-input-helper external-llm-processing-notice" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder} minLength={20} maxLength={5000} required className="min-h-36 max-w-full rounded-md border bg-background px-3 py-2 text-sm" />
               <p id="hosted-input-description" className="text-xs text-muted-foreground">{inputText.length}/5000 · Required. Obvious credentials and private keys are rejected. Only a redacted preview and SHA-256 are published.</p>
+              <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
+                External LLM processing: after paid API calls succeed, the validated input text and those API responses may be sent to FreeModel for optional synthesis. If FreeModel is unavailable, the deterministic report is preserved.
+              </div>
             </div>
             {workflowType === "market_context" ? (
               <div className="grid gap-2">
@@ -229,8 +234,8 @@ export function HostedAgentRunner({
             </div>
             <div className="rounded-md border p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL} <span className="font-normal text-muted-foreground">(optional)</span></p><p className="mt-1 text-xs text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p></div>
-                {wallet.address ? <Badge variant="secondary" className="font-mono">{shortenHash(wallet.address, 6)}</Badge> : <Button type="button" variant="outline" onClick={() => void wallet.connect()} disabled={!wallet.providerAvailable || wallet.connecting}><Wallet />{wallet.connecting ? "Connecting…" : "Connect identity"}</Button>}
+                <div className="min-w-0"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL} <span className="font-normal text-muted-foreground">(optional)</span></p><p className="mt-1 text-xs font-semibold">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p><p className="mt-1 text-xs text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p></div>
+                {wallet.address ? <Badge variant="secondary" className="font-mono">{shortenHash(wallet.address, 6)}</Badge> : <Button type="button" variant="outline" onClick={() => void wallet.connect()} disabled={!wallet.providerAvailable || wallet.connecting}><Wallet />{wallet.connecting ? "Connecting…" : "Connect Identity"}</Button>}
               </div>
             </div>
             {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
@@ -261,7 +266,7 @@ export function HostedAgentRunner({
                 <div className="rounded-md bg-secondary/30 p-3 text-xs"><p className="font-medium">Safe input preview</p><p className="mt-1 text-muted-foreground">{plan.inputPreview}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">SHA-256 {plan.inputSha256}</p></div>
                 <div className="grid gap-3">{plan.selectedServices.map((service) => <div key={service.slug} className="min-w-0 rounded-md border p-4"><div className="flex min-w-0 flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="font-medium">{service.name}</p><div className="mt-2"><ServicePresentation metadata={service.presentation} /></div></div><Badge variant="secondary" className="font-mono">{service.priceUsdc.toFixed(4)} USDC</Badge></div><p className="mt-2 break-all font-mono text-xs text-muted-foreground">{service.method} {service.endpoint}</p><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p></div>)}</div>
                 {plan.skippedServices.length ? <div><p className="text-sm font-medium">Skipped by policy or relevance</p><div className="mt-2 flex flex-wrap gap-2">{plan.skippedServices.map((service) => <Badge key={service.slug} variant="outline">{service.name}</Badge>)}</div></div> : null}
-                <p className="text-xs text-muted-foreground">{plan.aggregationLabel}. No LLM analysis is claimed.</p>
+                <p className="text-xs text-muted-foreground">{plan.aggregationLabel}. Planning, allowlisting, budgets, x402 execution, receipts, and Arc proofs remain deterministic.</p>
               </> : <p className="text-sm text-muted-foreground">Preview is calculated on the server from the fixed Arc Testnet allowlist. Browser-supplied URLs and service selections are ignored.</p>}
             </CardContent>
           </Card>

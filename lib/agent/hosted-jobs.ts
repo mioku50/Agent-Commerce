@@ -16,6 +16,7 @@ import {
   hashHostedWorkflowInput,
   hostedWorkflowInputMetadata,
   isHostedWorkflowType,
+  safeHostedServiceResult,
   workflowLabel,
   type HostedFinalReport,
   type HostedPlannerSnapshot,
@@ -34,6 +35,7 @@ import {
   providerResponsePresentation,
 } from "../services/presentation.ts";
 import type { ServiceSourceType } from "../services/registry.ts";
+import { synthesizeHostedFinalReport } from "./llm-synthesis.ts";
 
 export type HostedJobStatus = "queued" | "running" | "completed" | "failed";
 export type HostedJobProgressStage =
@@ -261,7 +263,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
           .filter((value): value is string => Boolean(value));
       }
     }
-    const structuredResult = buildHostedFinalReport({
+    const deterministicReport = buildHostedFinalReport({
       jobId,
       request,
       plan: plannerSnapshot,
@@ -272,6 +274,11 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       proofTransactionHashes,
       serviceResults: result.serviceResults,
       explorerUrl: configuredExplorerUrl(),
+    });
+    const structuredResult = await synthesizeHostedFinalReport({
+      request,
+      report: deterministicReport,
+      serviceResults: result.serviceResults,
     });
 
     await updateHostedAgentJob(jobId, {
@@ -290,7 +297,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       raw: {
         paymentEventIds: result.paymentEventIds,
         paidStepIds: result.paidStepIds,
-        serviceResults: result.serviceResults,
+        serviceResults: result.serviceResults.map(safeHostedServiceResult),
       },
     });
 

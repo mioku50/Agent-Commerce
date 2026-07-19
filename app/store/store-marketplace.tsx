@@ -192,9 +192,9 @@ export function StoreMarketplace({
                     </Link>
                   </Button>
                   <Button asChild size="sm">
-                    <Link href="/agent-launch">
+                    <Link href="/developer-tools">
                       <Fuel />
-                      Fund buyer-agent
+                      Developer Tools
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="outline">
@@ -386,9 +386,9 @@ export function StoreMarketplace({
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">
-                <Link href="/agent-launch">
+                <Link href="/developer-tools">
                   <Fuel />
-                  Fund agent
+                  Developer Tools
                 </Link>
               </Button>
               <Button asChild variant="outline" size="sm">

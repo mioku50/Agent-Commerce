@@ -15,7 +15,9 @@ import { ProviderResponseDetails } from "@/components/services/provider-response
 import { ServicePresentation } from "@/components/services/service-presentation";
 import {
   HOSTED_REQUESTER_IDENTITY_LABEL,
+  HOSTED_REQUESTER_NOT_CHARGED_COPY,
   HOSTED_REQUESTER_PAYMENT_COPY,
+  hostedRequesterDisplayLine,
 } from "@/lib/agent/hosted-ui";
 import { shortenHash } from "@/lib/utils";
 import type { HostedJobView } from "./types";
@@ -31,6 +33,22 @@ const STAGES = [
 
 function prettyJson(value: unknown) {
   return JSON.stringify(value, null, 2);
+}
+
+function fallbackReasonLabel(
+  value: NonNullable<
+    NonNullable<HostedJobView["job"]["structuredResult"]>["synthesis"]
+  >["fallbackReason"],
+) {
+  if (value === "not_configured") return "FreeModel is not configured";
+  if (value === "unsupported_provider") return "Unsupported LLM provider configuration";
+  if (value === "no_paid_api_results") return "No successful paid API response was available";
+  if (value === "timeout") return "FreeModel timed out";
+  if (value === "rate_limited") return "FreeModel rate limit";
+  if (value === "response_too_large") return "FreeModel response exceeded the safe limit";
+  if (value === "invalid_response") return "FreeModel returned an invalid response";
+  if (value === "upstream_error") return "FreeModel was unavailable";
+  return "Deterministic report selected";
 }
 
 export function HostedJobResult({ initialView }: { initialView: HostedJobView }) {
@@ -94,7 +112,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
             {view.job.status === "failed" ? <p className="text-sm text-destructive">failed · {view.job.error}</p> : null}
             {pollError ? <p className="text-sm text-destructive">{pollError}</p> : null}
             <div className="mt-2 min-w-0 rounded-md bg-secondary/30 p-3 text-xs"><p className="break-all font-mono">{view.job.id}</p><p className="mt-2 text-muted-foreground">Budget {view.job.budgetUsdc} USDC · spent {view.job.spentUsdc} USDC</p>{view.job.progressMessage ? <p className="mt-2">{view.job.progressMessage}</p> : null}</div>
-            <div className="min-w-0 rounded-md border p-3 text-xs"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL}</p><p className="mt-1 break-all font-mono">{view.job.requesterWallet ?? "Not supplied"}</p><p className="mt-2 text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p><p className="mt-2 break-all text-muted-foreground">Project payer: <span className="font-mono">{view.payerWallet ?? "Pending"}</span></p></div>
+            <div className="min-w-0 rounded-md border p-3 text-xs"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL}</p><p className={view.job.requesterWallet ? "mt-1 break-all font-mono" : "mt-1 text-muted-foreground"}>{hostedRequesterDisplayLine(view.job.requesterWallet)}</p><p className="mt-2 font-semibold">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p><p className="mt-1 text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p><p className="mt-2 break-all text-muted-foreground">Project payer: <span className="font-mono">{view.payerWallet ?? "Pending"}</span></p></div>
           </CardContent></Card>
 
           <Card className="rounded-lg"><CardHeader><CardTitle>Plan snapshot</CardTitle></CardHeader><CardContent className="grid gap-3 text-sm">
@@ -109,9 +127,10 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
             {report ? <>
               <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Summary</p><p className="mt-2 leading-7">{report.summary}</p></div>
               <div className="rounded-md bg-secondary/30 p-3"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Safe input preview</p><p className="mt-2 text-sm">{reportInput.preview}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">SHA-256 {reportInput.sha256}</p></div>
+              {report.synthesis ? <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm"><div className="flex flex-wrap items-center gap-2"><Badge variant={report.synthesis.status === "ai_generated" ? "default" : "secondary"}>{report.synthesis.status === "ai_generated" ? "AI-generated synthesis" : "Deterministic fallback"}</Badge>{report.synthesis.provider ? <Badge variant="outline">Provider · {report.synthesis.provider}</Badge> : null}{report.synthesis.model ? <Badge variant="outline">Model · {report.synthesis.model}</Badge> : null}</div>{report.synthesis.status === "ai_generated" ? <><p className="mt-3 text-xs text-muted-foreground">FreeModel generated the summary and findings after deterministic paid execution completed. It did not select services, approve spend, perform x402 settlement, or register proofs.</p><div className="mt-3"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Paid API responses used</p><div className="mt-2 flex flex-wrap gap-2">{report.synthesis.usedPaidApiResponses.map((service) => <Badge key={service.serviceSlug} variant="secondary">{service.serviceName}{service.amountUsdc ? ` · ${service.amountUsdc} USDC` : ""}</Badge>)}</div></div></> : <p className="mt-3 text-xs text-muted-foreground">{fallbackReasonLabel(report.synthesis.fallbackReason)}. Successful paid API results, receipts, and Arc proofs were preserved.</p>}</div> : null}
               <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key findings</p><ul className="mt-2 grid gap-2 text-sm">{report.keyFindings.map((finding, index) => <li key={`${index}-${finding}`} className="rounded-md bg-secondary/30 p-3">{finding}</li>)}</ul></div>
               <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Selected services</p><div className="mt-2 flex flex-wrap gap-2">{report.selectedServices.map((service) => <Badge key={service.slug}>{service.name}</Badge>)}</div></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Skipped services</p><div className="mt-2 flex flex-wrap gap-2">{report.skippedServices.length ? report.skippedServices.map((service) => <Badge key={service.slug} variant="outline">{service.name}</Badge>) : <span className="text-sm text-muted-foreground">None in the allowlisted plan.</span>}</div></div></div>
-              <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm"><p className="font-medium">{report.aggregationLabel}</p><p className="mt-1 text-xs text-muted-foreground">This report aggregates actual API responses deterministically. No model-generated sentiment or prose is claimed.</p></div>
+              <div className="rounded-md border p-3 text-sm"><p className="font-medium">{report.aggregationLabel}</p><p className="mt-1 text-xs text-muted-foreground">Actual paid API responses remain available below regardless of whether optional external synthesis succeeds.</p></div>
               <div className="flex flex-wrap gap-2">{report.links.agentRun ? <Button asChild variant="outline"><Link href={report.links.agentRun}>Agent Run</Link></Button> : null}<Button asChild variant="outline"><Link href={report.links.receipts}>Commerce Receipts</Link></Button>{report.links.passport ? <Button asChild variant="outline"><Link href={report.links.passport}>Agent Passport</Link></Button> : null}</div>
             </> : <div className="flex items-center gap-3 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />The Final Report appears after paid execution and durable persistence complete.</div>}
           </CardContent></Card>

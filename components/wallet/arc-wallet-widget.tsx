@@ -98,7 +98,7 @@ export function ArcWalletWidget({
         ) : (
           <Button type="button" size="sm" variant="outline" onClick={connect} disabled={connecting}>
             <Wallet />
-            {connecting ? "Connecting..." : "Connect Wallet"}
+            {connecting ? "Connecting..." : "Connect Identity"}
           </Button>
         )}
       </div>
@@ -136,7 +136,7 @@ export function ArcWalletWidget({
         ) : (
           <Button type="button" onClick={connect} disabled={connecting || !providerAvailable}>
             <Wallet />
-            {connecting ? "Connecting..." : "Connect Wallet"}
+            {connecting ? "Connecting..." : "Connect Identity"}
           </Button>
         )}
       </div>
@@ -210,8 +210,8 @@ export function ArcWalletWidget({
 
           <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
             <Button asChild variant="outline">
-              <Link href="/agent-launch">
-                Fund Agent
+              <Link href="/developer-tools">
+                Developer Tools
                 <Fuel />
               </Link>
             </Button>

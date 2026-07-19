@@ -61,9 +61,9 @@ export default function AgentControlPage() {
               </Link>
             </Button>
             <Button asChild variant="outline">
-              <Link href="/agent-launch">
+              <Link href="/developer-tools">
                 <Fuel />
-                Fund Agent
+                Developer Tools
               </Link>
             </Button>
             <Button asChild variant="outline">

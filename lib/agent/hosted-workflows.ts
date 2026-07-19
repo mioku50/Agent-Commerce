@@ -24,6 +24,7 @@ import {
   servicePresentationMetadata,
   type ServicePresentationMetadata,
 } from "../services/presentation.ts";
+import type { HostedReportSynthesis } from "../llm/types.ts";
 
 export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType };
 
@@ -62,8 +63,8 @@ export type HostedPlannerSnapshot = {
   remainingBudgetUsdc: number;
   maxPaidCalls: number;
   budgetCapUsdc: number;
-  aggregationMode: "deterministic_structured";
-  aggregationLabel: "Structured workflow result (no LLM configured)";
+  aggregationMode: "deterministic_execution_optional_llm";
+  aggregationLabel: "Deterministic paid execution with optional FreeModel synthesis";
   inputPreview: string;
   inputSha256: string;
   marketSymbol: PythMarketSymbol | null;
@@ -73,8 +74,9 @@ export type HostedPlannerSnapshot = {
 export type HostedFinalReport = {
   version: 3;
   workflowType: HostedWorkflowType;
-  aggregationMode: "deterministic_structured";
-  aggregationLabel: "Structured workflow result (no LLM configured)";
+  aggregationMode: "deterministic_structured" | "ai_generated_synthesis";
+  aggregationLabel: string;
+  synthesis: HostedReportSynthesis;
   input: {
     preview: string;
     sha256: string;
@@ -158,13 +160,17 @@ export function hashHostedWorkflowInput(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
 
-export function safeHostedWorkflowInputPreview(value: string) {
-  const compact = value
+export function redactHostedWorkflowText(value: string) {
+  return value
     .replace(/-----BEGIN (?:EC |RSA |OPENSSH )?PRIVATE KEY-----/gi, "[redacted-private-key]")
     .replace(/\b0x[0-9a-f]{64}\b/gi, "[redacted-hex]")
     .replace(/\b(?:sk-(?:proj-)?|ghp_|github_pat_|AKIA)[a-z0-9_-]{12,}\b/gi, "[redacted-token]")
     .replace(/\beyJ[a-z0-9_-]{10,}\.[a-z0-9_-]{10,}\.[a-z0-9_-]{10,}\b/gi, "[redacted-jwt]")
-    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[redacted-email]");
+}
+
+export function safeHostedWorkflowInputPreview(value: string) {
+  const compact = redactHostedWorkflowText(value)
     .replace(/\s+/g, " ")
     .trim();
   if (compact.length <= HOSTED_WORKFLOW_INPUT_PREVIEW_LENGTH) return compact;
@@ -175,6 +181,34 @@ export function hostedWorkflowInputMetadata(value: string) {
   return {
     preview: safeHostedWorkflowInputPreview(value),
     sha256: hashHostedWorkflowInput(value),
+  };
+}
+
+export function safeHostedServiceResponse(value: unknown, depth = 0): unknown {
+  if (depth > 6) return "[truncated]";
+  if (value === null || typeof value === "boolean" || typeof value === "number") return value;
+  if (typeof value === "string") return redactHostedWorkflowText(value).slice(0, 2_000);
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => safeHostedServiceResponse(item, depth + 1));
+  }
+  if (typeof value !== "object") return String(value);
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .filter(([key]) => !/(?:authorization|api.?key|private.?key|secret|token|headers?|raw|feed.?id)/i.test(key))
+      .slice(0, 40)
+      .map(([key, entry]) => [key, safeHostedServiceResponse(entry, depth + 1)]),
+  );
+}
+
+export function safeHostedServiceResult(
+  result: BuyerAgentServiceResult,
+): BuyerAgentServiceResult {
+  return {
+    ...result,
+    response: safeHostedServiceResponse(result.response),
+    error: result.status === "failed"
+      ? "Service call failed; successful paid results were preserved."
+      : null,
   };
 }
 
@@ -330,8 +364,8 @@ export function createHostedWorkflowPlan(input: {
     remainingBudgetUsdc: plan.remainingBudgetUsdc,
     maxPaidCalls: HOSTED_WORKFLOW_MAX_PAID_CALLS,
     budgetCapUsdc: input.request.budgetUsdc,
-    aggregationMode: "deterministic_structured",
-    aggregationLabel: "Structured workflow result (no LLM configured)",
+    aggregationMode: "deterministic_execution_optional_llm",
+    aggregationLabel: "Deterministic paid execution with optional FreeModel synthesis",
     inputPreview: inputMetadata.preview,
     inputSha256: inputMetadata.sha256,
     marketSymbol: input.request.marketSymbol,
@@ -430,14 +464,25 @@ export function buildHostedFinalReport(input: {
   serviceResults: BuyerAgentServiceResult[];
   explorerUrl: string;
 }): HostedFinalReport {
-  const paidCount = input.serviceResults.filter((result) => result.status === "paid").length;
-  const failedCount = input.serviceResults.filter((result) => result.status === "failed").length;
+  const serviceResults = input.serviceResults.map(safeHostedServiceResult);
+  const paidCount = serviceResults.filter((result) => result.status === "paid").length;
+  const failedCount = serviceResults.filter((result) => result.status === "failed").length;
   const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText ?? "");
   return {
     version: 3,
     workflowType: input.request.workflowType,
     aggregationMode: "deterministic_structured",
     aggregationLabel: "Structured workflow result (no LLM configured)",
+    synthesis: {
+      status: "deterministic_fallback",
+      provider: null,
+      protocol: null,
+      model: null,
+      attempted: false,
+      usedPaidApiResponses: [],
+      fallbackReason: "not_configured",
+      generatedAt: null,
+    },
     input: {
       preview: inputMetadata.preview,
       sha256: inputMetadata.sha256,
@@ -446,9 +491,9 @@ export function buildHostedFinalReport(input: {
     summary: `${workflowLabel(input.request.workflowType)} completed ${paidCount} of ${input.plan.selectedServices.length} selected paid API call(s) using deterministic aggregation${failedCount > 0 ? `; ${failedCount} call(s) failed` : ""}.`,
     keyFindings: [
       ...deterministicWorkflowFindings(input.request),
-      ...input.serviceResults.map(findingForResult),
+      ...serviceResults.map(findingForResult),
     ],
-    apiResults: input.serviceResults,
+    apiResults: serviceResults,
     selectedServices: input.plan.selectedServices,
     skippedServices: input.plan.skippedServices,
     spentUsdc: input.spentUsdc,

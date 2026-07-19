@@ -51,7 +51,31 @@ export type HostedApiResult = {
 };
 
 export type HostedFinalReport = {
+  aggregationMode: "deterministic_structured" | "ai_generated_synthesis";
   aggregationLabel: string;
+  synthesis?: {
+    status: "ai_generated" | "deterministic_fallback";
+    provider: "FreeModel" | null;
+    protocol: "openai-compatible" | null;
+    model: string | null;
+    attempted: boolean;
+    usedPaidApiResponses: Array<{
+      serviceSlug: string;
+      serviceName: string;
+      amountUsdc: string | null;
+    }>;
+    fallbackReason:
+      | "not_configured"
+      | "unsupported_provider"
+      | "no_paid_api_results"
+      | "timeout"
+      | "rate_limited"
+      | "upstream_error"
+      | "response_too_large"
+      | "invalid_response"
+      | null;
+    generatedAt: string | null;
+  };
   input: {
     preview: string;
     sha256: string;

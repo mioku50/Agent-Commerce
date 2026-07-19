@@ -7,7 +7,7 @@ import {
   ExternalLink,
   Fuel,
   LogOut,
-  RefreshCw,
+  Wrench,
   Wallet,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,19 +19,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { WalletAddress } from "@/components/wallet/WalletAddress";
-import { USDCAmount } from "@/components/wallet/USDCAmount";
+import { useArcWallet } from "@/components/wallet/use-arc-wallet";
 import {
-  formatArcBalance,
-  useArcWallet,
-} from "@/components/wallet/use-arc-wallet";
-import {
-  ARC_TESTNET_FAUCET_URL,
-  ARC_TESTNET_USDC_DECIMALS,
   getArcExplorerAddressUrl,
 } from "@/lib/wallet/arc";
 import { cn, shortenHash } from "@/lib/utils";
 import {
   HOSTED_REQUESTER_IDENTITY_LABEL,
+  HOSTED_REQUESTER_NOT_CHARGED_COPY,
   HOSTED_REQUESTER_PAYMENT_COPY,
 } from "@/lib/agent/hosted-ui";
 
@@ -39,18 +34,14 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
   const {
     address,
     chainId,
-    nativeBalanceWei,
-    erc20UsdcBalance,
     connecting,
     switching,
-    loadingBalances,
     error,
     providerAvailable,
     isArcTestnet,
     connect,
     switchToArc,
     disconnect,
-    loadBalances,
   } = useArcWallet();
 
   const explorerUrl = useMemo(
@@ -69,7 +60,7 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
         className="border-primary/35 bg-primary/10 text-primary hover:bg-primary/15"
       >
         <Wallet />
-        {connecting ? "Connecting..." : "Connect Wallet"}
+        {connecting ? "Connecting..." : "Connect Identity"}
       </Button>
     );
   }
@@ -100,48 +91,24 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
             {HOSTED_REQUESTER_IDENTITY_LABEL}
           </p>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            <span className="block font-semibold text-foreground">
+              {HOSTED_REQUESTER_NOT_CHARGED_COPY}
+            </span>
             {HOSTED_REQUESTER_PAYMENT_COPY}
           </p>
         </div>
         <div className="rounded-md border bg-muted/35 p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                <span
-                  className={cn(
-                    "size-2 rounded-full",
-                    isArcTestnet ? "bg-emerald-400" : "bg-amber-400",
-                  )}
-                />
-                {isArcTestnet ? "Arc Testnet" : `Chain ${chainId ?? "?"}`}
-              </p>
-              <div className="mt-3">
-                <WalletAddress address={address} full />
-              </div>
-            </div>
-            <Button
-              type="button"
-              size="icon"
-              variant="ghost"
-              onClick={() => void loadBalances(address)}
-              disabled={loadingBalances}
-              aria-label="Refresh wallet balances"
-            >
-              <RefreshCw className={cn("size-4", loadingBalances && "animate-spin")} />
-            </Button>
-          </div>
-
-          <div className="mt-4 grid gap-2">
-            <div className="flex items-center justify-between gap-3 rounded-md border bg-background/70 px-3 py-2">
-              <span className="text-xs text-muted-foreground">Native</span>
-              <USDCAmount value={formatArcBalance(nativeBalanceWei)} />
-            </div>
-            <div className="flex items-center justify-between gap-3 rounded-md border bg-background/70 px-3 py-2">
-              <span className="text-xs text-muted-foreground">ERC-20</span>
-              <USDCAmount
-                value={formatArcBalance(erc20UsdcBalance, ARC_TESTNET_USDC_DECIMALS)}
-              />
-            </div>
+          <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            <span
+              className={cn(
+                "size-2 rounded-full",
+                isArcTestnet ? "bg-emerald-400" : "bg-amber-400",
+              )}
+            />
+            {isArcTestnet ? "Arc Testnet" : `Chain ${chainId ?? "?"}`}
+          </p>
+          <div className="mt-3">
+            <WalletAddress address={address} full />
           </div>
         </div>
 
@@ -159,9 +126,9 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
 
         <div className="mt-3 grid grid-cols-2 gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link href="/agent-launch">
-              Fund Agent
-              <Fuel />
+            <Link href="/developer-tools">
+              Developer Tools
+              <Wrench />
             </Link>
           </Button>
           {explorerUrl ? (
@@ -172,12 +139,6 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
               </Link>
             </Button>
           ) : null}
-          <Button asChild variant="outline" size="sm">
-            <Link href={ARC_TESTNET_FAUCET_URL} target="_blank" rel="noreferrer">
-              Faucet
-              <ExternalLink />
-            </Link>
-          </Button>
           <Button asChild variant="outline" size="sm">
             <Link href={`/agents/${address}`}>
               Passport
@@ -201,7 +162,7 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
           }}
         >
           <LogOut />
-          Disconnect wallet
+          Disconnect identity
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

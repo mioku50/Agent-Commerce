@@ -81,6 +81,7 @@ const differenceItems = [
   "Hosted workflow outcomes instead of a fixed paid smoke.",
   "Real user input with planner preview and budget decisions.",
   "Actual purchased API responses assembled into Final Reports.",
+  "Optional FreeModel synthesis after deterministic paid API execution, with a fail-open structured fallback.",
   "A live provider-backed crypto price service sourced from Pyth Network.",
   "Seller-created services with safe mock fulfillment.",
   "Public receipts for paid API purchases.",
@@ -103,6 +104,7 @@ const testnetNotes = [
   "A connected browser wallet is optional requester identity or an explicit funding source; the project wallet pays hosted runs.",
   "Hosted x402 signing runs only on the server with the project demo wallet; the local CLI remains the advanced own-wallet flow.",
   "The proof registry is an app-owned contract, not an infrastructure USDC, CCTP, or Gateway address.",
+  "Validated workflow text may be processed by the external FreeModel LLM provider; keys and full prompts are never published.",
   "Occasional Supabase, Gateway, or network timeouts are handled with retry/backoff or safe empty states.",
 ];
 
@@ -331,6 +333,11 @@ export default async function ReviewPage() {
             title="Live Provider · Pyth Network"
             ok={data.checks.liveProviderEnabled}
             detail={data.checks.liveProviderEnabled ? "Authenticated server-side Hermes adapter maps explicit BTC/USD, ETH/USD, and SOL/USD choices to fixed feeds, rejects stale updates, and reports confidence interval plus price age. The agent pays Arc Agent Commerce through x402; Pyth supplies the underlying data." : "Pyth provider key or hosted service allowlist is not configured."}
+          />
+          <StatusCard
+            title="AI synthesis · FreeModel"
+            ok={data.checks.llmSynthesisConfigured}
+            detail={data.checks.llmSynthesisConfigured ? `OpenAI-compatible external synthesis is configured with ${data.llm.model ?? "the configured model"}. Service selection, x402 payment, receipts, and Arc proofs remain deterministic; model failures preserve the structured fallback.` : "FreeModel synthesis is not configured. Hosted workflows keep the deterministic structured report."}
           />
         </section>
 

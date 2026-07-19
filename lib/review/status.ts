@@ -35,6 +35,7 @@ import { getProofRegistryDiagnostic } from "../commerce/onchain-proof";
 import { getHostedRunnerDiagnostic } from "../agent/hosted-policy";
 import { listRecentHostedAgentJobs } from "../agent/hosted-jobs";
 import { getPythProviderDiagnostic } from "../providers/pyth";
+import { getLlmSynthesisDiagnostic } from "../llm/openai-compatible";
 
 export const RECOMMENDED_REVIEWER_COMMAND =
   'AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005';
@@ -61,6 +62,7 @@ export type ReviewHealthStatus = {
     workflowFirstProductEnabled: boolean;
     publicWorkflowPagesEnabled: boolean;
     liveProviderEnabled: boolean;
+    llmSynthesisConfigured: boolean;
   };
   productPositioning: {
     mode: "workflow-first";
@@ -84,6 +86,7 @@ export type ReviewHealthStatus = {
   proofRegistry: ReturnType<typeof getProofRegistryDiagnostic>;
   hostedRunner: ReturnType<typeof getHostedRunnerDiagnostic>;
   provider: ReturnType<typeof getPythProviderDiagnostic>;
+  llm: ReturnType<typeof getLlmSynthesisDiagnostic>;
   latestHostedWorkflow: Awaited<ReturnType<typeof listRecentHostedAgentJobs>>[number] | null;
 };
 
@@ -151,6 +154,7 @@ export async function getReviewHealthStatus(
     hostedResult.status === "fulfilled" ? hostedResult.value : [];
   const latestHostedWorkflow = hostedWorkflows[0] ?? null;
   const hostedRunner = getHostedRunnerDiagnostic();
+  const llm = getLlmSynthesisDiagnostic();
 
   const latestSuccessfulRun =
     runs.find((run) => run.status === "completed" && (run.paid_count ?? 0) > 0) ??
@@ -213,6 +217,7 @@ export async function getReviewHealthStatus(
       liveProviderEnabled:
         getPythProviderDiagnostic().configured &&
         hostedRunner.allowedServices.includes("pyth-market-price"),
+      llmSynthesisConfigured: llm.configured,
     },
     productPositioning: {
       mode: "workflow-first",
@@ -242,6 +247,7 @@ export async function getReviewHealthStatus(
     proofRegistry: getProofRegistryDiagnostic(),
     hostedRunner,
     provider: getPythProviderDiagnostic(),
+    llm,
     latestHostedWorkflow,
   };
 }

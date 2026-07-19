@@ -17,6 +17,14 @@ type HostedStatus = {
     error: string | null;
     structuredResult: {
       aggregationMode: string;
+      aggregationLabel: string;
+      synthesis?: {
+        status: "ai_generated" | "deterministic_fallback";
+        provider: "FreeModel" | null;
+        model: string | null;
+        usedPaidApiResponses: Array<{ serviceSlug: string; serviceName: string }>;
+        fallbackReason: string | null;
+      };
       summary: string;
       apiResults: Array<{
         serviceSlug: string;
@@ -90,7 +98,7 @@ async function main() {
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   const submittedInput =
-    `Phase 24 Pyth ${symbol} request: return the current provider-backed price, confidence interval, data publish time, price age, and server fetch time for an Arc builder. Do not invent market analysis.`;
+    `Phase 25 FreeModel ${symbol} request: use the paid text analysis and current provider-backed price to synthesize a concise evidence-labeled Arc builder report. Do not invent market data.`;
   let idempotencyKey: string | null = null;
   let launchBody: Record<string, unknown> | null = null;
 
@@ -114,13 +122,13 @@ async function main() {
     await page.locator("#market-symbol").selectOption(symbol);
     await page.locator("#hosted-input").fill(submittedInput);
     await page.getByRole("button", { name: "Preview plan and cost" }).click();
-    await page.getByText("2 paid APIs", { exact: true }).waitFor();
+    await page.getByText("2 of 3 maximum", { exact: true }).waitFor();
     const launchResponsePromise = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === "/api/hosted-agent/jobs",
     );
-    await page.getByRole("button", { name: "Run this workflow" }).click();
+    await page.getByRole("button", { name: "Run workflow for 0.0013 USDC" }).click();
     const launchResponse = await launchResponsePromise;
     assert(
       launchResponse.status() === 202 || launchResponse.status() === 200,
@@ -133,7 +141,7 @@ async function main() {
     assert(launch.jobId, "Hosted browser launch returned no job ID.");
     assert(idempotencyKey && launchBody, "Browser idempotency request was not captured.");
 
-    const deadline = Date.now() + 120_000;
+    const deadline = Date.now() + 180_000;
     let status: HostedStatus | null = null;
     while (Date.now() < deadline) {
       status = await page.evaluate(async (jobId) => {
@@ -156,18 +164,24 @@ async function main() {
     assert(status?.job.status === "completed", "Hosted browser job did not complete in time.");
     assert(status.job.workflowType === "market_context", "Hosted browser job used the wrong workflow type.");
     assert(status.job.inputText === undefined, "Hosted status API leaked full workflow input.");
-    assert(status.job.inputPreview.includes(`Phase 24 Pyth ${symbol}`), "Safe input preview is missing from the hosted result.");
+    assert(status.job.inputPreview.includes(`Phase 25 FreeModel ${symbol}`), "Safe input preview is missing from the hosted result.");
     assert(/^[0-9a-f]{64}$/.test(status.job.inputSha256), "Hosted input SHA-256 is invalid.");
     assert(status.proofs.length >= 2, "Hosted workflow did not create a proof per paid service.");
     assert(status.receiptIds.length >= 2, "Hosted multi-service workflow created fewer than two receipts.");
     assert(Number(status.job.spentUsdc) === 0.0013, "Hosted multi-service spend was not 0.0013 USDC.");
-    assert(status.job.structuredResult?.aggregationMode === "deterministic_structured", "Final Report aggregation mode is incorrect.");
-    assert(status.job.structuredResult.input.sha256 === status.job.inputSha256, "Final Report input hash differs from the job metadata.");
-    assert(status.job.structuredResult.marketSymbol === symbol, "Final Report did not preserve the selected market symbol.");
-    assert(status.job.structuredResult.apiResults.length >= 2, "Final Report is missing API results.");
+    const finalReport = status.job.structuredResult;
+    assert(finalReport?.aggregationMode === "ai_generated_synthesis", `Final Report did not use AI synthesis: ${finalReport?.synthesis?.fallbackReason ?? "missing synthesis metadata"}.`);
+    assert(finalReport.aggregationLabel === "AI-generated synthesis", "Final Report AI label is missing.");
+    assert(finalReport.synthesis?.status === "ai_generated", "Final Report synthesis status is incorrect.");
+    assert(finalReport.synthesis.provider === "FreeModel", "Final Report does not identify FreeModel.");
+    assert(finalReport.synthesis.model === "gpt-5.4-mini", "Final Report does not identify gpt-5.4-mini.");
+    assert(finalReport.synthesis.usedPaidApiResponses.length >= 2, "Final Report does not list the paid API responses used by FreeModel.");
+    assert(finalReport.input.sha256 === status.job.inputSha256, "Final Report input hash differs from the job metadata.");
+    assert(finalReport.marketSymbol === symbol, "Final Report did not preserve the selected market symbol.");
+    assert(finalReport.apiResults.length >= 2, "Final Report is missing API results.");
     assert(status.links.agentRun && status.links.receipt && status.links.passport, "Hosted result links are incomplete.");
 
-    const providerResult = status.job.structuredResult.apiResults.find(
+    const providerResult = finalReport.apiResults.find(
       (result) => result.serviceSlug === "pyth-market-price",
     );
     assert(providerResult?.status === "paid", "Pyth provider service was not paid successfully.");
@@ -189,6 +203,8 @@ async function main() {
     assert(Date.now() - publishTime < 5 * 60_000, "Pyth provider timestamp is not live.");
 
     await page.getByText("Final Report", { exact: true }).waitFor();
+    await page.getByText("AI-generated synthesis", { exact: true }).first().waitFor();
+    await page.getByText("Provider · FreeModel", { exact: true }).waitFor();
     const beforeRepeat = {
       jobId: status.job.id,
       receiptIds: [...status.receiptIds],
@@ -303,6 +319,13 @@ async function main() {
             proofTransaction: status.proofs.find(
               (proof) => proof.receiptId === providerResult.stepId,
             )?.transactionHash ?? null,
+          },
+          synthesis: {
+            provider: finalReport.synthesis?.provider,
+            model: finalReport.synthesis?.model,
+            usedPaidApiResponses: finalReport.synthesis?.usedPaidApiResponses.map(
+              (service) => service.serviceSlug,
+            ),
           },
           links: status.links,
         },

@@ -37,7 +37,9 @@ try {
   assert.equal(await page.locator("#workflow-type").inputValue(), "sentiment_tone");
   await page.getByText("Enter at least 20 characters to preview the workflow.", { exact: true }).waitFor();
   await page.getByText("Requester identity", { exact: false }).first().waitFor();
+  await page.getByText("Your wallet will not be charged.", { exact: false }).first().waitFor();
   await page.getByText("This wallet does not pay for hosted workflows.", { exact: false }).first().waitFor();
+  await page.getByText("External LLM processing:", { exact: false }).waitFor();
   await page.getByLabel("Workflow", { exact: true }).focus();
   await page.keyboard.press("Tab");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "hosted-task");

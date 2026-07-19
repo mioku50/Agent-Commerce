@@ -42,6 +42,7 @@ type ReviewStatus = {
     workflowFirstProductEnabled?: boolean;
     publicWorkflowPagesEnabled?: boolean;
     liveProviderEnabled?: boolean;
+    llmSynthesisConfigured?: boolean;
   };
   productPositioning?: {
     mode?: string;
@@ -72,6 +73,17 @@ type ReviewStatus = {
     priceUsdc?: string;
     maxPriceAgeSeconds?: number;
     dataBoundary?: string;
+  };
+  llm?: {
+    provider?: string;
+    protocol?: string;
+    configured?: boolean;
+    model?: string | null;
+    externalProcessing?: boolean;
+    deterministicFallback?: boolean;
+    legacyOpenAiKeyUsed?: boolean;
+    apiKey?: unknown;
+    baseUrl?: unknown;
   };
 };
 
@@ -313,6 +325,21 @@ async function checkReviewStatus(baseUrl: string) {
           /(api.?key|authorization|bearer|raw.?response)/i.test(key),
         ),
       detail: `configured=${json.provider?.configured === true ? "yes" : "no"} endpoint=${json.provider?.paidEndpoint ?? "missing"} freshness=${json.provider?.maxPriceAgeSeconds ?? "missing"}s`,
+    },
+    {
+      name: "review status exposes FreeModel synthesis without credentials or endpoint",
+      ok:
+        json.checks?.llmSynthesisConfigured === true &&
+        json.llm?.configured === true &&
+        json.llm.provider === "FreeModel" &&
+        json.llm.protocol === "openai-compatible" &&
+        json.llm.model === "gpt-5.4-mini" &&
+        json.llm.externalProcessing === true &&
+        json.llm.deterministicFallback === true &&
+        json.llm.legacyOpenAiKeyUsed === false &&
+        json.llm.apiKey === undefined &&
+        json.llm.baseUrl === undefined,
+      detail: `provider=${json.llm?.provider ?? "missing"} protocol=${json.llm?.protocol ?? "missing"} model=${json.llm?.model ?? "missing"} fallback=${json.llm?.deterministicFallback === true ? "enabled" : "missing"}`,
     },
   ] satisfies CheckResult[];
 

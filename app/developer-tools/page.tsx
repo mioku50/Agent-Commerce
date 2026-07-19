@@ -38,10 +38,10 @@ const tools = [
     body: "Dry-run the shared planner and inspect service buy/skip reasoning without creating a payment.",
   },
   {
-    title: "Agent Launch",
+    title: "Fund Local CLI Agent",
     href: "/agent-launch",
     icon: Fuel,
-    body: "Inspect and fund an operator-owned Arc Testnet buyer wallet for the advanced local flow.",
+    body: "Open the explicit funding flow for an operator-owned Arc Testnet buyer wallet used by the advanced local CLI.",
   },
   {
     title: "Agent Setup",

@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Agent Launch | Arc Agent Commerce",
+  title: "Fund Local CLI Agent | Arc Agent Commerce",
   description:
     "Connect an Arc Testnet wallet, fund a buyer-agent wallet, and launch the existing local CLI buyer-agent flow.",
 };
@@ -36,11 +36,11 @@ export default function AgentLaunchPage() {
         <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-12 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">Wallet-funded agent launch</Badge>
+              <Badge variant="secondary">Developer Tools · explicit funding</Badge>
               <Badge variant="outline">Arc Testnet only</Badge>
             </div>
             <h1 className="text-4xl font-bold tracking-normal text-foreground sm:text-5xl">
-              Fund the buyer-agent, then run it locally
+              Fund Local CLI Agent
             </h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
               Connect an EVM wallet on Arc Testnet, send native or ERC-20 USDC

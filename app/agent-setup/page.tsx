@@ -51,7 +51,7 @@ export default function AgentSetupPage() {
             <Button asChild variant="outline">
               <Link href="/agent-launch">
                 <Fuel />
-                Fund agent
+                Fund Local CLI Agent
               </Link>
             </Button>
             <Button asChild variant="outline">

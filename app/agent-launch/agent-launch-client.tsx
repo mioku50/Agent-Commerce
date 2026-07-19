@@ -383,7 +383,7 @@ export function AgentLaunchClient() {
             ) : (
               <Button type="button" onClick={connect} disabled={connecting || !providerAvailable}>
                 <Wallet />
-                {connecting ? "Connecting..." : "Connect Wallet"}
+                {connecting ? "Connecting..." : "Connect Funding Wallet"}
               </Button>
             )}
 
@@ -548,7 +548,7 @@ export function AgentLaunchClient() {
             <Badge variant="default">Testnet-only funding</Badge>
             <Badge variant="outline">User-confirmed wallet transactions</Badge>
           </div>
-          <CardTitle>Fund buyer-agent wallet</CardTitle>
+          <CardTitle>Fund Local CLI Agent</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-5">
           <div className="grid gap-4 md:grid-cols-2">
