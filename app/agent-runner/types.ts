@@ -6,6 +6,15 @@ export type HostedWorkflowType =
 
 export type PythMarketSymbol = "BTC/USD" | "ETH/USD" | "SOL/USD";
 
+export type ServicePresentationMetadata = {
+  providerType: "live_provider" | "internal_deterministic" | "seller_mock" | "external_placeholder";
+  providerName: string | null;
+  providerStatus: "live" | "deterministic" | "mock" | "placeholder";
+  assetSymbol: string | null;
+  dataFreshness: string | null;
+  billingLabel: string;
+};
+
 export type HostedPlanService = {
   id: string;
   slug: string;
@@ -14,6 +23,7 @@ export type HostedPlanService = {
   method: "GET" | "POST";
   priceUsdc: number;
   reasoning: string;
+  presentation: ServicePresentationMetadata;
 };
 
 export type HostedPlannerSnapshot = {
@@ -104,6 +114,7 @@ export type HostedJobView = {
     priceUsdc: string;
     status: string;
     reasoning: string;
+    presentation: ServicePresentationMetadata;
     response: unknown;
     error: string | null;
   }>;

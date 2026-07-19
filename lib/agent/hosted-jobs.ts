@@ -29,6 +29,11 @@ import {
 } from "../commerce/onchain-proof.ts";
 import { serviceRegistry } from "../services/registry.ts";
 import { getServerSupabaseConfig } from "../supabase/server-env.ts";
+import {
+  defaultServicePresentation,
+  providerResponsePresentation,
+} from "../services/presentation.ts";
+import type { ServiceSourceType } from "../services/registry.ts";
 
 export type HostedJobStatus = "queued" | "running" | "completed" | "failed";
 export type HostedJobProgressStage =
@@ -354,6 +359,7 @@ export async function getHostedAgentJobView(jobId: string) {
     id: string;
     service_slug: string;
     service_name: string;
+    service_source_type: string | null;
     price_usdc: string;
     status: string;
     reasoning: string;
@@ -370,7 +376,7 @@ export async function getHostedAgentJobView(jobId: string) {
         .maybeSingle(),
       getHostedClient()
         .from("agent_purchase_steps")
-        .select("id,service_slug,service_name,price_usdc,status,reasoning,payment_event_id,response_preview,error")
+        .select("id,service_slug,service_name,service_source_type,price_usdc,status,reasoning,payment_event_id,response_preview,error")
         .eq("run_id", job.agent_run_id)
         .order("step_index", { ascending: true }),
     ]);
@@ -481,16 +487,36 @@ export async function getHostedAgentJobView(jobId: string) {
     },
     payerWallet: agentWallet,
     receiptIds: paidSteps.map((step) => step.id),
-    services: steps.map((step) => ({
-      receiptId: step.status === "paid" ? step.id : null,
-      serviceSlug: step.service_slug,
-      serviceName: step.service_name,
-      priceUsdc: step.price_usdc,
-      status: step.status,
-      reasoning: step.reasoning,
-      response: step.response_preview,
-      error: step.error,
-    })),
+    services: steps.map((step) => {
+      const planned = job.planner_snapshot.selectedServices?.find(
+        (service) => service.slug === step.service_slug,
+      );
+      const responseProvider = providerResponsePresentation(step.response_preview);
+      const sourceType = (
+        step.service_source_type === "provider_backed" ||
+        step.service_source_type === "seller_mock" ||
+        step.service_source_type === "external_placeholder"
+          ? step.service_source_type
+          : "static"
+      ) as ServiceSourceType;
+      const fallback = defaultServicePresentation(sourceType);
+      const presentation = planned?.presentation ?? {
+        ...fallback,
+        providerName: responseProvider?.providerName ?? fallback.providerName,
+        assetSymbol: responseProvider?.assetSymbol ?? fallback.assetSymbol,
+      };
+      return {
+        receiptId: step.status === "paid" ? step.id : null,
+        serviceSlug: step.service_slug,
+        serviceName: step.service_name,
+        priceUsdc: step.price_usdc,
+        status: step.status,
+        reasoning: step.reasoning,
+        presentation,
+        response: step.response_preview,
+        error: step.error,
+      };
+    }),
     proofs,
     proof: verifiedProof ?? proofs[0] ?? null,
     links: {

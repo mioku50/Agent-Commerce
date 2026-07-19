@@ -22,6 +22,8 @@
     "hosted:workflow-test": "node --experimental-transform-types --no-warnings scripts/hosted-workflow-tests.mts",
     "hosted:recover": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/recover-hosted-agent-job.mts",
     "hosted:browser-smoke": "node --experimental-transform-types --no-warnings scripts/hosted-browser-smoke.mts",
+    "frontend:ux-test": "node --experimental-transform-types --no-warnings scripts/frontend-ux-tests.mts",
+    "frontend:responsive-test": "node --experimental-transform-types --no-warnings scripts/frontend-responsive-smoke.mts",
     "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts"
   },
   "dependencies": {

@@ -16,6 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ServicePresentationMetadata } from "./presentation.ts";
+
 export type ServiceMethod = "GET" | "POST";
 export type ServiceStatus =
   | "draft"
@@ -42,6 +44,7 @@ export type ApiService = {
   priceUsd: number;
   status: ServiceStatus;
   sourceType: ServiceSourceType;
+  presentation?: ServicePresentationMetadata;
   isPaid: boolean;
   inputSchema: unknown;
   outputSchema: unknown;
@@ -163,6 +166,15 @@ export const serviceRegistry = [
     priceUsd: 0.001,
     status: "live",
     sourceType: "provider_backed",
+    presentation: {
+      providerType: "live_provider",
+      providerName: "Pyth Network",
+      providerStatus: "live",
+      assetSymbol: null,
+      dataFreshness: "Price update age must be 120 seconds or less",
+      billingLabel:
+        "0.001 USDC pays Arc Agent Commerce for access to its Pyth-backed API, not Pyth Network directly.",
+    },
     isPaid: true,
     inputSchema: {
       type: "object",

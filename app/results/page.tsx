@@ -11,6 +11,7 @@ import {
   CircleAlert,
   FileText,
   ReceiptText,
+  Search,
   ShieldCheck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -21,6 +22,12 @@ import {
   listHostedFinalReports,
   type HostedFinalReportSummary,
 } from "@/lib/agent/hosted-jobs";
+import {
+  filterAndSortResults,
+  hasActiveResultsFilters,
+  parseResultsFilters,
+} from "@/lib/agent/results-filters";
+import { hostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
 
 export const metadata = {
   title: "Workflow Results | Arc Agent Commerce",
@@ -35,15 +42,27 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
-export default async function ResultsPage() {
+type ResultsPageProps = {
+  searchParams: Promise<{
+    q?: string | string[];
+    workflow?: string | string[];
+    status?: string | string[];
+    sort?: string | string[];
+  }>;
+};
+
+export default async function ResultsPage({ searchParams }: ResultsPageProps) {
   await connection();
-  let reports: HostedFinalReportSummary[] = [];
+  const filters = parseResultsFilters(await searchParams);
+  let allReports: HostedFinalReportSummary[] = [];
   let warning: string | null = null;
   try {
-    reports = await listHostedFinalReports(30);
+    allReports = await listHostedFinalReports(50);
   } catch (error) {
     warning = error instanceof Error ? error.message : String(error);
   }
+  const reports = filterAndSortResults(allReports, filters);
+  const filtersActive = hasActiveResultsFilters(filters);
 
   const totalSpent = reports.reduce(
     (sum, report) => sum + Number(report.spentUsdc || 0),
@@ -88,6 +107,56 @@ export default async function ResultsPage() {
         ))}
       </section>
 
+      <section className="mx-auto w-full max-w-7xl px-4 pt-6 sm:px-6">
+        <Card className="rounded-lg">
+          <CardContent className="grid gap-4 p-5">
+            <form method="get" action="/results" className="grid min-w-0 gap-4 xl:grid-cols-[minmax(220px,1fr)_220px_220px_180px_auto] xl:items-end">
+              <label className="grid min-w-0 gap-2 text-sm">
+                <span className="font-medium">Search reports</span>
+                <span className="relative min-w-0">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <input name="q" defaultValue={filters.query} maxLength={160} placeholder="Input preview or summary" className="h-10 w-full min-w-0 rounded-md border bg-background pl-9 pr-3 text-sm" />
+                </span>
+              </label>
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium">Workflow</span>
+                <select name="workflow" defaultValue={filters.workflowType ?? "all"} className="h-10 rounded-md border bg-background px-3 text-sm">
+                  <option value="all">All workflows</option>
+                  {hostedWorkflowTemplates.map((workflow) => <option key={workflow.value} value={workflow.value}>{workflow.label}</option>)}
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium">Completion status</span>
+                <select name="status" defaultValue={filters.status} className="h-10 rounded-md border bg-background px-3 text-sm">
+                  <option value="all">All completed</option>
+                  <option value="completed">Completed</option>
+                  <option value="warnings">Completed with warnings</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium">Sort</span>
+                <select name="sort" defaultValue={filters.sort} className="h-10 rounded-md border bg-background px-3 text-sm">
+                  <option value="newest">Newest</option>
+                  <option value="oldest">Oldest</option>
+                  <option value="spend">Highest spend</option>
+                </select>
+              </label>
+              <Button type="submit">Apply filters</Button>
+            </form>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t pt-4 text-sm">
+              <p data-testid="results-count" className="font-medium">
+                {reports.length} result{reports.length === 1 ? "" : "s"} found
+                {filtersActive ? ` · ${allReports.length} total` : ""}
+              </p>
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-xs text-muted-foreground">Idempotency replays resolve to the original report and do not create a second payment card.</p>
+                {filtersActive ? <Button asChild size="sm" variant="ghost"><Link href="/results">Clear filters</Link></Button> : null}
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
       <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6 lg:grid-cols-2">
         {warning ? (
           <Card className="rounded-lg lg:col-span-2">
@@ -100,9 +169,9 @@ export default async function ResultsPage() {
           <div className="lg:col-span-2">
             <EmptyState
               icon={FileText}
-              title="No completed Final Reports yet."
-              description="Run a hosted workflow with real input to create the first shareable result."
-              action={{ label: "Run Workflow", href: "/agent-runner" }}
+              title={filtersActive ? "No results match these filters." : "No completed Final Reports yet."}
+              description={filtersActive ? "Adjust or clear the search, workflow, completion status, or sorting filters." : "Run a hosted workflow with real input to create the first shareable result."}
+              action={filtersActive ? { label: "Clear filters", href: "/results" } : { label: "Run Workflow", href: "/agent-runner" }}
             />
           </div>
         ) : (

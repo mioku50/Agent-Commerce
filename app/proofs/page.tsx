@@ -21,6 +21,7 @@ import {
   type CommerceReceipt,
 } from "@/lib/commerce/receipts";
 import { shortenHash } from "@/lib/utils";
+import { ProviderResponseDetails } from "@/components/services/provider-response-details";
 
 export const metadata = {
   title: "Arc Proofs | Arc Agent Commerce",
@@ -46,25 +47,6 @@ function formatDate(value: string | null) {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));
-}
-
-function ProviderProofMetadata({ value }: { value: unknown }) {
-  if (!value || typeof value !== "object") return null;
-  const result = value as Record<string, unknown>;
-  if (result.provider !== "Pyth Network") return null;
-  const interval = result.confidenceInterval as Record<string, unknown> | undefined;
-  return (
-    <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
-      <div className="mb-3 flex flex-wrap gap-2"><Badge>Live Provider</Badge><Badge variant="secondary">Pyth Network</Badge><Badge variant="outline">{String(result.symbol ?? "unknown symbol")}</Badge></div>
-      <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
-        <div><dt className="text-muted-foreground">Normalized price</dt><dd className="font-mono">{String(result.price ?? "n/a")}</dd></div>
-        <div><dt className="text-muted-foreground">Confidence interval</dt><dd className="font-mono">{String(interval?.low ?? "n/a")} – {String(interval?.high ?? "n/a")}</dd></div>
-        <div><dt className="text-muted-foreground">Provider publish time</dt><dd>{String(result.publishTime ?? "n/a")}</dd></div>
-        <div><dt className="text-muted-foreground">Age at server fetch</dt><dd>{String(result.priceAgeSeconds ?? "n/a")} seconds</dd></div>
-      </dl>
-      <p className="mt-3 text-xs text-muted-foreground">This registry proof belongs to an Arc Agent Commerce receipt for a 0.001 USDC provider-backed API call. Pyth supplied the underlying market data and did not receive the x402 payment directly.</p>
-    </div>
-  );
 }
 
 export default async function ProofsPage() {
@@ -140,7 +122,7 @@ export default async function ProofsPage() {
             const proof = receipt.onchainProof;
             if (!proof) return null;
             return (
-              <Card key={receipt.id} className="command-card rounded-lg">
+              <Card key={receipt.id} className="command-card min-w-0 rounded-lg">
                 <CardHeader>
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
@@ -152,26 +134,26 @@ export default async function ProofsPage() {
                     <Badge variant={statusVariant(proof.status)}>{statusLabel(proof.status)}</Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="grid gap-4">
-                  <ProviderProofMetadata value={receipt.responsePreview} />
-                  <dl className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
-                    <div>
+                <CardContent className="grid min-w-0 gap-4">
+                  <ProviderResponseDetails value={receipt.responsePreview} />
+                  <dl className="grid min-w-0 gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
+                    <div className="min-w-0">
                       <dt className="text-muted-foreground">Transaction hash</dt>
                       <dd className="mt-1 break-all font-mono text-xs">
                         {proof.transactionHash ?? "Awaiting transaction"}
                       </dd>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <dt className="text-muted-foreground">Block</dt>
                       <dd className="mt-1 font-mono">{proof.blockNumber ?? "pending"}</dd>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <dt className="text-muted-foreground">Contract</dt>
                       <dd className="mt-1 break-all font-mono text-xs">
                         {proof.contractAddress ?? "n/a"}
                       </dd>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <dt className="text-muted-foreground">Verified</dt>
                       <dd className="mt-1">{formatDate(proof.verifiedAt)}</dd>
                     </div>

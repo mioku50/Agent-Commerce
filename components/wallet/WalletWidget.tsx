@@ -30,6 +30,10 @@ import {
   getArcExplorerAddressUrl,
 } from "@/lib/wallet/arc";
 import { cn, shortenHash } from "@/lib/utils";
+import {
+  HOSTED_REQUESTER_IDENTITY_LABEL,
+  HOSTED_REQUESTER_PAYMENT_COPY,
+} from "@/lib/agent/hosted-ui";
 
 export function WalletWidget({ compact = false }: { compact?: boolean }) {
   const {
@@ -91,6 +95,14 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[340px] p-3">
+        <div className="mb-3 rounded-md border border-primary/20 bg-primary/5 p-3">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">
+            {HOSTED_REQUESTER_IDENTITY_LABEL}
+          </p>
+          <p className="mt-2 text-xs leading-5 text-muted-foreground">
+            {HOSTED_REQUESTER_PAYMENT_COPY}
+          </p>
+        </div>
         <div className="rounded-md border bg-muted/35 p-3">
           <div className="flex items-center justify-between gap-3">
             <div>

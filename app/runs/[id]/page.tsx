@@ -32,6 +32,7 @@ import {
 } from "@/lib/agent/runs-public";
 import { shortenHash } from "@/lib/utils";
 import { ARC_TESTNET_EXPLORER_URL } from "@/lib/commerce/onchain-proof";
+import { ProviderResponseDetails } from "@/components/services/provider-response-details";
 
 type RunDetailPageProps = {
   params: Promise<{
@@ -54,7 +55,7 @@ function statusVariant(status: string) {
 
 function sourceLabel(sourceType: string | null) {
   if (sourceType === "static") return "Internal deterministic";
-  if (sourceType === "provider_backed") return "Live Provider · Pyth Network";
+  if (sourceType === "provider_backed") return "Live Provider";
   if (sourceType === "seller_mock") return "Seller-created mock";
   if (sourceType === "external_placeholder") return "Seller-created placeholder";
   return null;
@@ -81,27 +82,6 @@ function JsonPreview({ value }: { value: unknown }) {
     <pre className="mt-3 max-h-64 overflow-auto rounded-md bg-muted p-3 text-xs leading-5">
       {JSON.stringify(value, null, 2)}
     </pre>
-  );
-}
-
-function ProviderTimelineMetadata({ value }: { value: unknown }) {
-  if (!value || typeof value !== "object") return null;
-  const result = value as Record<string, unknown>;
-  if (result.provider !== "Pyth Network") return null;
-  const interval = result.confidenceInterval as Record<string, unknown> | undefined;
-  return (
-    <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
-      <div className="mb-3 flex flex-wrap gap-2"><Badge>Live Provider</Badge><Badge variant="secondary">Pyth Network</Badge></div>
-      <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
-        <div><dt className="text-muted-foreground">Symbol</dt><dd className="font-medium">{String(result.symbol ?? "n/a")}</dd></div>
-        <div><dt className="text-muted-foreground">Price</dt><dd className="font-mono">{String(result.price ?? "n/a")}</dd></div>
-        <div><dt className="text-muted-foreground">Confidence interval</dt><dd className="font-mono">{String(interval?.low ?? "n/a")} – {String(interval?.high ?? "n/a")}</dd></div>
-        <div><dt className="text-muted-foreground">Provider publish time</dt><dd>{String(result.publishTime ?? "n/a")}</dd></div>
-        <div><dt className="text-muted-foreground">Price age at fetch</dt><dd>{String(result.priceAgeSeconds ?? "n/a")} seconds</dd></div>
-        <div><dt className="text-muted-foreground">Provider call cost</dt><dd className="font-mono">{String(result.paidAmountUsdc ?? "0.001")} USDC</dd></div>
-      </dl>
-      <p className="mt-3 text-xs text-muted-foreground">The x402 charge is paid to Arc Agent Commerce for this normalized Pyth-backed API, not directly to Pyth Network.</p>
-    </div>
   );
 }
 
@@ -259,7 +239,7 @@ function TimelineStep({ step }: { step: PublicAgentStep }) {
           </p>
         ) : null}
 
-        <ProviderTimelineMetadata value={step.response_preview} />
+        <ProviderResponseDetails value={step.response_preview} />
 
         <div>
           <div className="flex flex-wrap items-center justify-between gap-3">

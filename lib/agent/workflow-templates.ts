@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import type { ServicePresentationMetadata } from "../services/presentation.ts";
+
 export const HOSTED_WORKFLOW_TYPES = [
   "sentiment_tone",
   "builder_update",
@@ -25,6 +27,7 @@ export type HostedWorkflowTemplate = {
     name: string;
     priceUsdc: number;
     purpose: string;
+    presentation: ServicePresentationMetadata;
   }>;
   expectedResult: string[];
 };
@@ -35,12 +38,28 @@ const commonServices: HostedWorkflowTemplate["services"] = [
     name: "Text Analyzer",
     priceUsdc: 0.0003,
     purpose: "Measures the submitted text and returns structured compute output.",
+    presentation: {
+      providerType: "internal_deterministic",
+      providerName: null,
+      providerStatus: "deterministic",
+      assetSymbol: null,
+      dataFreshness: null,
+      billingLabel: "USDC pays Arc Agent Commerce for this deterministic API service.",
+    },
   },
   {
     slug: "premium-quote",
     name: "Premium Quote",
     priceUsdc: 0.001,
     purpose: "Adds a paid, traceable research-context result to the report.",
+    presentation: {
+      providerType: "internal_deterministic",
+      providerName: null,
+      providerStatus: "deterministic",
+      assetSymbol: null,
+      dataFreshness: null,
+      billingLabel: "USDC pays Arc Agent Commerce for this deterministic API service.",
+    },
   },
 ];
 
@@ -50,12 +69,28 @@ const marketServices: HostedWorkflowTemplate["services"] = [
     name: "Text Analyzer",
     priceUsdc: 0.0003,
     purpose: "Measures the submitted source text for deterministic report context.",
+    presentation: {
+      providerType: "internal_deterministic",
+      providerName: null,
+      providerStatus: "deterministic",
+      assetSymbol: null,
+      dataFreshness: null,
+      billingLabel: "USDC pays Arc Agent Commerce for this deterministic API service.",
+    },
   },
   {
     slug: "pyth-market-price",
     name: "Live Market Price",
     priceUsdc: 0.001,
     purpose: "Returns a normalized live BTC, ETH, or SOL price sourced from Pyth Network.",
+    presentation: {
+      providerType: "live_provider",
+      providerName: "Pyth Network",
+      providerStatus: "live",
+      assetSymbol: null,
+      dataFreshness: "Price update age must be 120 seconds or less",
+      billingLabel: "0.001 USDC pays Arc Agent Commerce for access to its Pyth-backed API, not Pyth Network directly.",
+    },
   },
 ];
 

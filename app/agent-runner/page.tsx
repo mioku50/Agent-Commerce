@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { HostedAgentRunner } from "./hosted-agent-runner";
 import { getHostedRunnerDiagnostic } from "@/lib/agent/hosted-policy";
 import { listRecentHostedAgentJobs } from "@/lib/agent/hosted-jobs";
+import { parseHostedRunnerQuery } from "@/lib/agent/workflow-links";
 
 export const metadata = {
   title: "Real-Input Hosted Agent Workflows | Arc Agent Commerce",
@@ -15,7 +16,13 @@ export const metadata = {
 
 export const dynamic = "force-dynamic";
 
-type PageProps = { searchParams: Promise<{ job?: string }> };
+type PageProps = {
+  searchParams: Promise<{
+    job?: string | string[];
+    workflow?: string | string[];
+    symbol?: string | string[];
+  }>;
+};
 
 function recentHistoryWithTimeout() {
   return Promise.race([
@@ -27,11 +34,20 @@ function recentHistoryWithTimeout() {
 }
 
 export default async function AgentRunnerPage({ searchParams }: PageProps) {
-  const { job } = await searchParams;
+  const params = await searchParams;
+  const job = Array.isArray(params.job) ? params.job[0] : params.job;
   if (job && /^[0-9a-f-]{36}$/i.test(job)) redirect(`/agent-runner/${job}`);
+  const initialSelection = parseHostedRunnerQuery(params);
   const [diagnostic, history] = await Promise.all([
     Promise.resolve(getHostedRunnerDiagnostic()),
     recentHistoryWithTimeout(),
   ]);
-  return <HostedAgentRunner diagnostic={diagnostic} initialHistory={history} />;
+  return (
+    <HostedAgentRunner
+      diagnostic={diagnostic}
+      initialHistory={history}
+      initialWorkflowType={initialSelection.workflowType}
+      initialMarketSymbol={initialSelection.marketSymbol}
+    />
+  );
 }

@@ -15,6 +15,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { hostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
+import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
+import { ServicePresentation } from "@/components/services/service-presentation";
 
 export const metadata = {
   title: "Workflow Templates | Arc Agent Commerce",
@@ -87,11 +89,17 @@ export default function WorkflowsPage() {
                       className="grid gap-2 rounded-md border bg-background/60 p-3 sm:grid-cols-[1fr_auto]"
                     >
                       <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="font-medium">{service.name}</p>
-                          <Badge variant={service.slug === "pyth-market-price" ? "default" : "outline"}>
-                            {service.slug === "pyth-market-price" ? "Live Provider · Pyth Network" : "Internal deterministic"}
-                          </Badge>
+                        <p className="font-medium">{service.name}</p>
+                        <div className="mt-2">
+                          <ServicePresentation
+                            metadata={{
+                              ...service.presentation,
+                              assetSymbol:
+                                service.presentation.providerType === "live_provider"
+                                  ? "BTC/USD · ETH/USD · SOL/USD"
+                                  : service.presentation.assetSymbol,
+                            }}
+                          />
                         </div>
                         <p className="mt-1 text-xs leading-5 text-muted-foreground">
                           {service.purpose}
@@ -121,7 +129,7 @@ export default function WorkflowsPage() {
                 </div>
               </div>
               <Button asChild>
-                <Link href="/agent-runner">
+                <Link href={hostedWorkflowHref(template.value)}>
                   Use this template
                   <ArrowRight />
                 </Link>

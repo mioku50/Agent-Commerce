@@ -20,6 +20,10 @@ import {
   normalizePythSymbol,
 } from "../providers/pyth.ts";
 import type { PythMarketSymbol } from "../providers/types.ts";
+import {
+  servicePresentationMetadata,
+  type ServicePresentationMetadata,
+} from "../services/presentation.ts";
 
 export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType };
 
@@ -44,6 +48,7 @@ export type HostedPlanService = {
   method: ServiceMethod;
   priceUsdc: number;
   reasoning: string;
+  presentation: ServicePresentationMetadata;
 };
 
 export type HostedPlannerSnapshot = {
@@ -270,7 +275,7 @@ function safeService(decision: {
   service: ApiService;
   expectedPriceUsd: number;
   reasoning: string;
-}): HostedPlanService {
+}, marketSymbol: PythMarketSymbol | null): HostedPlanService {
   return {
     id: decision.service.id,
     slug: decision.service.slug,
@@ -279,6 +284,7 @@ function safeService(decision: {
     method: decision.service.method,
     priceUsdc: decision.expectedPriceUsd,
     reasoning: decision.reasoning,
+    presentation: servicePresentationMetadata(decision.service, marketSymbol),
   };
 }
 
@@ -314,8 +320,12 @@ export function createHostedWorkflowPlan(input: {
     workflowType: input.request.workflowType,
     workflowLabel: workflowLabel(input.request.workflowType),
     effectiveTask,
-    selectedServices: plan.selected.map(safeService),
-    skippedServices: plan.skipped.map(safeService),
+    selectedServices: plan.selected.map((decision) =>
+      safeService(decision, input.request.marketSymbol)
+    ),
+    skippedServices: plan.skipped.map((decision) =>
+      safeService(decision, input.request.marketSymbol)
+    ),
     estimatedSpendUsdc: plan.estimatedSpendUsdc,
     remainingBudgetUsdc: plan.remainingBudgetUsdc,
     maxPaidCalls: HOSTED_WORKFLOW_MAX_PAID_CALLS,

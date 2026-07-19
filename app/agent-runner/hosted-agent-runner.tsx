@@ -14,8 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { ServicePresentation } from "@/components/services/service-presentation";
 import { useArcWallet } from "@/components/wallet/use-arc-wallet";
 import { shortenHash } from "@/lib/utils";
+import {
+  HOSTED_REQUESTER_IDENTITY_LABEL,
+  HOSTED_REQUESTER_PAYMENT_COPY,
+  hostedInputPreviewHelper,
+} from "@/lib/agent/hosted-ui";
 import {
   getHostedWorkflowTemplate,
   hostedWorkflowTemplates,
@@ -35,17 +41,21 @@ function workflowLabel(type: HostedWorkflowType) {
 export function HostedAgentRunner({
   diagnostic,
   initialHistory,
+  initialWorkflowType,
+  initialMarketSymbol,
 }: {
   diagnostic: HostedRunnerDiagnostic;
   initialHistory: RecentHostedJob[];
+  initialWorkflowType: HostedWorkflowType;
+  initialMarketSymbol: PythMarketSymbol;
 }) {
   const router = useRouter();
   const wallet = useArcWallet();
-  const initial = hostedWorkflowTemplates[0];
+  const initial = getHostedWorkflowTemplate(initialWorkflowType) ?? hostedWorkflowTemplates[0];
   const [workflowType, setWorkflowType] = useState<HostedWorkflowType>(initial.value);
   const [task, setTask] = useState(initial.task);
   const [inputText, setInputText] = useState("");
-  const [marketSymbol, setMarketSymbol] = useState<PythMarketSymbol>("BTC/USD");
+  const [marketSymbol, setMarketSymbol] = useState<PythMarketSymbol>(initialMarketSymbol);
   const [budget, setBudget] = useState("0.005");
   const [plan, setPlan] = useState<HostedPlannerSnapshot | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -55,6 +65,7 @@ export function HostedAgentRunner({
   const [historyFilter, setHistoryFilter] = useState<HostedWorkflowType | "all">("all");
   const [historyLoading, setHistoryLoading] = useState(false);
   const idempotencyKey = useRef<string | null>(null);
+  const inputHelper = hostedInputPreviewHelper(inputText);
 
   function invalidatePlan() {
     setPlan(null);
@@ -164,7 +175,7 @@ export function HostedAgentRunner({
               <div className="flex items-center gap-2 font-medium"><ShieldCheck className="size-4 text-primary" />Project-owned payer wallet</div>
               <p className="break-all font-mono text-xs">{diagnostic.payerAddress ?? "Hosted wallet not configured"}</p>
               <p className="text-muted-foreground">Arc Testnet only · max {diagnostic.maxBudgetUsdc} USDC · max 3 paid calls · one active run.</p>
-              <p className="text-muted-foreground">A browser wallet is optional requester identity only. It never pays or exposes a private key.</p>
+              <p className="text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p>
             </CardContent>
           </Card>
         </div>
@@ -188,8 +199,8 @@ export function HostedAgentRunner({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="hosted-input">Input text</Label>
-              <textarea id="hosted-input" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder} minLength={20} maxLength={5000} required className="min-h-36 rounded-md border bg-background px-3 py-2 text-sm" />
-              <p className="text-xs text-muted-foreground">{inputText.length}/5000 · Required. Obvious credentials and private keys are rejected. Only a redacted preview and SHA-256 are published.</p>
+              <textarea id="hosted-input" aria-describedby="hosted-input-description hosted-input-helper" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder} minLength={20} maxLength={5000} required className="min-h-36 max-w-full rounded-md border bg-background px-3 py-2 text-sm" />
+              <p id="hosted-input-description" className="text-xs text-muted-foreground">{inputText.length}/5000 · Required. Obvious credentials and private keys are rejected. Only a redacted preview and SHA-256 are published.</p>
             </div>
             {workflowType === "market_context" ? (
               <div className="grid gap-2">
@@ -218,16 +229,17 @@ export function HostedAgentRunner({
             </div>
             <div className="rounded-md border p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div><p className="font-medium">Optional requester identity</p><p className="mt-1 text-xs text-muted-foreground">Separate from the project payer wallet.</p></div>
+                <div className="min-w-0"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL} <span className="font-normal text-muted-foreground">(optional)</span></p><p className="mt-1 text-xs text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p></div>
                 {wallet.address ? <Badge variant="secondary" className="font-mono">{shortenHash(wallet.address, 6)}</Badge> : <Button type="button" variant="outline" onClick={() => void wallet.connect()} disabled={!wallet.providerAvailable || wallet.connecting}><Wallet />{wallet.connecting ? "Connecting…" : "Connect identity"}</Button>}
               </div>
             </div>
             {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
+            {inputHelper ? <p id="hosted-input-helper" role="status" className="text-sm font-medium text-amber-300">{inputHelper}</p> : <span id="hosted-input-helper" className="sr-only">Input is ready for workflow preview.</span>}
             <Button size="lg" variant={plan ? "outline" : "default"} onClick={() => void preview()} disabled={previewing || launching || !diagnostic.configured || inputText.trim().length < 20}>
               {previewing ? <LoaderCircle className="animate-spin" /> : <Calculator />}{previewing ? "Building safe plan…" : plan ? "Refresh plan preview" : "Preview plan and cost"}
             </Button>
             <Button size="lg" onClick={() => void launch()} disabled={!plan || launching || previewing || plan.selectedServices.length === 0}>
-              {launching ? <LoaderCircle className="animate-spin" /> : <Bot />}{launching ? "Queueing workflow…" : "Run this workflow"}
+              {launching ? <LoaderCircle className="animate-spin" /> : <Bot />}{launching ? "Queueing workflow…" : plan ? `Run workflow for ${plan.estimatedSpendUsdc.toFixed(4)} USDC` : "Run workflow"}
             </Button>
             <Button asChild variant="ghost"><Link href="/agent-setup">Use your own wallet with the local CLI <ArrowRight /></Link></Button>
           </CardContent>
@@ -238,9 +250,16 @@ export function HostedAgentRunner({
             <CardHeader><CardTitle>Plan preview</CardTitle></CardHeader>
             <CardContent className="grid gap-4">
               {plan ? <>
-                <div className="flex flex-wrap gap-2"><Badge>{plan.selectedServices.length} paid API{plan.selectedServices.length === 1 ? "" : "s"}</Badge><Badge variant="secondary">estimated {plan.estimatedSpendUsdc} USDC</Badge><Badge variant="outline">cap {plan.maxPaidCalls} calls</Badge>{plan.marketSymbol ? <Badge variant="outline">asset {plan.marketSymbol}</Badge> : null}</div>
+                <div className="grid gap-3 rounded-md border bg-secondary/20 p-4 text-sm sm:grid-cols-2">
+                  <div><p className="text-xs text-muted-foreground">Workflow</p><p className="font-medium">{plan.workflowLabel}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Paid calls</p><p className="font-medium">{plan.selectedServices.length} of {plan.maxPaidCalls} maximum</p></div>
+                  {plan.marketSymbol ? <div><p className="text-xs text-muted-foreground">Selected asset</p><p className="font-medium">{plan.marketSymbol}</p></div> : null}
+                  <div><p className="text-xs text-muted-foreground">Estimated total</p><p className="font-mono font-medium">{plan.estimatedSpendUsdc.toFixed(4)} USDC</p></div>
+                  <div className="min-w-0"><p className="text-xs text-muted-foreground">Project-owned payer</p><p className="break-all font-mono text-xs">{diagnostic.payerAddress ?? "Unavailable"}</p></div>
+                  <div><p className="text-xs text-muted-foreground">Expected Final Report</p><p className="font-medium">{plan.aggregationLabel}</p></div>
+                </div>
                 <div className="rounded-md bg-secondary/30 p-3 text-xs"><p className="font-medium">Safe input preview</p><p className="mt-1 text-muted-foreground">{plan.inputPreview}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">SHA-256 {plan.inputSha256}</p></div>
-                <div className="grid gap-3">{plan.selectedServices.map((service) => <div key={service.slug} className="rounded-md border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><p className="font-medium">{service.name}</p>{service.slug === "pyth-market-price" ? <Badge>Live Provider · Pyth Network</Badge> : <Badge variant="outline">Internal deterministic</Badge>}</div><Badge variant="secondary">{service.priceUsdc} USDC</Badge></div><p className="mt-2 font-mono text-xs text-muted-foreground">{service.method} {service.endpoint}</p><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p>{service.slug === "pyth-market-price" ? <p className="mt-2 text-xs text-muted-foreground">Asset: {plan.marketSymbol ?? "BTC/USD"}. The 0.001 USDC price buys access to Arc Agent Commerce&apos;s normalized Pyth-backed API; it is not a direct payment to Pyth Network.</p> : null}</div>)}</div>
+                <div className="grid gap-3">{plan.selectedServices.map((service) => <div key={service.slug} className="min-w-0 rounded-md border p-4"><div className="flex min-w-0 flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="font-medium">{service.name}</p><div className="mt-2"><ServicePresentation metadata={service.presentation} /></div></div><Badge variant="secondary" className="font-mono">{service.priceUsdc.toFixed(4)} USDC</Badge></div><p className="mt-2 break-all font-mono text-xs text-muted-foreground">{service.method} {service.endpoint}</p><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p></div>)}</div>
                 {plan.skippedServices.length ? <div><p className="text-sm font-medium">Skipped by policy or relevance</p><div className="mt-2 flex flex-wrap gap-2">{plan.skippedServices.map((service) => <Badge key={service.slug} variant="outline">{service.name}</Badge>)}</div></div> : null}
                 <p className="text-xs text-muted-foreground">{plan.aggregationLabel}. No LLM analysis is claimed.</p>
               </> : <p className="text-sm text-muted-foreground">Preview is calculated on the server from the fixed Arc Testnet allowlist. Browser-supplied URLs and service selections are ignored.</p>}

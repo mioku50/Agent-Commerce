@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { listHostedFinalReports } from "@/lib/agent/hosted-jobs";
 import { listAgentProfiles } from "@/lib/agent/passport-persistence";
 import { hostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
+import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
 import { fetchRecentReceipts } from "@/lib/commerce/receipts";
 
 export default async function Home() {
@@ -122,7 +123,7 @@ export default async function Home() {
             {hostedWorkflowTemplates.slice(0, 3).map((template) => (
               <Link
                 key={template.value}
-                href="/agent-runner"
+                href={hostedWorkflowHref(template.value)}
                 className="grid min-w-0 gap-3 rounded-md border bg-background/60 p-4 transition-colors hover:border-primary/40 hover:bg-primary/5 md:grid-cols-[1fr_auto]"
               >
                 <div className="min-w-0">

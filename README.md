@@ -107,6 +107,19 @@ The primary navigation is organized around the user outcome:
 
 Legacy routes remain live so existing reviewer links, API clients, and smoke tests do not break.
 
+### Template deep links and frontend controls
+
+Workflow templates open the hosted runner with a safe, allowlisted selection already applied:
+
+- `/agent-runner?workflow=sentiment`
+- `/agent-runner?workflow=builder_update`
+- `/agent-runner?workflow=market_context&symbol=ETH%2FUSD`
+- `/agent-runner?workflow=custom`
+
+Market Context accepts only `BTC/USD`, `ETH/USD`, or `SOL/USD`; invalid workflow or symbol query values fall back to the default template. The runner still requires at least 20 input characters before the server can produce a plan. Its launch price comes only from that server-generated plan.
+
+Results search, workflow/status filters, and Newest/Oldest/Highest spend sorting are reflected in the `/results` query string, so filtered views can be bookmarked or shared. Hosted browser wallets are labeled **Requester identity** throughout the workflow UI: the separate project-owned Arc Testnet payer continues to pay hosted workflow calls.
+
 ## Verified Production Example
 
 Phase 24 was validated with a real browser-triggered **Market Context Brief** that explicitly selected `ETH/USD`. Arc Agent Commerce charged the hosted buyer-agent through x402; the normalized underlying price came from authenticated Pyth Hermes. The result records the provider confidence interval and price age at fetch. Idempotency replay returned the same job, receipts, and proof transactions without another payment.
@@ -424,9 +437,14 @@ The migration runner applies files in lexical order, records applied versions, a
 ```bash
 # Application
 npm run provider:test
+npm run hosted:workflow-test
+npm run frontend:ux-test
 npm run lint
 npm run build
 npm run review:smoke
+
+# Browser responsive/accessibility smoke against a running build
+BASE_URL=http://127.0.0.1:3000 npm run frontend:responsive-test
 
 # Hosted runner policy and database tests
 npm run hosted:test

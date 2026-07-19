@@ -11,6 +11,12 @@ import { BadgeCheck, Check, Circle, ExternalLink, LoaderCircle, ReceiptText, Rot
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ProviderResponseDetails } from "@/components/services/provider-response-details";
+import { ServicePresentation } from "@/components/services/service-presentation";
+import {
+  HOSTED_REQUESTER_IDENTITY_LABEL,
+  HOSTED_REQUESTER_PAYMENT_COPY,
+} from "@/lib/agent/hosted-ui";
 import { shortenHash } from "@/lib/utils";
 import type { HostedJobView } from "./types";
 
@@ -25,26 +31,6 @@ const STAGES = [
 
 function prettyJson(value: unknown) {
   return JSON.stringify(value, null, 2);
-}
-
-function ProviderResult({ value }: { value: unknown }) {
-  if (!value || typeof value !== "object") return null;
-  const result = value as Record<string, unknown>;
-  if (result.provider !== "Pyth Network") return null;
-  const interval = result.confidenceInterval as Record<string, unknown> | undefined;
-  return (
-    <dl className="mt-3 grid gap-2 rounded-md bg-secondary/40 p-3 text-xs sm:grid-cols-2">
-      <div><dt className="text-muted-foreground">Provider</dt><dd className="font-medium">Pyth Network</dd></div>
-      <div><dt className="text-muted-foreground">Requested symbol</dt><dd className="font-medium">{String(result.symbol ?? "—")}</dd></div>
-      <div><dt className="text-muted-foreground">Price</dt><dd className="font-mono">{String(result.price ?? "—")}</dd></div>
-      <div><dt className="text-muted-foreground">Confidence interval</dt><dd className="font-mono">{String(interval?.low ?? "—")} – {String(interval?.high ?? "—")} (±{String(result.confidence ?? "—")})</dd></div>
-      <div><dt className="text-muted-foreground">Data publish time</dt><dd>{String(result.publishTime ?? "—")}</dd></div>
-      <div><dt className="text-muted-foreground">Data fetched time</dt><dd>{String(result.fetchedAt ?? "—")}</dd></div>
-      <div><dt className="text-muted-foreground">Price age when fetched</dt><dd>{String(result.priceAgeSeconds ?? "—")} seconds</dd></div>
-      <div><dt className="text-muted-foreground">Provider call cost</dt><dd className="font-mono">{String(result.paidAmountUsdc ?? "0.001")} USDC</dd></div>
-      <div className="sm:col-span-2"><dt className="text-muted-foreground">Payment boundary</dt><dd>Paid to Arc Agent Commerce for its Pyth-backed service; not paid directly to Pyth Network.</dd></div>
-    </dl>
-  );
 }
 
 export function HostedJobResult({ initialView }: { initialView: HostedJobView }) {
@@ -107,12 +93,13 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
             })}
             {view.job.status === "failed" ? <p className="text-sm text-destructive">failed · {view.job.error}</p> : null}
             {pollError ? <p className="text-sm text-destructive">{pollError}</p> : null}
-            <div className="mt-2 rounded-md bg-secondary/30 p-3 text-xs"><p className="font-mono break-all">{view.job.id}</p><p className="mt-2 text-muted-foreground">Budget {view.job.budgetUsdc} USDC · spent {view.job.spentUsdc} USDC</p>{view.job.progressMessage ? <p className="mt-2">{view.job.progressMessage}</p> : null}</div>
+            <div className="mt-2 min-w-0 rounded-md bg-secondary/30 p-3 text-xs"><p className="break-all font-mono">{view.job.id}</p><p className="mt-2 text-muted-foreground">Budget {view.job.budgetUsdc} USDC · spent {view.job.spentUsdc} USDC</p>{view.job.progressMessage ? <p className="mt-2">{view.job.progressMessage}</p> : null}</div>
+            <div className="min-w-0 rounded-md border p-3 text-xs"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL}</p><p className="mt-1 break-all font-mono">{view.job.requesterWallet ?? "Not supplied"}</p><p className="mt-2 text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p><p className="mt-2 break-all text-muted-foreground">Project payer: <span className="font-mono">{view.payerWallet ?? "Pending"}</span></p></div>
           </CardContent></Card>
 
           <Card className="rounded-lg"><CardHeader><CardTitle>Plan snapshot</CardTitle></CardHeader><CardContent className="grid gap-3 text-sm">
             {view.job.plannerSnapshot.marketSymbol ? <Badge variant="outline" className="w-fit">Selected asset · {view.job.plannerSnapshot.marketSymbol}</Badge> : null}
-            {view.job.plannerSnapshot.selectedServices?.map((service) => <div key={service.slug} className="rounded-md border p-3"><div className="flex justify-between gap-3"><p className="font-medium">{service.name}</p><span>{service.priceUsdc} USDC</span></div><p className="mt-1 text-xs text-muted-foreground">{service.reasoning}</p></div>)}
+            {view.job.plannerSnapshot.selectedServices?.map((service) => <div key={service.slug} className="min-w-0 rounded-md border p-3"><div className="flex flex-wrap justify-between gap-3"><p className="font-medium">{service.name}</p><span className="font-mono">{service.priceUsdc.toFixed(4)} USDC</span></div>{service.presentation ? <div className="mt-2"><ServicePresentation metadata={service.presentation} /></div> : null}<p className="mt-2 text-xs text-muted-foreground">{service.reasoning}</p></div>)}
             <p className="text-xs text-muted-foreground">Estimated {view.job.plannerSnapshot.estimatedSpendUsdc ?? "—"} USDC · server allowlist · max 3 paid calls.</p>
           </CardContent></Card>
         </div>
@@ -130,7 +117,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
           </CardContent></Card>
 
           <Card className="rounded-lg"><CardHeader><CardTitle>Services purchased</CardTitle></CardHeader><CardContent className="grid gap-4">
-            {view.services.filter((service) => service.status === "paid" || service.status === "failed").map((service) => <div key={service.serviceSlug} className="rounded-md border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><p className="font-medium">{service.serviceName}</p>{service.serviceSlug === "pyth-market-price" ? <Badge variant="secondary">Live Provider · Pyth Network</Badge> : null}</div><Badge variant={service.status === "paid" ? "default" : "destructive"}>{service.status === "paid" ? `${service.priceUsdc} USDC` : "failed"}</Badge></div><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p>{service.serviceSlug === "pyth-market-price" ? <ProviderResult value={service.response} /> : service.response ? <pre className="mt-3 max-h-52 overflow-auto rounded-md bg-secondary/40 p-3 text-xs">{prettyJson(service.response)}</pre> : null}{service.error ? <p className="mt-2 text-sm text-destructive">{service.error}</p> : null}{service.receiptId ? <Button asChild size="sm" variant="outline" className="mt-3"><Link href={`/receipts/${service.receiptId}`}><ReceiptText />Receipt</Link></Button> : null}</div>)}
+            {view.services.filter((service) => service.status === "paid" || service.status === "failed").map((service) => <div key={service.serviceSlug} className="min-w-0 rounded-md border p-4"><div className="flex min-w-0 flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="font-medium">{service.serviceName}</p><div className="mt-2"><ServicePresentation metadata={service.presentation} /></div></div><Badge variant={service.status === "paid" ? "default" : "destructive"}>{service.status === "paid" ? `${service.priceUsdc} USDC` : "failed"}</Badge></div><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p>{service.presentation.providerType === "live_provider" ? <div className="mt-3"><ProviderResponseDetails value={service.response} /></div> : service.response ? <pre className="mt-3 max-h-52 max-w-full overflow-auto rounded-md bg-secondary/40 p-3 text-xs">{prettyJson(service.response)}</pre> : null}{service.error ? <p className="mt-2 break-words text-sm text-destructive">{service.error}</p> : null}{service.receiptId ? <Button asChild size="sm" variant="outline" className="mt-3"><Link href={`/receipts/${service.receiptId}`}><ReceiptText />Receipt</Link></Button> : null}</div>)}
             {!view.services.some((service) => service.status === "paid" || service.status === "failed") ? <p className="text-sm text-muted-foreground">Purchases have not started yet.</p> : null}
           </CardContent></Card>
 
