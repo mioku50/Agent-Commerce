@@ -25,6 +25,7 @@ export async function POST(request: Request) {
         budgetUsdc: workflowRequest.budgetUsdc,
         inputPreview: input.preview,
         inputSha256: input.sha256,
+        marketSymbol: workflowRequest.marketSymbol,
       },
       plan,
     }, {

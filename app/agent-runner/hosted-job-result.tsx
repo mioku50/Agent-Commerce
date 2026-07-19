@@ -31,14 +31,18 @@ function ProviderResult({ value }: { value: unknown }) {
   if (!value || typeof value !== "object") return null;
   const result = value as Record<string, unknown>;
   if (result.provider !== "Pyth Network") return null;
+  const interval = result.confidenceInterval as Record<string, unknown> | undefined;
   return (
     <dl className="mt-3 grid gap-2 rounded-md bg-secondary/40 p-3 text-xs sm:grid-cols-2">
       <div><dt className="text-muted-foreground">Provider</dt><dd className="font-medium">Pyth Network</dd></div>
       <div><dt className="text-muted-foreground">Requested symbol</dt><dd className="font-medium">{String(result.symbol ?? "—")}</dd></div>
       <div><dt className="text-muted-foreground">Price</dt><dd className="font-mono">{String(result.price ?? "—")}</dd></div>
-      <div><dt className="text-muted-foreground">Confidence</dt><dd className="font-mono">± {String(result.confidence ?? "—")}</dd></div>
+      <div><dt className="text-muted-foreground">Confidence interval</dt><dd className="font-mono">{String(interval?.low ?? "—")} – {String(interval?.high ?? "—")} (±{String(result.confidence ?? "—")})</dd></div>
       <div><dt className="text-muted-foreground">Data publish time</dt><dd>{String(result.publishTime ?? "—")}</dd></div>
       <div><dt className="text-muted-foreground">Data fetched time</dt><dd>{String(result.fetchedAt ?? "—")}</dd></div>
+      <div><dt className="text-muted-foreground">Price age when fetched</dt><dd>{String(result.priceAgeSeconds ?? "—")} seconds</dd></div>
+      <div><dt className="text-muted-foreground">Provider call cost</dt><dd className="font-mono">{String(result.paidAmountUsdc ?? "0.001")} USDC</dd></div>
+      <div className="sm:col-span-2"><dt className="text-muted-foreground">Payment boundary</dt><dd>Paid to Arc Agent Commerce for its Pyth-backed service; not paid directly to Pyth Network.</dd></div>
     </dl>
   );
 }
@@ -107,6 +111,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
           </CardContent></Card>
 
           <Card className="rounded-lg"><CardHeader><CardTitle>Plan snapshot</CardTitle></CardHeader><CardContent className="grid gap-3 text-sm">
+            {view.job.plannerSnapshot.marketSymbol ? <Badge variant="outline" className="w-fit">Selected asset · {view.job.plannerSnapshot.marketSymbol}</Badge> : null}
             {view.job.plannerSnapshot.selectedServices?.map((service) => <div key={service.slug} className="rounded-md border p-3"><div className="flex justify-between gap-3"><p className="font-medium">{service.name}</p><span>{service.priceUsdc} USDC</span></div><p className="mt-1 text-xs text-muted-foreground">{service.reasoning}</p></div>)}
             <p className="text-xs text-muted-foreground">Estimated {view.job.plannerSnapshot.estimatedSpendUsdc ?? "—"} USDC · server allowlist · max 3 paid calls.</p>
           </CardContent></Card>

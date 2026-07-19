@@ -4,6 +4,8 @@ export type HostedWorkflowType =
   | "market_context"
   | "custom_task";
 
+export type PythMarketSymbol = "BTC/USD" | "ETH/USD" | "SOL/USD";
+
 export type HostedPlanService = {
   id: string;
   slug: string;
@@ -25,6 +27,7 @@ export type HostedPlannerSnapshot = {
   aggregationLabel: string;
   inputPreview: string;
   inputSha256: string;
+  marketSymbol: PythMarketSymbol | null;
   warnings: string[];
 };
 
@@ -43,6 +46,7 @@ export type HostedFinalReport = {
     preview: string;
     sha256: string;
   };
+  marketSymbol: PythMarketSymbol | null;
   summary: string;
   keyFindings: string[];
   apiResults: HostedApiResult[];

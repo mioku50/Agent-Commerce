@@ -14,8 +14,14 @@ export type NormalizedMarketPrice = {
   symbol: PythMarketSymbol;
   price: string;
   confidence: string;
+  confidenceInterval: {
+    low: string;
+    high: string;
+  };
   publishTime: string;
   fetchedAt: string;
+  priceAgeSeconds: number;
+  freshnessThresholdSeconds: number;
   sourceStatus: ProviderSourceStatus;
 };
 

@@ -348,8 +348,10 @@ export default async function DemoPage() {
               discovers paid APIs, selects useful services, pays with USDC on
               Arc through x402/Gateway, and produces public receipts, a dynamic
               report, Agent Passport updates, and verified proofs. Market
-              Context buys a provider-backed service from Arc Agent Commerce;
-              its underlying BTC, ETH, or SOL data is sourced from Pyth Network.
+              Context lets the user explicitly choose BTC/USD, ETH/USD, or
+              SOL/USD, then buys a 0.001 USDC provider-backed service from Arc
+              Agent Commerce. Its underlying data is sourced from Pyth Network;
+              the payment is not made directly to Pyth.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">

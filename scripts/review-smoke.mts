@@ -70,6 +70,8 @@ type ReviewStatus = {
     supportedSymbols?: string[];
     paidEndpoint?: string;
     priceUsdc?: string;
+    maxPriceAgeSeconds?: number;
+    dataBoundary?: string;
   };
 };
 
@@ -305,8 +307,12 @@ async function checkReviewStatus(baseUrl: string) {
         json.provider?.configured === true &&
         json.provider?.paidEndpoint === "/api/provider/pyth/price" &&
         json.provider?.priceUsdc === "0.001" &&
-        json.provider?.supportedSymbols?.join(",") === "BTC/USD,ETH/USD,SOL/USD",
-      detail: `configured=${json.provider?.configured === true ? "yes" : "no"} endpoint=${json.provider?.paidEndpoint ?? "missing"}`,
+        json.provider?.maxPriceAgeSeconds === 120 &&
+        json.provider?.supportedSymbols?.join(",") === "BTC/USD,ETH/USD,SOL/USD" &&
+        !Object.keys(json.provider ?? {}).some((key) =>
+          /(api.?key|authorization|bearer|raw.?response)/i.test(key),
+        ),
+      detail: `configured=${json.provider?.configured === true ? "yes" : "no"} endpoint=${json.provider?.paidEndpoint ?? "missing"} freshness=${json.provider?.maxPriceAgeSeconds ?? "missing"}s`,
     },
   ] satisfies CheckResult[];
 

@@ -48,6 +48,25 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function ProviderProofMetadata({ value }: { value: unknown }) {
+  if (!value || typeof value !== "object") return null;
+  const result = value as Record<string, unknown>;
+  if (result.provider !== "Pyth Network") return null;
+  const interval = result.confidenceInterval as Record<string, unknown> | undefined;
+  return (
+    <div className="rounded-md border border-primary/20 bg-primary/5 p-4">
+      <div className="mb-3 flex flex-wrap gap-2"><Badge>Live Provider</Badge><Badge variant="secondary">Pyth Network</Badge><Badge variant="outline">{String(result.symbol ?? "unknown symbol")}</Badge></div>
+      <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+        <div><dt className="text-muted-foreground">Normalized price</dt><dd className="font-mono">{String(result.price ?? "n/a")}</dd></div>
+        <div><dt className="text-muted-foreground">Confidence interval</dt><dd className="font-mono">{String(interval?.low ?? "n/a")} – {String(interval?.high ?? "n/a")}</dd></div>
+        <div><dt className="text-muted-foreground">Provider publish time</dt><dd>{String(result.publishTime ?? "n/a")}</dd></div>
+        <div><dt className="text-muted-foreground">Age at server fetch</dt><dd>{String(result.priceAgeSeconds ?? "n/a")} seconds</dd></div>
+      </dl>
+      <p className="mt-3 text-xs text-muted-foreground">This registry proof belongs to an Arc Agent Commerce receipt for a 0.001 USDC provider-backed API call. Pyth supplied the underlying market data and did not receive the x402 payment directly.</p>
+    </div>
+  );
+}
+
 export default async function ProofsPage() {
   await connection();
   let receipts: CommerceReceipt[] = [];
@@ -134,6 +153,7 @@ export default async function ProofsPage() {
                   </div>
                 </CardHeader>
                 <CardContent className="grid gap-4">
+                  <ProviderProofMetadata value={receipt.responsePreview} />
                   <dl className="grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
                     <div>
                       <dt className="text-muted-foreground">Transaction hash</dt>

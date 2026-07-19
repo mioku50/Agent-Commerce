@@ -22,6 +22,7 @@ import {
 } from "@/lib/agent/workflow-templates";
 import type {
   HostedPlannerSnapshot,
+  PythMarketSymbol,
   HostedRunnerDiagnostic,
   HostedWorkflowType,
   RecentHostedJob,
@@ -44,6 +45,7 @@ export function HostedAgentRunner({
   const [workflowType, setWorkflowType] = useState<HostedWorkflowType>(initial.value);
   const [task, setTask] = useState(initial.task);
   const [inputText, setInputText] = useState("");
+  const [marketSymbol, setMarketSymbol] = useState<PythMarketSymbol>("BTC/USD");
   const [budget, setBudget] = useState("0.005");
   const [plan, setPlan] = useState<HostedPlannerSnapshot | null>(null);
   const [previewing, setPreviewing] = useState(false);
@@ -88,7 +90,13 @@ export function HostedAgentRunner({
   }
 
   function requestBody() {
-    return { workflowType, task, inputText, budgetUsdc: budget };
+    return {
+      workflowType,
+      task,
+      inputText,
+      marketSymbol: workflowType === "market_context" ? marketSymbol : null,
+      budgetUsdc: budget,
+    };
   }
 
   async function preview() {
@@ -183,6 +191,27 @@ export function HostedAgentRunner({
               <textarea id="hosted-input" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder} minLength={20} maxLength={5000} required className="min-h-36 rounded-md border bg-background px-3 py-2 text-sm" />
               <p className="text-xs text-muted-foreground">{inputText.length}/5000 · Required. Obvious credentials and private keys are rejected. Only a redacted preview and SHA-256 are published.</p>
             </div>
+            {workflowType === "market_context" ? (
+              <div className="grid gap-2">
+                <Label htmlFor="market-symbol">Market asset</Label>
+                <select
+                  id="market-symbol"
+                  value={marketSymbol}
+                  onChange={(event) => {
+                    setMarketSymbol(event.target.value as PythMarketSymbol);
+                    invalidatePlan();
+                  }}
+                  className="h-10 rounded-md border bg-background px-3 text-sm"
+                >
+                  <option value="BTC/USD">BTC/USD</option>
+                  <option value="ETH/USD">ETH/USD</option>
+                  <option value="SOL/USD">SOL/USD</option>
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  The server maps this allowlisted symbol to its fixed Pyth feed ID. Browser-supplied feed IDs and upstream URLs are never accepted.
+                </p>
+              </div>
+            ) : null}
             <div className="grid gap-2">
               <Label htmlFor="hosted-budget">Maximum budget (USDC)</Label>
               <Input id="hosted-budget" type="number" min="0.001" max="0.005" step="0.0001" value={budget} onChange={(event) => { setBudget(event.target.value); invalidatePlan(); }} />
@@ -209,9 +238,9 @@ export function HostedAgentRunner({
             <CardHeader><CardTitle>Plan preview</CardTitle></CardHeader>
             <CardContent className="grid gap-4">
               {plan ? <>
-                <div className="flex flex-wrap gap-2"><Badge>{plan.selectedServices.length} paid API{plan.selectedServices.length === 1 ? "" : "s"}</Badge><Badge variant="secondary">estimated {plan.estimatedSpendUsdc} USDC</Badge><Badge variant="outline">cap {plan.maxPaidCalls} calls</Badge></div>
+                <div className="flex flex-wrap gap-2"><Badge>{plan.selectedServices.length} paid API{plan.selectedServices.length === 1 ? "" : "s"}</Badge><Badge variant="secondary">estimated {plan.estimatedSpendUsdc} USDC</Badge><Badge variant="outline">cap {plan.maxPaidCalls} calls</Badge>{plan.marketSymbol ? <Badge variant="outline">asset {plan.marketSymbol}</Badge> : null}</div>
                 <div className="rounded-md bg-secondary/30 p-3 text-xs"><p className="font-medium">Safe input preview</p><p className="mt-1 text-muted-foreground">{plan.inputPreview}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">SHA-256 {plan.inputSha256}</p></div>
-                <div className="grid gap-3">{plan.selectedServices.map((service) => <div key={service.slug} className="rounded-md border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><p className="font-medium">{service.name}</p>{service.slug === "pyth-market-price" ? <Badge>Live Provider · Pyth Network</Badge> : <Badge variant="outline">Internal deterministic</Badge>}</div><Badge variant="secondary">{service.priceUsdc} USDC</Badge></div><p className="mt-2 font-mono text-xs text-muted-foreground">{service.method} {service.endpoint}</p><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p></div>)}</div>
+                <div className="grid gap-3">{plan.selectedServices.map((service) => <div key={service.slug} className="rounded-md border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2"><p className="font-medium">{service.name}</p>{service.slug === "pyth-market-price" ? <Badge>Live Provider · Pyth Network</Badge> : <Badge variant="outline">Internal deterministic</Badge>}</div><Badge variant="secondary">{service.priceUsdc} USDC</Badge></div><p className="mt-2 font-mono text-xs text-muted-foreground">{service.method} {service.endpoint}</p><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p>{service.slug === "pyth-market-price" ? <p className="mt-2 text-xs text-muted-foreground">Asset: {plan.marketSymbol ?? "BTC/USD"}. The 0.001 USDC price buys access to Arc Agent Commerce&apos;s normalized Pyth-backed API; it is not a direct payment to Pyth Network.</p> : null}</div>)}</div>
                 {plan.skippedServices.length ? <div><p className="text-sm font-medium">Skipped by policy or relevance</p><div className="mt-2 flex flex-wrap gap-2">{plan.skippedServices.map((service) => <Badge key={service.slug} variant="outline">{service.name}</Badge>)}</div></div> : null}
                 <p className="text-xs text-muted-foreground">{plan.aggregationLabel}. No LLM analysis is claimed.</p>
               </> : <p className="text-sm text-muted-foreground">Preview is calculated on the server from the fixed Arc Testnet allowlist. Browser-supplied URLs and service selections are ignored.</p>}

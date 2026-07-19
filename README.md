@@ -57,7 +57,7 @@ Available hosted workflows:
 
 - **Sentiment & Tone Report** — deterministic keyword and punctuation heuristics over user text, plus traceable paid API results;
 - **Builder Update Summary** — deterministic delivery/risk signal extraction from a project update;
-- **Market Context Brief** — combines user context with a normalized live BTC/USD, ETH/USD, or SOL/USD price sourced from Pyth Network;
+- **Market Context Brief** — explicitly selects BTC/USD, ETH/USD, or SOL/USD and combines user context with a normalized live price sourced from Pyth Network;
 - **Custom Task** — the shared planner selects relevant services from the fixed server allowlist.
 
 When no LLM is configured, the result is explicitly labeled **Structured workflow result (no LLM configured)**. The application never presents deterministic aggregation as model-generated analysis.
@@ -66,7 +66,7 @@ The application then:
 
 1. validates input type, length, emptiness, and obvious credential/private-key patterns;
 2. computes a redacted 240-character preview and SHA-256, then creates a durable Agent DB job without storing the full input;
-3. binds idempotency to the key plus workflow, input hash, task, and budget;
+3. binds idempotency to the key plus workflow, input hash, selected market symbol, task, and budget;
 4. applies cooldown, rate-limit, and active-job checks;
 5. plans the purchase through the shared agent execution core;
 6. calls up to three allowlisted x402-protected services within the `0.005 USDC` total cap, passing ephemeral source text to the Text Analyzer and an allowlisted symbol to the Pyth-backed service;
@@ -109,23 +109,26 @@ Legacy routes remain live so existing reviewer links, API clients, and smoke tes
 
 ## Verified Production Example
 
-Phase 23 was validated with a real browser-triggered **Market Context Brief** that selected the allowlisted Pyth-backed service. Arc Agent Commerce charged the hosted buyer-agent through x402; the normalized underlying price came from authenticated Pyth Hermes. Idempotency replay returned the same job, receipts, and proof transactions without another payment.
+Phase 24 was validated with a real browser-triggered **Market Context Brief** that explicitly selected `ETH/USD`. Arc Agent Commerce charged the hosted buyer-agent through x402; the normalized underlying price came from authenticated Pyth Hermes. The result records the provider confidence interval and price age at fetch. Idempotency replay returned the same job, receipts, and proof transactions without another payment.
 
 | Proof | Value |
 | --- | --- |
-| Hosted result | [`e0b9cdd0-314f-4d1a-90e2-6aaaf65632d2`](https://agent-commerce-six.vercel.app/agent-runner/e0b9cdd0-314f-4d1a-90e2-6aaaf65632d2) |
-| Agent Run | [`f9a092b5-b418-4fd9-a26f-885b810dbcbd`](https://agent-commerce-six.vercel.app/runs/f9a092b5-b418-4fd9-a26f-885b810dbcbd) |
-| Pyth receipt | [`6667cce0-854b-4560-ab39-530dd0e46615`](https://agent-commerce-six.vercel.app/receipts/6667cce0-854b-4560-ab39-530dd0e46615) |
-| Symbol | `BTC/USD` |
-| Live price · confidence | `64436.01519547` · `±20.9096521` |
-| Provider publish time | `2026-07-19T14:00:20.000Z` |
-| Server fetch time | `2026-07-19T14:00:20.524Z` |
+| Production deployment | `dpl_89Jir9UejcfsBc8WSq5SGn2wmWxC` · [`agent-commerce-six.vercel.app`](https://agent-commerce-six.vercel.app) |
+| Hosted result | [`1526513f-fe6b-4060-b2ba-e9104e4904da`](https://agent-commerce-six.vercel.app/agent-runner/1526513f-fe6b-4060-b2ba-e9104e4904da) |
+| Agent Run | [`6b5f5120-47f5-4d7e-9686-149030be1f61`](https://agent-commerce-six.vercel.app/runs/6b5f5120-47f5-4d7e-9686-149030be1f61) |
+| Pyth receipt | [`046917f0-c2ed-44b5-ab87-cb62d82c4e6b`](https://agent-commerce-six.vercel.app/receipts/046917f0-c2ed-44b5-ab87-cb62d82c4e6b) |
+| Symbol | `ETH/USD` |
+| Live price | `1871.56876472` |
+| Confidence interval | `1870.98407444` – `1872.153455` (`±0.58469028`) |
+| Provider publish time | `2026-07-19T14:32:23.000Z` |
+| Server fetch time · price age | `2026-07-19T14:32:23.539Z` · `0.539s` |
 | Pyth service payment | `0.001 USDC` |
 | Total workflow spend | `0.0013 USDC` |
-| Pyth Arc proof | [`0xdfb03cf91b61ed07d21bb7d9076cc31b85dc78e60cfae75c606befa9581f82e2`](https://testnet.arcscan.app/tx/0xdfb03cf91b61ed07d21bb7d9076cc31b85dc78e60cfae75c606befa9581f82e2) |
-| Registry read | `verified`, block `52618688`, receipt hash `0x4ffd…24a8` |
+| Pyth Arc proof | [`0xff6ed0d8d4da2abda3bde0ac9e419f997a3d7410f629e9b0a71ffe8f206d5e06`](https://testnet.arcscan.app/tx/0xff6ed0d8d4da2abda3bde0ac9e419f997a3d7410f629e9b0a71ffe8f206d5e06) |
+| Registry read | `verified`, block `52622457`, proof ID `0xc1c2…fded`, `isRegistered=true` |
+| Idempotency replay | Same job, two receipts, and two proof transactions; no second payment or proof |
 
-The provider receipt appears in Results, the Agent Run timeline, the hosted payer Passport, and seller analytics. `GET /api/proofs/6667cce0-854b-4560-ab39-530dd0e46615` and `GET /api/proofs/transactions/0xdfb…f82e2` both return the same verified registry record.
+The provider receipt appears in Results, the Agent Run timeline, the hosted payer Passport, seller analytics, and Arc Proofs. `GET /api/proofs/046917f0-c2ed-44b5-ab87-cb62d82c4e6b` and `GET /api/proofs/transactions/0xff6e…5e06` both read the same verified registry record from the unchanged app-owned contract.
 
 Historical Phase 21 real-input validation:
 
@@ -391,7 +394,7 @@ The hosted payer key, rate-limit secret, Supabase privileged credentials, proof 
 
 ### Pyth provider boundary
 
-The authenticated Hermes adapter uses a fixed upstream host and the server-side feed mapping for `BTC/USD`, `ETH/USD`, and `SOL/USD`. It applies a request timeout, limited retry/backoff for provider failures and rate limits, a five-second server cache, response-shape checks, and stale-data detection. Provider retries happen only after the x402 request reaches the Arc Agent Commerce server; the buyer's paid request is never automatically retried, avoiding duplicate settlement. A provider failure is reported honestly and does not erase useful results from other services.
+The authenticated Hermes adapter uses a fixed upstream host and server-side feed mapping for the explicit `BTC/USD`, `ETH/USD`, and `SOL/USD` selection. Browser clients cannot submit feed IDs or upstream URLs. The adapter applies a request timeout, limited retry/backoff for provider failures and rate limits, a five-second server cache, response-shape checks, and a `120s` maximum update age. It publishes only normalized symbol, price, confidence interval, provider/server timestamps, price age, source status, and billing attribution; raw Hermes responses and authorization headers are not persisted. Provider retries happen only inside the already-paid Arc Agent Commerce service request; the buyer's x402 payment is never automatically retried, avoiding duplicate settlement. A provider failure is reported honestly and does not erase useful results from other services.
 
 ## Advanced Local Buyer-Agent
 
@@ -430,7 +433,7 @@ npm run hosted:test
 
 # Explicit paid browser smoke; spends Arc Testnet USDC
 npx playwright install chromium
-npm run hosted:browser-smoke -- --confirm-paid-run
+npm run hosted:browser-smoke -- --symbol=ETH/USD --confirm-paid-run
 
 # Proof registry
 cd contracts && forge test
@@ -471,7 +474,7 @@ A paid browser smoke must never run silently. It requires the explicit `--confir
 
 ## Next Direction
 
-Phase 23 adds the first real external data provider. Future work can focus on:
+Phase 24 turns the first provider into an explicit multi-asset workflow source with transparent freshness, confidence, cost, receipt, and proof metadata. Future work can focus on:
 
 - optional model-backed synthesis that is explicitly labeled and never implied when unavailable;
 - additional low-cost allowlisted data and compute services;

@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       workflowType?: unknown;
       task?: unknown;
       inputText?: unknown;
+      marketSymbol?: unknown;
       budgetUsdc?: unknown;
       requesterWallet?: unknown;
     };
@@ -66,6 +67,7 @@ export async function POST(request: NextRequest) {
         workflowType: workflowRequest.workflowType,
         inputSha256,
         task: workflowRequest.task,
+        marketSymbol: workflowRequest.marketSymbol,
         budgetUsdc: workflowRequest.budgetUsdc,
       }),
       requesterFingerprint: hostedRequesterFingerprint({

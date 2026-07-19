@@ -43,8 +43,10 @@ const normalizedRequest = validateHostedWorkflowRequest({
   workflowType: "market_context",
   task: "Create a market context brief from the submitted note.",
   inputText: "  Volume rose 12% while volatility remained elevated.\r\nRisk appetite improved.  ",
+  marketSymbol: "ETH/USD",
   budgetUsdc: "0.005",
 });
+assert(normalizedRequest.marketSymbol === "ETH/USD", "Explicit hosted market symbol was not preserved.");
 assert(
   normalizedRequest.inputText ===
     "Volume rose 12% while volatility remained elevated.\nRisk appetite improved.",
@@ -60,6 +62,7 @@ const idempotencyRequestHash = hostedIdempotencyRequestHash({
   workflowType: normalizedRequest.workflowType,
   inputSha256: normalizedMetadata.sha256,
   task: normalizedRequest.task,
+  marketSymbol: normalizedRequest.marketSymbol,
   budgetUsdc: normalizedRequest.budgetUsdc,
 });
 const changedInputRequestHash = hostedIdempotencyRequestHash({
@@ -67,11 +70,24 @@ const changedInputRequestHash = hostedIdempotencyRequestHash({
   workflowType: normalizedRequest.workflowType,
   inputSha256: hashHostedWorkflowInput(`${normalizedRequest.inputText} changed`),
   task: normalizedRequest.task,
+  marketSymbol: normalizedRequest.marketSymbol,
   budgetUsdc: normalizedRequest.budgetUsdc,
 });
 assert(
   idempotencyRequestHash !== changedInputRequestHash,
   "Idempotency request fingerprint does not include the workflow input hash.",
+);
+const changedSymbolRequestHash = hostedIdempotencyRequestHash({
+  secret: "phase21-test-secret",
+  workflowType: normalizedRequest.workflowType,
+  inputSha256: normalizedMetadata.sha256,
+  task: normalizedRequest.task,
+  marketSymbol: "SOL/USD",
+  budgetUsdc: normalizedRequest.budgetUsdc,
+});
+assert(
+  idempotencyRequestHash !== changedSymbolRequestHash,
+  "Idempotency request fingerprint does not include the selected market symbol.",
 );
 assert(
   hostedWorkflowInputMetadata(
@@ -109,8 +125,9 @@ const pythRequest = requestBodyForService(
   normalizedRequest.task,
   "SOL/USD market context with elevated volatility.",
   [],
+  normalizedRequest.marketSymbol,
 ) as { symbol?: string };
-assert(pythRequest.symbol === "SOL/USD", "Pyth request did not use the allowlisted symbol inferred from real input.");
+assert(pythRequest.symbol === "ETH/USD", "Pyth request did not use the explicit allowlisted hosted symbol.");
 const btcRequest = requestBodyForService(
   pythService,
   "Use a current BTC, ETH, or SOL price sourced from Pyth Network.",
@@ -124,6 +141,7 @@ assert(
   "Market Context Brief did not select deterministic text analysis plus Pyth.",
 );
 assert(marketPlan.estimatedSpendUsdc === 0.0013, "Market workflow estimated cost is incorrect.");
+assert(marketPlan.marketSymbol === "ETH/USD", "Planner snapshot did not persist the selected market symbol.");
 
 assert(plan.selectedServices.length === 2, "Multi-service workflow did not select two paid APIs.");
 assert(plan.selectedServices.length <= 3, "Hosted plan exceeded the three-call cap.");
@@ -161,6 +179,13 @@ expectInvalid("empty market context input", {
   workflowType: "market_context",
   task: "Analyze this market note with safe services.",
   inputText: "   ",
+  budgetUsdc: 0.005,
+});
+expectInvalid("unsupported market symbol", {
+  workflowType: "market_context",
+  task: "Analyze this market note with safe services.",
+  inputText: "A sufficiently long market context request for a live price.",
+  marketSymbol: "DOGE/USD",
   budgetUsdc: 0.005,
 });
 expectInvalid("non-string input", {
@@ -230,4 +255,4 @@ assert(report.aggregationMode === "deterministic_structured", "Report claims an 
 assert(report.input.sha256 === plan.inputSha256, "Final Report input hash differs from the plan.");
 assert(report.input.preview === plan.inputPreview, "Final Report input preview differs from the plan.");
 
-console.log("[hosted-workflow-test] passed: input type/size/secret validation, normalized hashing, safe preview, fixed allowlist, two-service planning, budget/call caps, dynamic Final Report, partial failure");
+console.log("[hosted-workflow-test] passed: input type/size/secret/symbol validation, input+asset idempotency hashing, safe preview, fixed allowlist, explicit ETH/USD execution, two-service planning, budget/call caps, dynamic Final Report, partial failure");

@@ -15,6 +15,11 @@ import {
   HOSTED_WORKFLOW_TYPES,
   type HostedWorkflowType,
 } from "./workflow-templates.ts";
+import {
+  inferPythSymbol,
+  normalizePythSymbol,
+} from "../providers/pyth.ts";
+import type { PythMarketSymbol } from "../providers/types.ts";
 
 export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType };
 
@@ -27,6 +32,7 @@ export type HostedWorkflowRequest = {
   workflowType: HostedWorkflowType;
   task: string;
   inputText: string;
+  marketSymbol: PythMarketSymbol | null;
   budgetUsdc: number;
 };
 
@@ -41,7 +47,7 @@ export type HostedPlanService = {
 };
 
 export type HostedPlannerSnapshot = {
-  version: 2;
+  version: 3;
   workflowType: HostedWorkflowType;
   workflowLabel: string;
   effectiveTask: string;
@@ -55,11 +61,12 @@ export type HostedPlannerSnapshot = {
   aggregationLabel: "Structured workflow result (no LLM configured)";
   inputPreview: string;
   inputSha256: string;
+  marketSymbol: PythMarketSymbol | null;
   warnings: string[];
 };
 
 export type HostedFinalReport = {
-  version: 2;
+  version: 3;
   workflowType: HostedWorkflowType;
   aggregationMode: "deterministic_structured";
   aggregationLabel: "Structured workflow result (no LLM configured)";
@@ -67,6 +74,7 @@ export type HostedFinalReport = {
     preview: string;
     sha256: string;
   };
+  marketSymbol: PythMarketSymbol | null;
   summary: string;
   keyFindings: string[];
   apiResults: BuyerAgentServiceResult[];
@@ -177,6 +185,7 @@ export function validateHostedWorkflowRequest(input: {
   workflowType?: unknown;
   task?: unknown;
   inputText?: unknown;
+  marketSymbol?: unknown;
   budgetUsdc?: unknown;
 }): HostedWorkflowRequest {
   if (!isHostedWorkflowType(input.workflowType)) {
@@ -206,10 +215,27 @@ export function validateHostedWorkflowRequest(input: {
   rejectObviousSecrets(task, "Task");
   rejectObviousSecrets(inputText, "Input text");
 
+  let marketSymbol: PythMarketSymbol | null = null;
+  if (workflowType === "market_context") {
+    marketSymbol =
+      input.marketSymbol === undefined ||
+      input.marketSymbol === null ||
+      input.marketSymbol === ""
+        ? inferPythSymbol(inputText, task)
+        : normalizePythSymbol(input.marketSymbol);
+  } else if (
+    input.marketSymbol !== undefined &&
+    input.marketSymbol !== null &&
+    input.marketSymbol !== ""
+  ) {
+    marketSymbol = normalizePythSymbol(input.marketSymbol);
+  }
+
   return {
     workflowType,
     task: task || defaultWorkflowTask(workflowType),
     inputText,
+    marketSymbol,
     budgetUsdc: validateHostedBudget(input.budgetUsdc),
   };
 }
@@ -235,7 +261,7 @@ export function effectiveWorkflowTask(input: HostedWorkflowRequest) {
     return `${input.task} Use paid text analysis and concise research context for the builder update report.`;
   }
   if (input.workflowType === "market_context") {
-    return `${input.task} Use paid text analysis and a current BTC, ETH, or SOL price sourced from Pyth Network. Never invent provider data.`;
+    return `${input.task} Use paid text analysis and the current ${input.marketSymbol ?? "BTC/USD"} price sourced from Pyth Network. Never invent provider data.`;
   }
   return input.task;
 }
@@ -284,7 +310,7 @@ export function createHostedWorkflowPlan(input: {
   });
 
   return {
-    version: 2,
+    version: 3,
     workflowType: input.request.workflowType,
     workflowLabel: workflowLabel(input.request.workflowType),
     effectiveTask,
@@ -298,6 +324,7 @@ export function createHostedWorkflowPlan(input: {
     aggregationLabel: "Structured workflow result (no LLM configured)",
     inputPreview: inputMetadata.preview,
     inputSha256: inputMetadata.sha256,
+    marketSymbol: input.request.marketSymbol,
     warnings: plan.warnings,
   };
 }
@@ -314,7 +341,8 @@ function findingForResult(result: BuyerAgentServiceResult) {
     return `Premium Quote returned: ${String(response.quote)}`;
   }
   if (result.serviceSlug === "pyth-market-price" && response) {
-    return `Pyth Network returned ${String(response.symbol ?? "the requested symbol")} at ${String(response.price ?? "unavailable")} ± ${String(response.confidence ?? "unavailable")}, published ${String(response.publishTime ?? "unknown")} and fetched ${String(response.fetchedAt ?? "unknown")}; Arc Agent Commerce charged ${String(result.amountUsdc ?? response.paidAmountUsdc ?? "unknown")} USDC.`;
+    const interval = response.confidenceInterval as Record<string, unknown> | undefined;
+    return `Pyth Network returned ${String(response.symbol ?? "the requested symbol")} at ${String(response.price ?? "unavailable")} with confidence interval ${String(interval?.low ?? "unavailable")}–${String(interval?.high ?? "unavailable")} (±${String(response.confidence ?? "unavailable")}), published ${String(response.publishTime ?? "unknown")}, age ${String(response.priceAgeSeconds ?? "unknown")}s when fetched ${String(response.fetchedAt ?? "unknown")}; Arc Agent Commerce charged ${String(result.amountUsdc ?? response.paidAmountUsdc ?? "unknown")} USDC for access to its provider-backed service, not as a direct payment to Pyth.`;
   }
   return `${result.serviceName} returned a structured paid API result.`;
 }
@@ -396,7 +424,7 @@ export function buildHostedFinalReport(input: {
   const failedCount = input.serviceResults.filter((result) => result.status === "failed").length;
   const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText ?? "");
   return {
-    version: 2,
+    version: 3,
     workflowType: input.request.workflowType,
     aggregationMode: "deterministic_structured",
     aggregationLabel: "Structured workflow result (no LLM configured)",
@@ -404,6 +432,7 @@ export function buildHostedFinalReport(input: {
       preview: inputMetadata.preview,
       sha256: inputMetadata.sha256,
     },
+    marketSymbol: input.request.marketSymbol,
     summary: `${workflowLabel(input.request.workflowType)} completed ${paidCount} of ${input.plan.selectedServices.length} selected paid API call(s) using deterministic aggregation${failedCount > 0 ? `; ${failedCount} call(s) failed` : ""}.`,
     keyFindings: [
       ...deterministicWorkflowFindings(input.request),

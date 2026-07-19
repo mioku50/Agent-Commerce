@@ -28,6 +28,7 @@ type HostedStatus = {
       receiptIds: string[];
       proofTransactionHashes: string[];
       input: { preview: string; sha256: string };
+      marketSymbol: "BTC/USD" | "ETH/USD" | "SOL/USD" | null;
     } | null;
   };
   receiptIds: string[];
@@ -69,6 +70,15 @@ function confirmPaidRun() {
   }
 }
 
+function requestedSymbol() {
+  const argument = process.argv.find((value) => value.startsWith("--symbol="));
+  const symbol = argument?.slice("--symbol=".length).toUpperCase() ?? "BTC/USD";
+  if (symbol !== "BTC/USD" && symbol !== "ETH/USD" && symbol !== "SOL/USD") {
+    throw new Error("--symbol must be BTC/USD, ETH/USD, or SOL/USD.");
+  }
+  return symbol;
+}
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -76,10 +86,11 @@ function sleep(ms: number) {
 async function main() {
   confirmPaidRun();
   const url = baseUrl();
+  const symbol = requestedSymbol();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
   const submittedInput =
-    "Phase 23 Pyth BTC/USD request: return the current provider-backed price, confidence, data publish time, and server fetch time for an Arc builder. Do not invent market analysis.";
+    `Phase 24 Pyth ${symbol} request: return the current provider-backed price, confidence interval, data publish time, price age, and server fetch time for an Arc builder. Do not invent market analysis.`;
   let idempotencyKey: string | null = null;
   let launchBody: Record<string, unknown> | null = null;
 
@@ -100,6 +111,7 @@ async function main() {
     await page.goto(`${url}/agent-runner`, { waitUntil: "networkidle" });
     await page.getByText("Project-owned payer wallet", { exact: true }).waitFor();
     await page.locator("#workflow-type").selectOption("market_context");
+    await page.locator("#market-symbol").selectOption(symbol);
     await page.locator("#hosted-input").fill(submittedInput);
     await page.getByRole("button", { name: "Preview plan and cost" }).click();
     await page.getByText("2 paid APIs", { exact: true }).waitFor();
@@ -144,13 +156,14 @@ async function main() {
     assert(status?.job.status === "completed", "Hosted browser job did not complete in time.");
     assert(status.job.workflowType === "market_context", "Hosted browser job used the wrong workflow type.");
     assert(status.job.inputText === undefined, "Hosted status API leaked full workflow input.");
-    assert(status.job.inputPreview.includes("Phase 23 Pyth BTC/USD"), "Safe input preview is missing from the hosted result.");
+    assert(status.job.inputPreview.includes(`Phase 24 Pyth ${symbol}`), "Safe input preview is missing from the hosted result.");
     assert(/^[0-9a-f]{64}$/.test(status.job.inputSha256), "Hosted input SHA-256 is invalid.");
     assert(status.proofs.length >= 2, "Hosted workflow did not create a proof per paid service.");
     assert(status.receiptIds.length >= 2, "Hosted multi-service workflow created fewer than two receipts.");
     assert(Number(status.job.spentUsdc) === 0.0013, "Hosted multi-service spend was not 0.0013 USDC.");
     assert(status.job.structuredResult?.aggregationMode === "deterministic_structured", "Final Report aggregation mode is incorrect.");
     assert(status.job.structuredResult.input.sha256 === status.job.inputSha256, "Final Report input hash differs from the job metadata.");
+    assert(status.job.structuredResult.marketSymbol === symbol, "Final Report did not preserve the selected market symbol.");
     assert(status.job.structuredResult.apiResults.length >= 2, "Final Report is missing API results.");
     assert(status.links.agentRun && status.links.receipt && status.links.passport, "Hosted result links are incomplete.");
 
@@ -161,9 +174,14 @@ async function main() {
     assert(providerResult.amountUsdc === "0.001", "Pyth provider paid amount is not 0.001 USDC.");
     assert(providerResult.stepId, "Pyth provider receipt ID is missing.");
     assert(providerResult.response?.provider === "Pyth Network", "Final Report does not identify Pyth Network.");
-    assert(providerResult.response.symbol === "BTC/USD", "Pyth provider returned the wrong symbol.");
+    assert(providerResult.response.symbol === symbol, "Pyth provider returned the wrong symbol.");
     assert(Number(providerResult.response.price) > 0, "Pyth provider price is not a positive live value.");
     assert(Number(providerResult.response.confidence) >= 0, "Pyth provider confidence is invalid.");
+    const confidenceInterval = providerResult.response.confidenceInterval as Record<string, unknown> | undefined;
+    assert(Number(confidenceInterval?.low) <= Number(providerResult.response.price), "Pyth confidence interval low bound is invalid.");
+    assert(Number(confidenceInterval?.high) >= Number(providerResult.response.price), "Pyth confidence interval high bound is invalid.");
+    assert(Number(providerResult.response.priceAgeSeconds) >= 0, "Pyth provider price age is invalid.");
+    assert(Number(providerResult.response.priceAgeSeconds) <= 120, "Pyth provider returned stale price metadata.");
     const publishTime = Date.parse(String(providerResult.response.publishTime));
     const fetchedAt = Date.parse(String(providerResult.response.fetchedAt));
     assert(Number.isFinite(publishTime), "Pyth provider publish time is invalid.");
@@ -277,8 +295,10 @@ async function main() {
             symbol: providerResult.response.symbol,
             price: providerResult.response.price,
             confidence: providerResult.response.confidence,
+            confidenceInterval: providerResult.response.confidenceInterval,
             publishTime: providerResult.response.publishTime,
             fetchedAt: providerResult.response.fetchedAt,
+            priceAgeSeconds: providerResult.response.priceAgeSeconds,
             receiptId: providerResult.stepId,
             proofTransaction: status.proofs.find(
               (proof) => proof.receiptId === providerResult.stepId,

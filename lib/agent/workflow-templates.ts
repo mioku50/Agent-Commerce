@@ -97,14 +97,14 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
     label: "Market Context Brief",
     shortLabel: "Market Context",
     description:
-      "Combine a user-supplied market question with a paid live price sourced from Pyth Network.",
+      "Choose BTC/USD, ETH/USD, or SOL/USD and combine user-supplied context with a paid live price sourced from Pyth Network.",
     task: "Analyze this submitted crypto market context using a live provider-backed price and produce an evidence-labeled brief.",
-    placeholder: "Ask about BTC/USD, ETH/USD, or SOL/USD and include the context you want analyzed…",
+    placeholder: "Add the real market context or question you want analyzed for the selected asset…",
     estimatedSpendUsdc: 0.0013,
     services: marketServices,
     expectedResult: [
-      "Live Pyth Network price and confidence",
-      "Provider publish and server fetch timestamps",
+      "Live Pyth Network price and confidence interval",
+      "Provider publish time, server fetch time, and price age",
       "Receipts and a verified Arc proof for every paid call",
     ],
   },

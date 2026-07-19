@@ -24,7 +24,7 @@ const handler = async (req: NextRequest) => {
   } catch (error) {
     if (!isProviderError(error)) throw error;
     console.warn(
-      `[provider:pyth] request failed code=${error.code} upstreamStatus=${error.upstreamStatus ?? "none"} retryable=${error.retryable ? "yes" : "no"} upstreamMessage=${JSON.stringify(error.upstreamMessage ?? "none")}`,
+      `[provider:pyth] request failed code=${error.code} upstreamStatus=${error.upstreamStatus ?? "none"} retryable=${error.retryable ? "yes" : "no"}`,
     );
     return NextResponse.json(
       {

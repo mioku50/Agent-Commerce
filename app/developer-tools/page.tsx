@@ -9,12 +9,14 @@ import {
   Bot,
   FlaskConical,
   Fuel,
+  Radio,
   Store,
   TerminalSquare,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getPythProviderDiagnostic } from "@/lib/providers/pyth";
 
 export const metadata = {
   title: "Developer Tools | Arc Agent Commerce",
@@ -50,6 +52,7 @@ const tools = [
 ];
 
 export default function DeveloperToolsPage() {
+  const provider = getPythProviderDiagnostic();
   return (
     <main className="min-h-screen bg-background">
       <section className="border-b bg-secondary/20">
@@ -83,6 +86,22 @@ export default function DeveloperToolsPage() {
             </CardContent>
           </Card>
         ))}
+        <Card className="rounded-lg border-primary/25 md:col-span-2">
+          <CardHeader>
+            <div className="mb-3 flex size-10 items-center justify-center rounded-md bg-primary/10 text-primary"><Radio className="size-5" /></div>
+            <div className="flex flex-wrap items-center gap-2"><CardTitle>Pyth provider details</CardTitle><Badge>{provider.configured ? "Server adapter configured" : "Server adapter unavailable"}</Badge><Badge variant="secondary">Live Provider</Badge></div>
+          </CardHeader>
+          <CardContent className="grid gap-4">
+            <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <div><dt className="text-muted-foreground">Provider</dt><dd className="font-medium">{provider.provider}</dd></div>
+              <div><dt className="text-muted-foreground">Symbols</dt><dd>{provider.supportedSymbols.join(", ")}</dd></div>
+              <div><dt className="text-muted-foreground">Agent access price</dt><dd className="font-mono">{provider.priceUsdc} USDC</dd></div>
+              <div><dt className="text-muted-foreground">Freshness threshold</dt><dd>{provider.maxPriceAgeSeconds} seconds</dd></div>
+            </dl>
+            <p className="text-sm leading-6 text-muted-foreground">Arc Agent Commerce charges the buyer-agent through x402, then obtains and normalizes Pyth Network data. The agent does not pay Pyth directly. Feed IDs and the upstream host are fixed server-side; arbitrary provider proxying is disabled.</p>
+            <p className="rounded-md bg-secondary/30 p-3 text-xs text-muted-foreground">{provider.dataBoundary}</p>
+          </CardContent>
+        </Card>
         <Card className="rounded-lg border-primary/25 md:col-span-2">
           <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
             <p className="flex items-center gap-3 text-sm text-muted-foreground">

@@ -12,7 +12,7 @@ const DEFAULT_TIMEOUT_MS = 4_000;
 const DEFAULT_RETRIES = 2;
 const DEFAULT_BACKOFF_MS = 200;
 const DEFAULT_CACHE_TTL_MS = 5_000;
-const DEFAULT_MAX_AGE_SECONDS = 120;
+export const PYTH_MAX_PRICE_AGE_SECONDS = 120;
 
 const FEED_IDS: Record<PythMarketSymbol, string> = {
   "BTC/USD": "e62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43",
@@ -133,18 +133,27 @@ function parseResult(
     throw new ProviderError("malformed_response");
   }
 
-  const ageSeconds = Math.floor(nowMs / 1000) - publishTime;
+  const ageSeconds = (nowMs - publishTime * 1000) / 1000;
   if (ageSeconds > maxAgeSeconds || ageSeconds < -30) {
     throw new ProviderError("stale_data", { retryable: true });
   }
+
+  const rawPrice = BigInt(price);
+  const rawConfidence = BigInt(confidence);
 
   return {
     provider: "Pyth Network",
     symbol,
     price: decimalString(price, exponent),
     confidence: decimalString(confidence, exponent),
+    confidenceInterval: {
+      low: decimalString((rawPrice - rawConfidence).toString(), exponent),
+      high: decimalString((rawPrice + rawConfidence).toString(), exponent),
+    },
     publishTime: new Date(publishTime * 1000).toISOString(),
     fetchedAt: new Date(nowMs).toISOString(),
+    priceAgeSeconds: Math.max(0, Number(ageSeconds.toFixed(3))),
+    freshnessThresholdSeconds: maxAgeSeconds,
     sourceStatus: "live",
   };
 }
@@ -184,10 +193,17 @@ export async function getPythMarketPrice(
   const retries = options.retries ?? DEFAULT_RETRIES;
   const backoffMs = options.backoffMs ?? DEFAULT_BACKOFF_MS;
   const cacheTtlMs = options.cacheTtlMs ?? DEFAULT_CACHE_TTL_MS;
-  const maxAgeSeconds = options.maxAgeSeconds ?? DEFAULT_MAX_AGE_SECONDS;
+  const maxAgeSeconds = options.maxAgeSeconds ?? PYTH_MAX_PRICE_AGE_SECONDS;
   const nowMs = now();
   const cached = cache.get(symbol);
-  if (cached && cached.expiresAt > nowMs) return cached.result;
+  if (cached && cached.expiresAt > nowMs) {
+    const cachedAgeSeconds =
+      (nowMs - Date.parse(cached.result.publishTime)) / 1000;
+    if (cachedAgeSeconds <= maxAgeSeconds && cachedAgeSeconds >= -30) {
+      return cached.result;
+    }
+    cache.delete(symbol);
+  }
 
   const url = new URL(PYTH_HERMES_URL);
   url.searchParams.append("ids[]", FEED_IDS[symbol]);
@@ -259,6 +275,9 @@ export function getPythProviderDiagnostic() {
     supportedSymbols: [...PYTH_MARKET_SYMBOLS],
     paidEndpoint: "/api/provider/pyth/price" as const,
     priceUsdc: "0.001" as const,
+    maxPriceAgeSeconds: PYTH_MAX_PRICE_AGE_SECONDS,
+    dataBoundary:
+      "Only normalized price metadata crosses the provider boundary; raw Hermes payloads and authorization headers are not persisted." as const,
   };
 }
 

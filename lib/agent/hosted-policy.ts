@@ -235,15 +235,17 @@ export function hostedIdempotencyRequestHash(input: {
   workflowType: string;
   inputSha256: string;
   task: string;
+  marketSymbol?: string | null;
   budgetUsdc: number;
 }) {
   return hmac(
     input.secret,
-    "hosted-agent-idempotency-request-v2",
+    "hosted-agent-idempotency-request-v3",
     [
       input.workflowType,
       input.inputSha256,
       input.task,
+      input.marketSymbol ?? "none",
       input.budgetUsdc.toFixed(6),
     ].join("\n"),
   );

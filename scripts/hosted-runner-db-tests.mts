@@ -39,7 +39,7 @@ async function launch(
   const sourceInput = "This is a valid hosted workflow database test input.";
   const inputHash = digest(sourceInput);
   const plannerSnapshot = {
-    version: 2,
+    version: 3,
     workflowType: "sentiment_tone",
     workflowLabel: "Sentiment & Tone Report",
     selectedServices: [
@@ -51,6 +51,7 @@ async function launch(
     aggregationMode: "deterministic_structured",
     inputPreview: sourceInput,
     inputSha256: inputHash,
+    marketSymbol: null,
   };
   const { data, error } = await client.rpc("launch_hosted_agent_workflow_v2", {
     p_idempotency_hash: input.idempotency,

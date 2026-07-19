@@ -177,6 +177,7 @@ function validatedExecutionRequest(job: HostedAgentJobRow, inputText: string) {
     workflowType: job.workflow_type,
     task: job.task,
     inputText,
+    marketSymbol: job.planner_snapshot.marketSymbol,
     budgetUsdc: Number(job.budget_usdc),
   });
   if (hashHostedWorkflowInput(request.inputText) !== job.input_hash) {
@@ -201,6 +202,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
     const result = await executeBuyerAgent({
       task: plannerSnapshot.effectiveTask ?? job.task,
       requestInputText: request.inputText,
+      marketSymbol: request.marketSymbol,
       spendingLimit: Number(job.budget_usdc),
       baseUrl: config.baseUrl,
       sellerAddress: config.sellerAddress,

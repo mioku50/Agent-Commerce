@@ -56,6 +56,7 @@ import type {
   ServiceStatus,
 } from "../services/registry.ts";
 import { inferPythSymbol } from "../providers/pyth.ts";
+import type { PythMarketSymbol } from "../providers/types.ts";
 
 type ServiceDiscoveryResponse = {
   services?: ApiService[];
@@ -80,6 +81,7 @@ export type BuyerAgentProgress = {
 export type BuyerAgentExecutionOptions = {
   task: string;
   requestInputText?: string | null;
+  marketSymbol?: PythMarketSymbol | null;
   spendingLimit: number;
   baseUrl: string;
   sellerAddress: Address;
@@ -369,6 +371,7 @@ export function requestBodyForService(
   task: string,
   inputText: string | null | undefined,
   paidPreviews: unknown[],
+  marketSymbol?: PythMarketSymbol | null,
 ) {
   if (service.method !== "POST") return undefined;
 
@@ -377,7 +380,7 @@ export function requestBodyForService(
   }
 
   if (service.slug === "pyth-market-price") {
-    return { symbol: inferPythSymbol(inputText, task) };
+    return { symbol: marketSymbol ?? inferPythSymbol(inputText, task) };
   }
 
   const example = service.exampleRequest as { body?: Record<string, unknown> };
@@ -1060,6 +1063,7 @@ export async function executeBuyerAgent(
       task,
       options.requestInputText,
       paidPreviews,
+      options.marketSymbol,
     );
 
     updateLocalStep(runLog, stepIndex, { status: "selected" });

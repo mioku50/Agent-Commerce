@@ -57,7 +57,7 @@ const reviewSmokeCommand = "npm run review:smoke";
 const reviewChecklist = [
   {
     title: "Run a hosted workflow",
-    body: "Choose Market Context, request BTC/USD, ETH/USD, or SOL/USD, preview the paid Pyth-backed service, and launch once.",
+    body: "Choose Market Context, explicitly select BTC/USD, ETH/USD, or SOL/USD, preview the 0.001 USDC Pyth-backed service, and launch once.",
     href: "/agent-runner",
   },
   {
@@ -330,7 +330,7 @@ export default async function ReviewPage() {
           <StatusCard
             title="Live Provider · Pyth Network"
             ok={data.checks.liveProviderEnabled}
-            detail={data.checks.liveProviderEnabled ? "Authenticated server-side Hermes adapter is allowlisted for BTC/USD, ETH/USD, and SOL/USD. The agent pays Arc Agent Commerce through x402; Pyth supplies the underlying data." : "Pyth provider key or hosted service allowlist is not configured."}
+            detail={data.checks.liveProviderEnabled ? "Authenticated server-side Hermes adapter maps explicit BTC/USD, ETH/USD, and SOL/USD choices to fixed feeds, rejects stale updates, and reports confidence interval plus price age. The agent pays Arc Agent Commerce through x402; Pyth supplies the underlying data." : "Pyth provider key or hosted service allowlist is not configured."}
           />
         </section>
 

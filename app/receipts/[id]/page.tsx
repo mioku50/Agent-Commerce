@@ -77,6 +77,7 @@ function ProviderMetadata({ value }: { value: unknown }) {
   if (!value || typeof value !== "object") return null;
   const result = value as Record<string, unknown>;
   if (result.provider !== "Pyth Network") return null;
+  const interval = result.confidenceInterval as Record<string, unknown> | undefined;
   return (
     <div className="mb-5 rounded-lg border border-primary/20 bg-primary/5 p-4">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -85,11 +86,14 @@ function ProviderMetadata({ value }: { value: unknown }) {
       </div>
       <dl className="grid gap-3 text-sm sm:grid-cols-2">
         <div><dt className="text-muted-foreground">Requested symbol</dt><dd className="font-medium">{String(result.symbol ?? "n/a")}</dd></div>
-        <div><dt className="text-muted-foreground">Price · confidence</dt><dd className="font-mono">{String(result.price ?? "n/a")} · ±{String(result.confidence ?? "n/a")}</dd></div>
+        <div><dt className="text-muted-foreground">Price</dt><dd className="font-mono">{String(result.price ?? "n/a")}</dd></div>
+        <div><dt className="text-muted-foreground">Confidence interval</dt><dd className="font-mono">{String(interval?.low ?? "n/a")} – {String(interval?.high ?? "n/a")} (±{String(result.confidence ?? "n/a")})</dd></div>
         <div><dt className="text-muted-foreground">Data publish time</dt><dd>{String(result.publishTime ?? "n/a")}</dd></div>
         <div><dt className="text-muted-foreground">Data fetched time</dt><dd>{String(result.fetchedAt ?? "n/a")}</dd></div>
+        <div><dt className="text-muted-foreground">Price age when fetched</dt><dd>{String(result.priceAgeSeconds ?? "n/a")} seconds</dd></div>
+        <div><dt className="text-muted-foreground">Provider call cost</dt><dd className="font-mono">{String(result.paidAmountUsdc ?? "0.001")} USDC</dd></div>
       </dl>
-      <p className="mt-3 text-xs text-muted-foreground">Arc Agent Commerce charged this x402 call. The underlying market data was sourced from Pyth Network.</p>
+      <p className="mt-3 text-xs text-muted-foreground">Arc Agent Commerce charged this x402 call for access to its provider-backed service. The underlying market data was sourced from Pyth Network; this is not a direct payment to Pyth.</p>
     </div>
   );
 }
