@@ -345,6 +345,10 @@ function createTextAnalyzerBody(
   inputText: string | null | undefined,
   paidPreviews: unknown[],
 ) {
+  if (inputText?.trim()) {
+    return { text: inputText.trim() };
+  }
+
   const context = paidPreviews.length > 0
     ? JSON.stringify(paidPreviews, null, 2)
     : "No paid context has been collected yet.";
@@ -358,7 +362,7 @@ function createTextAnalyzerBody(
   };
 }
 
-function requestBodyForService(
+export function requestBodyForService(
   service: ApiService,
   task: string,
   inputText: string | null | undefined,

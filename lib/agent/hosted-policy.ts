@@ -129,6 +129,13 @@ export function getHostedRunnerDiagnostic() {
       chainId: 5_042_002,
       payerAddress: config.agentAddress,
       maxBudgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
+      supportedWorkflows: [
+        "sentiment_tone",
+        "builder_update",
+        "market_context",
+        "custom_task",
+      ],
+      inputPersistence: "redacted_preview_and_sha256_only" as const,
       allowedServices: config.serviceAllowlist.map((service) => service.slug),
       cooldownSeconds: config.cooldownSeconds,
       rateLimitWindowSeconds: config.rateLimitWindowSeconds,
@@ -144,6 +151,13 @@ export function getHostedRunnerDiagnostic() {
           ? getAddress(configuredAddress)
           : null,
       maxBudgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
+      supportedWorkflows: [
+        "sentiment_tone",
+        "builder_update",
+        "market_context",
+        "custom_task",
+      ],
+      inputPersistence: "redacted_preview_and_sha256_only" as const,
       allowedServices: hostedServiceAllowlist().map((service) => service.slug),
       cooldownSeconds: 60,
       rateLimitWindowSeconds: 3_600,
@@ -209,6 +223,25 @@ function hmac(secret: string, purpose: string, value: string) {
 
 export function hostedIdempotencyHash(secret: string, key: string) {
   return hmac(secret, "hosted-agent-idempotency-v1", key);
+}
+
+export function hostedIdempotencyRequestHash(input: {
+  secret: string;
+  workflowType: string;
+  inputSha256: string;
+  task: string;
+  budgetUsdc: number;
+}) {
+  return hmac(
+    input.secret,
+    "hosted-agent-idempotency-request-v2",
+    [
+      input.workflowType,
+      input.inputSha256,
+      input.task,
+      input.budgetUsdc.toFixed(6),
+    ].join("\n"),
+  );
 }
 
 export function hostedRequesterFingerprint(input: {

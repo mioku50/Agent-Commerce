@@ -1,6 +1,7 @@
 export type HostedWorkflowType =
   | "sentiment_tone"
   | "builder_update"
+  | "market_context"
   | "custom_task";
 
 export type HostedPlanService = {
@@ -22,6 +23,8 @@ export type HostedPlannerSnapshot = {
   remainingBudgetUsdc: number;
   maxPaidCalls: number;
   aggregationLabel: string;
+  inputPreview: string;
+  inputSha256: string;
   warnings: string[];
 };
 
@@ -36,6 +39,10 @@ export type HostedApiResult = {
 
 export type HostedFinalReport = {
   aggregationLabel: string;
+  input: {
+    preview: string;
+    sha256: string;
+  };
   summary: string;
   keyFindings: string[];
   apiResults: HostedApiResult[];
@@ -61,7 +68,8 @@ export type HostedJobView = {
     requesterWallet: string | null;
     workflowType: HostedWorkflowType;
     task: string;
-    inputText: string | null;
+    inputPreview: string;
+    inputSha256: string;
     budgetUsdc: string;
     plannerSnapshot: HostedPlannerSnapshot;
     selectedServices: HostedPlanService[];
@@ -130,6 +138,7 @@ export type RecentHostedJob = {
   id: string;
   workflowType: HostedWorkflowType;
   task: string;
+  inputPreview: string;
   status: "queued" | "running" | "completed" | "failed";
   spentUsdc: string;
   createdAt: string;

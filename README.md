@@ -47,28 +47,31 @@ For the end user, the hosted flow requires no repository clone, no private key, 
 
 ## One-Click Hosted Flow
 
-Open [`/agent-runner`](https://agent-commerce-six.vercel.app/agent-runner), choose a useful workflow, inspect its server-generated plan and estimated price, then launch it.
+Open [`/agent-runner`](https://agent-commerce-six.vercel.app/agent-runner), choose a workflow, paste real non-sensitive source text, inspect the server-generated plan and estimated price, then launch it.
 
 Available hosted workflows:
 
 - **Sentiment & Tone Report** — deterministic keyword and punctuation heuristics over user text, plus traceable paid API results;
-- **Builder Update Analysis** — deterministic delivery/risk signal extraction from a project update;
+- **Builder Update Summary** — deterministic delivery/risk signal extraction from a project update;
+- **Market Context Brief** — an evidence-labeled brief limited to user-supplied market context and actual paid API responses;
 - **Custom Task** — the shared planner selects relevant services from the fixed server allowlist.
 
 When no LLM is configured, the result is explicitly labeled **Structured workflow result (no LLM configured)**. The application never presents deterministic aggregation as model-generated analysis.
 
 The application then:
 
-1. creates a durable Agent DB job;
-2. applies idempotency, cooldown, rate-limit, and active-job checks;
-3. plans the purchase through the shared agent execution core;
-4. calls up to three allowlisted x402-protected services within the `0.005 USDC` total cap;
-5. pays with the project-owned Arc Testnet payer wallet;
-6. records the Agent Run, purchase step, payment event, and receipt;
-7. updates the payer wallet's Agent Passport and seller analytics;
-8. publishes a compact post-settlement proof to Arc;
-9. persists a structured Final Report with actual API responses, selected/skipped services, spend, receipts, and proof transactions;
-10. publishes the result at the shareable read-only route `/agent-runner/<job-id>`.
+1. validates input type, length, emptiness, and obvious credential/private-key patterns;
+2. computes a redacted 240-character preview and SHA-256, then creates a durable Agent DB job without storing the full input;
+3. binds idempotency to the key plus workflow, input hash, task, and budget;
+4. applies cooldown, rate-limit, and active-job checks;
+5. plans the purchase through the shared agent execution core;
+6. calls up to three allowlisted x402-protected services within the `0.005 USDC` total cap, passing the ephemeral source text to the Text Analyzer instead of a fixed demo value;
+7. pays with the project-owned Arc Testnet payer wallet;
+8. records the Agent Run, purchase step, payment event, and receipt;
+9. updates the payer wallet's Agent Passport and seller analytics;
+10. publishes a compact post-settlement proof to Arc;
+11. persists a structured Final Report built from the actual API responses, safe input metadata, reasoning, spend, receipts, and proof transactions;
+12. publishes the result at the shareable read-only route `/agent-runner/<job-id>`.
 
 The UI exposes progress states such as:
 
@@ -81,7 +84,27 @@ The UI exposes progress states such as:
 
 A connected browser wallet is optional and is used only as a requester label. It never pays, signs, or authorizes the hosted purchase.
 
+The original workflow input exists only in the launch request and the in-memory background execution closure. Public status, history, result pages, and Agent DB expose only the redacted preview and SHA-256. Failed pre-payment recovery therefore requires the operator to re-submit the original text from a local file whose hash matches the job.
+
 ## Verified Production Example
+
+Phase 21 was validated with a real browser-submitted **Market Context Brief**. The paid Text Analyzer measured the exact normalized user input (`20` words, `136` characters), while the status API and Agent DB exposed only its safe preview and SHA-256.
+
+| Proof | Value |
+| --- | --- |
+| Hosted result | [`9a2334b1-d9fd-498d-85d3-339ff340c444`](https://agent-commerce-six.vercel.app/agent-runner/9a2334b1-d9fd-498d-85d3-339ff340c444) |
+| Agent Run | [`596938fd-e746-48fd-8ad9-8cd8c071616c`](https://agent-commerce-six.vercel.app/runs/596938fd-e746-48fd-8ad9-8cd8c071616c) |
+| Premium Quote receipt | [`f4af1a4c-4629-4567-a352-2bb4b1eead47`](https://agent-commerce-six.vercel.app/receipts/f4af1a4c-4629-4567-a352-2bb4b1eead47) |
+| Text Analyzer receipt | [`75d822e0-41cb-4224-98ab-f265928919ab`](https://agent-commerce-six.vercel.app/receipts/75d822e0-41cb-4224-98ab-f265928919ab) |
+| Total paid | `0.0013 USDC` |
+| Arc proof 1 | [`0xe535b6d38afdfc976dc057bf2a2c70e4d9a912844bb6983b48d76085aef10081`](https://testnet.arcscan.app/tx/0xe535b6d38afdfc976dc057bf2a2c70e4d9a912844bb6983b48d76085aef10081) |
+| Arc proof 2 | [`0x3d430763fce9500dbad7d4690c3293f1c6f2c25fa86327fb99b9ffd0c35f0140`](https://testnet.arcscan.app/tx/0x3d430763fce9500dbad7d4690c3293f1c6f2c25fa86327fb99b9ffd0c35f0140) |
+| Replay result | Same job and two receipt IDs; no second payment or proof |
+| Changed-input replay | `409 idempotency_conflict`; no payment |
+
+Both proofs are registered in the app-owned `AgentCommerceProofRegistry`; the run updated the hosted payer Passport and seller analytics. The production Playwright smoke also confirmed that neither the status response nor the result page publishes the full source input.
+
+Historical Phase 20 two-service validation:
 
 Phase 20 was validated with a real two-service browser workflow and production idempotency replay:
 
@@ -234,8 +257,8 @@ The hosted payer is protected by server-side and database-enforced controls:
 - one queued or running job globally for the demo payer;
 - requester cooldown;
 - rolling rate limit;
-- HMAC-protected idempotency keys;
-- replay returns the original job;
+- HMAC-protected idempotency keys bound to workflow, normalized input hash, task, and budget;
+- an exact replay returns the original job, while key reuse with different input returns `409 idempotency_conflict`;
 - recovery is allowed only before payment when recorded spend is zero;
 - payer and attester keys are stored only as Vercel Sensitive environment variables.
 
@@ -261,7 +284,7 @@ Useful public APIs:
 | `GET /api/store/services` | Machine-readable service discovery |
 | `POST /api/hosted-agent/plan` | Validate input and preview the exact allowlisted plan/cost |
 | `POST /api/hosted-agent/jobs` | Create or replay a hosted job |
-| `GET /api/hosted-agent/jobs` | Recent hosted workflow history |
+| `GET /api/hosted-agent/jobs?workflowType=<type>` | Recent hosted workflow history, optionally filtered by workflow |
 | `GET /api/hosted-agent/jobs/<id>` | Read hosted job progress and proof links |
 | `GET /api/receipts` | Recent commerce receipts |
 | `GET /api/receipts/<id>` | One receipt |
@@ -272,7 +295,7 @@ Useful public APIs:
 ## Review the Project in Two Minutes
 
 1. Open the [hosted runner](https://agent-commerce-six.vercel.app/agent-runner).
-2. Choose Sentiment & Tone or Builder Update, preview the two-service `0.0013 USDC` plan, and launch it.
+2. Choose Sentiment & Tone, Builder Update Summary, or Market Context Brief; paste a real non-sensitive input; preview the two-service `0.0013 USDC` plan; and launch it.
 3. Watch the job progress to `completed`, inspect the Final Report, and confirm every receipt is `Verified on Arc`.
 4. Open the generated Agent Run, receipt, Passport, and Arcscan transaction.
 5. Open the [review page](https://agent-commerce-six.vercel.app/review) for the current production status.
@@ -362,7 +385,7 @@ cd ..
 npm run proofs:smoke
 
 # Server-only recovery
-npm run hosted:recover -- --job <hosted-job-uuid>
+npm run hosted:recover -- --job <hosted-job-uuid> --input-file <original-input.txt>
 npm run proofs:recover -- --dry-run
 ```
 
@@ -389,17 +412,17 @@ A paid browser smoke must never run silently. It requires the explicit `--confir
 - the registry is custom and unaudited;
 - seller-created external API proxying is disabled;
 - seller publishing and settlement configuration are still prototype-level;
-- the current hosted demo proves payment and verification, but richer multi-service user workflows and a composed final report are the next product step.
+- deterministic aggregation is intentionally limited and does not replace an LLM or live market feed;
+- full source input cannot be recovered from Agent DB by design.
 
 ## Next Direction
 
-The next phase moves from a proof-oriented hosted smoke into useful agent work:
+Phase 21 completes the real-input hosted workflow layer. Future work can focus on:
 
-- input-driven workflows such as sentiment analysis and builder update review;
-- multiple selected paid services within one budget;
-- a structured final report combining purchased responses;
-- shareable hosted result pages;
-- clearer service-level proof and cost summaries;
+- optional model-backed synthesis that is explicitly labeled and never implied when unavailable;
+- additional low-cost allowlisted data and compute services;
+- encrypted, user-controlled private result storage for use cases that should not be public;
+- richer service-level proof and cost comparisons;
 - production-grade seller authentication and settlement configuration;
 - future exploration of ERC-8004 identity and ERC-8183 job coordination.
 

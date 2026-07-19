@@ -6,8 +6,12 @@
 import {
   buildHostedFinalReport,
   createHostedWorkflowPlan,
+  hashHostedWorkflowInput,
+  hostedWorkflowInputMetadata,
   validateHostedWorkflowRequest,
 } from "../lib/agent/hosted-workflows.ts";
+import { hostedIdempotencyRequestHash } from "../lib/agent/hosted-policy.ts";
+import { requestBodyForService } from "../lib/agent/execution.ts";
 import { serviceRegistry } from "../lib/services/registry.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -34,11 +38,63 @@ const request = validateHostedWorkflowRequest({
   inputText: "The release is stable, thoughtfully documented, and ready for builders to test today.",
   budgetUsdc: "0.005",
 });
+const normalizedRequest = validateHostedWorkflowRequest({
+  workflowType: "market_context",
+  task: "Create a market context brief from the submitted note.",
+  inputText: "  Volume rose 12% while volatility remained elevated.\r\nRisk appetite improved.  ",
+  budgetUsdc: "0.005",
+});
+assert(
+  normalizedRequest.inputText ===
+    "Volume rose 12% while volatility remained elevated.\nRisk appetite improved.",
+  "Workflow input normalization is not deterministic.",
+);
+const normalizedMetadata = hostedWorkflowInputMetadata(normalizedRequest.inputText);
+assert(
+  normalizedMetadata.sha256 === hashHostedWorkflowInput(normalizedRequest.inputText),
+  "Persisted input hash does not match normalized source input.",
+);
+const idempotencyRequestHash = hostedIdempotencyRequestHash({
+  secret: "phase21-test-secret",
+  workflowType: normalizedRequest.workflowType,
+  inputSha256: normalizedMetadata.sha256,
+  task: normalizedRequest.task,
+  budgetUsdc: normalizedRequest.budgetUsdc,
+});
+const changedInputRequestHash = hostedIdempotencyRequestHash({
+  secret: "phase21-test-secret",
+  workflowType: normalizedRequest.workflowType,
+  inputSha256: hashHostedWorkflowInput(`${normalizedRequest.inputText} changed`),
+  task: normalizedRequest.task,
+  budgetUsdc: normalizedRequest.budgetUsdc,
+});
+assert(
+  idempotencyRequestHash !== changedInputRequestHash,
+  "Idempotency request fingerprint does not include the workflow input hash.",
+);
+assert(
+  hostedWorkflowInputMetadata(
+    "Contact builder@example.com about the stable release and the next test window.",
+  ).preview.includes("[redacted-email]"),
+  "Safe input preview did not redact an email address.",
+);
 const plan = createHostedWorkflowPlan({
   request,
   services: serviceRegistry,
   allowlist,
 });
+const analyzer = serviceRegistry.find((service) => service.slug === "text-analyzer");
+assert(analyzer, "Text Analyzer is missing from the service registry.");
+const analyzerRequest = requestBodyForService(
+  analyzer,
+  request.task,
+  request.inputText,
+  [{ service: "premium-quote", response: { quote: "context" } }],
+) as { text?: string };
+assert(
+  analyzerRequest.text === request.inputText,
+  "The paid Text Analyzer request did not receive the real normalized user input.",
+);
 
 assert(plan.selectedServices.length === 2, "Multi-service workflow did not select two paid APIs.");
 assert(plan.selectedServices.length <= 3, "Hosted plan exceeded the three-call cap.");
@@ -72,10 +128,34 @@ expectInvalid("oversized workflow input", {
   inputText: "x".repeat(5_001),
   budgetUsdc: 0.005,
 });
+expectInvalid("empty market context input", {
+  workflowType: "market_context",
+  task: "Analyze this market note with safe services.",
+  inputText: "   ",
+  budgetUsdc: 0.005,
+});
+expectInvalid("non-string input", {
+  workflowType: "sentiment_tone",
+  task: "Analyze this sentiment text with safe services.",
+  inputText: { text: "not accepted" },
+  budgetUsdc: 0.005,
+});
+expectInvalid("private key", {
+  workflowType: "builder_update",
+  task: "Analyze this builder update with safe services.",
+  inputText: `Private key: 0x${"ab".repeat(32)}`,
+  budgetUsdc: 0.005,
+});
+expectInvalid("API token", {
+  workflowType: "sentiment_tone",
+  task: "Analyze this sentiment text with safe services.",
+  inputText: "Please inspect sk-proj-abcdefghijklmnopqrstuv before release.",
+  budgetUsdc: 0.005,
+});
 expectInvalid("budget above cap", {
   workflowType: "custom_task",
   task: "Analyze a useful custom task with safe services.",
-  inputText: "Optional text",
+  inputText: "A sufficiently long custom workflow input.",
   budgetUsdc: 0.005001,
 });
 
@@ -118,5 +198,7 @@ assert(report.completedWithWarnings, "Partial failure was not surfaced in the Fi
 assert(report.apiResults.length === 2, "Partial report did not preserve every selected API result.");
 assert(report.keyFindings.some((finding) => finding.includes("failed")), "Partial failure finding is missing.");
 assert(report.aggregationMode === "deterministic_structured", "Report claims an unsupported aggregation mode.");
+assert(report.input.sha256 === plan.inputSha256, "Final Report input hash differs from the plan.");
+assert(report.input.preview === plan.inputPreview, "Final Report input preview differs from the plan.");
 
-console.log("[hosted-workflow-test] passed: input validation, fixed allowlist, two-service planning, budget/call caps, deterministic Final Report, partial failure");
+console.log("[hosted-workflow-test] passed: input type/size/secret validation, normalized hashing, safe preview, fixed allowlist, two-service planning, budget/call caps, dynamic Final Report, partial failure");

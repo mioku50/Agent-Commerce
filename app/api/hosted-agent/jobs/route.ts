@@ -13,12 +13,17 @@ import {
 import {
   getHostedRunnerConfig,
   hostedIdempotencyHash,
+  hostedIdempotencyRequestHash,
   hostedRequesterFingerprint,
   optionalRequesterWallet,
   safeHostedError,
   validateIdempotencyKey,
 } from "@/lib/agent/hosted-policy";
-import { validateHostedWorkflowRequest } from "@/lib/agent/hosted-workflows";
+import {
+  hashHostedWorkflowInput,
+  isHostedWorkflowType,
+  validateHostedWorkflowRequest,
+} from "@/lib/agent/hosted-workflows";
 
 export const maxDuration = 300;
 export const dynamic = "force-dynamic";
@@ -50,11 +55,19 @@ export async function POST(request: NextRequest) {
 
   try {
     const config = getHostedRunnerConfig();
+    const inputSha256 = hashHostedWorkflowInput(workflowRequest.inputText);
     const result = await launchHostedAgentJob({
       idempotencyHash: hostedIdempotencyHash(
         config.rateLimitSecret,
         idempotencyKey,
       ),
+      requestHash: hostedIdempotencyRequestHash({
+        secret: config.rateLimitSecret,
+        workflowType: workflowRequest.workflowType,
+        inputSha256,
+        task: workflowRequest.task,
+        budgetUsdc: workflowRequest.budgetUsdc,
+      }),
       requesterFingerprint: hostedRequesterFingerprint({
         secret: config.rateLimitSecret,
         forwardedFor: request.headers.get("x-forwarded-for"),
@@ -65,11 +78,16 @@ export async function POST(request: NextRequest) {
     });
 
     if (!result.jobId) {
-      const status = result.reason === "active_job" ? 409 : 429;
+      const status =
+        result.reason === "active_job" || result.reason === "idempotency_conflict"
+          ? 409
+          : 429;
       return NextResponse.json(
         {
           error:
-            result.reason === "active_job"
+            result.reason === "idempotency_conflict"
+              ? "This Idempotency-Key was already used for a different workflow or input."
+              : result.reason === "active_job"
               ? "The project demo wallet already has an active hosted run."
               : result.reason === "cooldown"
                 ? "Please wait for the public hosted-run cooldown."
@@ -88,7 +106,7 @@ export async function POST(request: NextRequest) {
     if (job?.status === "queued") {
       after(async () => {
         try {
-          await runHostedAgentJob(result.jobId!);
+          await runHostedAgentJob(result.jobId!, workflowRequest.inputText);
         } catch (error) {
           console.error(
             `[hosted-agent] background launch failed for job=${result.jobId}: ${safeHostedError(error)}`,
@@ -120,7 +138,18 @@ export async function POST(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const rawLimit = Number(request.nextUrl.searchParams.get("limit") ?? "8");
-    const jobs = await listRecentHostedAgentJobs(Number.isFinite(rawLimit) ? rawLimit : 8);
+    const workflowParam = request.nextUrl.searchParams.get("workflowType");
+    let workflowFilter: Parameters<typeof listRecentHostedAgentJobs>[1] = null;
+    if (workflowParam && workflowParam !== "all") {
+      if (!isHostedWorkflowType(workflowParam)) {
+        return NextResponse.json({ error: "Invalid workflow filter." }, { status: 400 });
+      }
+      workflowFilter = workflowParam;
+    }
+    const jobs = await listRecentHostedAgentJobs(
+      Number.isFinite(rawLimit) ? rawLimit : 8,
+      workflowFilter,
+    );
     return NextResponse.json({ jobs }, {
       headers: { "Cache-Control": "no-store" },
     });

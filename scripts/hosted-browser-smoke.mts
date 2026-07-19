@@ -8,8 +8,12 @@ import { chromium, type Request } from "playwright";
 type HostedStatus = {
   job: {
     id: string;
+    workflowType: string;
     status: "queued" | "running" | "completed" | "failed";
     spentUsdc: string;
+    inputPreview: string;
+    inputSha256: string;
+    inputText?: unknown;
     error: string | null;
     structuredResult: {
       aggregationMode: string;
@@ -17,6 +21,7 @@ type HostedStatus = {
       apiResults: unknown[];
       receiptIds: string[];
       proofTransactionHashes: string[];
+      input: { preview: string; sha256: string };
     } | null;
   };
   receiptIds: string[];
@@ -67,6 +72,8 @@ async function main() {
   const url = baseUrl();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage();
+  const submittedInput =
+    "Phase 21 market input: weekly payment volume rose 12% while latency declined 8%, although volatility and execution risk remain elevated.";
   let idempotencyKey: string | null = null;
   let launchBody: Record<string, unknown> | null = null;
 
@@ -86,6 +93,8 @@ async function main() {
   try {
     await page.goto(`${url}/agent-runner`, { waitUntil: "networkidle" });
     await page.getByText("Project-owned payer wallet", { exact: true }).waitFor();
+    await page.locator("#workflow-type").selectOption("market_context");
+    await page.locator("#hosted-input").fill(submittedInput);
     await page.getByRole("button", { name: "Preview plan and cost" }).click();
     await page.getByText("2 paid APIs", { exact: true }).waitFor();
     const launchResponsePromise = page.waitForResponse(
@@ -127,10 +136,15 @@ async function main() {
     }
 
     assert(status?.job.status === "completed", "Hosted browser job did not complete in time.");
+    assert(status.job.workflowType === "market_context", "Hosted browser job used the wrong workflow type.");
+    assert(status.job.inputText === undefined, "Hosted status API leaked full workflow input.");
+    assert(status.job.inputPreview.includes("Phase 21 market input"), "Safe input preview is missing from the hosted result.");
+    assert(/^[0-9a-f]{64}$/.test(status.job.inputSha256), "Hosted input SHA-256 is invalid.");
     assert(status.proofs.length >= 2, "Hosted workflow did not create a proof per paid service.");
     assert(status.receiptIds.length >= 2, "Hosted multi-service workflow created fewer than two receipts.");
     assert(Number(status.job.spentUsdc) === 0.0013, "Hosted multi-service spend was not 0.0013 USDC.");
     assert(status.job.structuredResult?.aggregationMode === "deterministic_structured", "Final Report aggregation mode is incorrect.");
+    assert(status.job.structuredResult.input.sha256 === status.job.inputSha256, "Final Report input hash differs from the job metadata.");
     assert(status.job.structuredResult.apiResults.length >= 2, "Final Report is missing API results.");
     assert(status.links.agentRun && status.links.receipt && status.links.passport, "Hosted result links are incomplete.");
 
@@ -164,6 +178,31 @@ async function main() {
     assert(repeated.status === 200, `Repeated launch returned HTTP ${repeated.status}.`);
     assert(repeated.body.idempotent === true, "Repeated launch was not marked idempotent.");
     assert(repeated.body.jobId === beforeRepeat.jobId, "Repeated launch returned a different job.");
+
+    const conflict = await page.evaluate(
+      async ({ key, body }) => {
+        const response = await fetch("/api/hosted-agent/jobs", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": key,
+          },
+          body: JSON.stringify({
+            ...body,
+            inputText: `${String(body.inputText)} Different input must conflict.`,
+          }),
+        });
+        return {
+          status: response.status,
+          body: (await response.json()) as { reason?: string },
+        };
+      },
+      { key: idempotencyKey, body: launchBody },
+    );
+    assert(
+      conflict.status === 409 && conflict.body.reason === "idempotency_conflict",
+      "Idempotency key reuse with changed input did not return a conflict.",
+    );
 
     const afterRepeat = await page.evaluate(async (jobId) => {
       const response = await fetch(`/api/hosted-agent/jobs/${jobId}`, {

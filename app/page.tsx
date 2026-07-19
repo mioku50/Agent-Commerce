@@ -40,7 +40,7 @@ import { listAllStoreServices } from "@/lib/services/store-service-persistence";
 import { shortenHash } from "@/lib/utils";
 
 const quickActions = [
-  { href: "/agent-runner", label: "Run a useful agent workflow", icon: Bot },
+  { href: "/agent-runner", label: "Run a real-input agent workflow", icon: Bot },
   { href: "/demo", label: "Start guided demo", icon: Sparkles },
   { href: "/agent-launch", label: "Fund buyer-agent", icon: Fuel },
   { href: "/agents", label: "Agent Passports", icon: BadgeCheck },
@@ -76,7 +76,7 @@ export default async function Home() {
               Agent commerce control center for paid APIs on Arc
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">
-              Discover x402-powered services, launch a hosted buyer-agent or use
+              Submit real text to a guarded hosted buyer-agent, or use
               the advanced local wallet flow, and inspect the public proof trail:
               timelines, receipts, passports, and seller analytics.
             </p>
@@ -84,7 +84,7 @@ export default async function Home() {
               <Button asChild size="lg">
                 <Link href="/agent-runner">
                   <Bot />
-                  Run a useful agent workflow
+                  Run a real-input agent workflow
                 </Link>
               </Button>
               <Button asChild size="lg" variant="secondary">

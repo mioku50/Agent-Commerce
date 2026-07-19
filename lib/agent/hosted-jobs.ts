@@ -13,10 +13,14 @@ import {
 import {
   buildHostedFinalReport,
   createHostedWorkflowPlan,
+  hashHostedWorkflowInput,
+  hostedWorkflowInputMetadata,
+  isHostedWorkflowType,
   type HostedFinalReport,
   type HostedPlannerSnapshot,
   type HostedWorkflowRequest,
   type HostedWorkflowType,
+  validateHostedWorkflowRequest,
 } from "./hosted-workflows.ts";
 import {
   configuredExplorerUrl,
@@ -33,11 +37,14 @@ export type HostedJobProgressStage =
 export type HostedAgentJobRow = {
   id: string;
   idempotency_hash: string;
+  request_hash: string;
   requester_fingerprint: string;
   requester_wallet: string | null;
   workflow_type: HostedWorkflowType;
   task: string;
   input_text: string | null;
+  input_preview: string;
+  input_hash: string;
   budget_usdc: string;
   planner_snapshot: HostedPlannerSnapshot;
   selected_services: HostedPlannerSnapshot["selectedServices"];
@@ -63,7 +70,13 @@ export type HostedAgentJobRow = {
 export type HostedLaunchResult = {
   jobId: string | null;
   created: boolean;
-  reason: "created" | "idempotent" | "active_job" | "cooldown" | "rate_limited";
+  reason:
+    | "created"
+    | "idempotent"
+    | "idempotency_conflict"
+    | "active_job"
+    | "cooldown"
+    | "rate_limited";
   retryAfterSeconds: number;
 };
 
@@ -79,19 +92,23 @@ function getHostedClient() {
 
 export async function launchHostedAgentJob(input: {
   idempotencyHash: string;
+  requestHash: string;
   requesterFingerprint: string;
   requesterWallet: string | null;
   request: HostedWorkflowRequest;
 }) {
   const config = getHostedRunnerConfig();
   const plan = await previewHostedWorkflow(input.request);
-  const { data, error } = await getHostedClient().rpc("launch_hosted_agent_workflow", {
+  const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText);
+  const { data, error } = await getHostedClient().rpc("launch_hosted_agent_workflow_v2", {
     p_idempotency_hash: input.idempotencyHash,
+    p_request_hash: input.requestHash,
     p_requester_fingerprint: input.requesterFingerprint,
     p_requester_wallet: input.requesterWallet,
     p_workflow_type: input.request.workflowType,
     p_task: input.request.task,
-    p_input_text: input.request.inputText,
+    p_input_preview: inputMetadata.preview,
+    p_input_hash: inputMetadata.sha256,
     p_budget_usdc: input.request.budgetUsdc,
     p_planner_snapshot: plan,
     p_selected_services: plan.selectedServices,
@@ -154,7 +171,23 @@ async function claimHostedAgentJob(jobId: string) {
   return data === true;
 }
 
-export async function runHostedAgentJob(jobId: string) {
+function validatedExecutionRequest(job: HostedAgentJobRow, inputText: string) {
+  const request = validateHostedWorkflowRequest({
+    workflowType: job.workflow_type,
+    task: job.task,
+    inputText,
+    budgetUsdc: Number(job.budget_usdc),
+  });
+  if (hashHostedWorkflowInput(request.inputText) !== job.input_hash) {
+    throw new Error("Hosted workflow input does not match the original launch request.");
+  }
+  return request;
+}
+
+export async function runHostedAgentJob(jobId: string, inputText: string) {
+  const queuedJob = await getHostedAgentJob(jobId);
+  if (!queuedJob) throw new Error("Hosted job no longer exists.");
+  const request = validatedExecutionRequest(queuedJob, inputText);
   const claimed = await claimHostedAgentJob(jobId);
   if (!claimed) return { claimed: false as const };
 
@@ -166,7 +199,7 @@ export async function runHostedAgentJob(jobId: string) {
     const plannerSnapshot = job.planner_snapshot;
     const result = await executeBuyerAgent({
       task: plannerSnapshot.effectiveTask ?? job.task,
-      requestInputText: job.input_text,
+      requestInputText: request.inputText,
       spendingLimit: Number(job.budget_usdc),
       baseUrl: config.baseUrl,
       sellerAddress: config.sellerAddress,
@@ -220,12 +253,6 @@ export async function runHostedAgentJob(jobId: string) {
           .filter((value): value is string => Boolean(value));
       }
     }
-    const request: HostedWorkflowRequest = {
-      workflowType: job.workflow_type,
-      task: job.task,
-      inputText: job.input_text,
-      budgetUsdc: Number(job.budget_usdc),
-    };
     const structuredResult = buildHostedFinalReport({
       jobId,
       request,
@@ -284,10 +311,16 @@ export async function requeueFailedHostedAgentJob(jobId: string) {
   return data === true;
 }
 
-export async function recoverAndRunHostedAgentJob(jobId: string) {
+export async function recoverAndRunHostedAgentJob(jobId: string, inputText: string) {
+  const job = await getHostedAgentJob(jobId);
+  if (!job) throw new Error("Hosted job not found.");
+  validatedExecutionRequest(job, inputText);
   const recovered = await requeueFailedHostedAgentJob(jobId);
   if (!recovered) return { recovered: false as const };
-  return { recovered: true as const, execution: await runHostedAgentJob(jobId) };
+  return {
+    recovered: true as const,
+    execution: await runHostedAgentJob(jobId, inputText),
+  };
 }
 
 type PaymentEventView = {
@@ -425,7 +458,8 @@ export async function getHostedAgentJobView(jobId: string) {
       requesterWallet: job.requester_wallet,
       workflowType: job.workflow_type,
       task: job.task,
-      inputText: job.input_text,
+      inputPreview: job.input_preview,
+      inputSha256: job.input_hash,
       budgetUsdc: job.budget_usdc,
       plannerSnapshot: job.planner_snapshot,
       selectedServices: job.selected_services,
@@ -473,18 +507,25 @@ export async function getHostedAgentJobView(jobId: string) {
   };
 }
 
-export async function listRecentHostedAgentJobs(limit = 8) {
+export async function listRecentHostedAgentJobs(
+  limit = 8,
+  workflowType?: HostedWorkflowType | null,
+) {
   const safeLimit = Math.max(1, Math.min(Math.trunc(limit), 20));
-  const { data, error } = await getHostedClient()
+  let query = getHostedClient()
     .from("hosted_agent_jobs")
-    .select("id,workflow_type,task,status,spent_usdc,created_at,completed_at,receipt_ids,proof_transaction_hashes")
-    .order("created_at", { ascending: false })
-    .limit(safeLimit);
+    .select("id,workflow_type,task,input_preview,status,spent_usdc,created_at,completed_at,receipt_ids,proof_transaction_hashes")
+    .order("created_at", { ascending: false });
+  if (workflowType && isHostedWorkflowType(workflowType)) {
+    query = query.eq("workflow_type", workflowType);
+  }
+  const { data, error } = await query.limit(safeLimit);
   if (error) throw new Error("Unable to load recent hosted workflows.");
   return (data ?? []).map((row) => ({
     id: row.id as string,
     workflowType: row.workflow_type as HostedWorkflowType,
     task: row.task as string,
+    inputPreview: String(row.input_preview ?? ""),
     status: row.status as HostedJobStatus,
     spentUsdc: String(row.spent_usdc),
     createdAt: row.created_at as string,

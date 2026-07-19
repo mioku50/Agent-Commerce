@@ -28,28 +28,35 @@ const WORKFLOWS: Array<{
   label: string;
   description: string;
   task: string;
-  input: string;
+  placeholder: string;
 }> = [
   {
     value: "sentiment_tone",
     label: "Sentiment & Tone Report",
-    description: "Measure submitted text with deterministic paid compute and add concise paid context.",
+    description: "Analyze your submitted text with deterministic paid compute and traceable paid context.",
     task: "Analyze this text and produce a sentiment and tone workflow report.",
-    input: "Arc builders are shipping useful payment infrastructure quickly, and the latest proof workflow feels clear and trustworthy.",
+    placeholder: "Paste the real text whose sentiment and tone you want to inspect…",
   },
   {
     value: "builder_update",
-    label: "Builder Update Analysis",
+    label: "Builder Update Summary",
     description: "Turn a project update into a compact, traceable structured report.",
     task: "Analyze this builder update and extract a concise structured progress report.",
-    input: "This week we launched the hosted runner, connected receipts to our onchain registry, and reduced the public demo budget to a safe testnet cap.",
+    placeholder: "Paste a real shipping update, changelog, or project status note…",
+  },
+  {
+    value: "market_context",
+    label: "Market Context Brief",
+    description: "Structure user-supplied market context without claiming a live feed or model analysis.",
+    task: "Analyze this submitted market context and produce an evidence-labeled brief.",
+    placeholder: "Paste a market note, metrics update, or research excerpt to contextualize…",
   },
   {
     value: "custom_task",
     label: "Custom Task",
     description: "Let the deterministic planner select only relevant services from the server allowlist.",
     task: "Analyze my text and prepare a concise structured report with useful paid API context.",
-    input: "Paste optional source text here for the allowlisted Text Analyzer service.",
+    placeholder: "Paste the real source text for your custom allowlisted workflow…",
   },
 ];
 
@@ -69,12 +76,15 @@ export function HostedAgentRunner({
   const initial = WORKFLOWS[0];
   const [workflowType, setWorkflowType] = useState<HostedWorkflowType>(initial.value);
   const [task, setTask] = useState(initial.task);
-  const [inputText, setInputText] = useState(initial.input);
+  const [inputText, setInputText] = useState("");
   const [budget, setBudget] = useState("0.005");
   const [plan, setPlan] = useState<HostedPlannerSnapshot | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [history, setHistory] = useState(initialHistory);
+  const [historyFilter, setHistoryFilter] = useState<HostedWorkflowType | "all">("all");
+  const [historyLoading, setHistoryLoading] = useState(false);
   const idempotencyKey = useRef<string | null>(null);
 
   function invalidatePlan() {
@@ -87,8 +97,27 @@ export function HostedAgentRunner({
     const workflow = WORKFLOWS.find((item) => item.value === value) ?? WORKFLOWS[0];
     setWorkflowType(workflow.value);
     setTask(workflow.task);
-    setInputText(workflow.input);
     invalidatePlan();
+  }
+
+  async function filterHistory(value: HostedWorkflowType | "all") {
+    setHistoryFilter(value);
+    setHistoryLoading(true);
+    try {
+      const params = new URLSearchParams({ limit: "8", workflowType: value });
+      const response = await fetch(`/api/hosted-agent/jobs?${params}`, {
+        cache: "no-store",
+      });
+      const data = (await response.json()) as { jobs?: RecentHostedJob[]; error?: string };
+      if (!response.ok || !data.jobs) {
+        throw new Error(data.error ?? "Unable to filter hosted history.");
+      }
+      setHistory(data.jobs);
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setHistoryLoading(false);
+    }
   }
 
   function requestBody() {
@@ -184,8 +213,8 @@ export function HostedAgentRunner({
             </div>
             <div className="grid gap-2">
               <Label htmlFor="hosted-input">Input text</Label>
-              <textarea id="hosted-input" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} maxLength={5000} className="min-h-36 rounded-md border bg-background px-3 py-2 text-sm" />
-              <p className="text-xs text-muted-foreground">{inputText.length}/5000 · Results are public and shareable; do not paste secrets.</p>
+              <textarea id="hosted-input" value={inputText} onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }} placeholder={WORKFLOWS.find((workflow) => workflow.value === workflowType)?.placeholder} minLength={20} maxLength={5000} required className="min-h-36 rounded-md border bg-background px-3 py-2 text-sm" />
+              <p className="text-xs text-muted-foreground">{inputText.length}/5000 · Required. Obvious credentials and private keys are rejected. Only a redacted preview and SHA-256 are published.</p>
             </div>
             <div className="grid gap-2">
               <Label htmlFor="hosted-budget">Maximum budget (USDC)</Label>
@@ -198,7 +227,7 @@ export function HostedAgentRunner({
               </div>
             </div>
             {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
-            <Button size="lg" variant={plan ? "outline" : "default"} onClick={() => void preview()} disabled={previewing || launching || !diagnostic.configured}>
+            <Button size="lg" variant={plan ? "outline" : "default"} onClick={() => void preview()} disabled={previewing || launching || !diagnostic.configured || inputText.trim().length < 20}>
               {previewing ? <LoaderCircle className="animate-spin" /> : <Calculator />}{previewing ? "Building safe plan…" : plan ? "Refresh plan preview" : "Preview plan and cost"}
             </Button>
             <Button size="lg" onClick={() => void launch()} disabled={!plan || launching || previewing || plan.selectedServices.length === 0}>
@@ -214,6 +243,7 @@ export function HostedAgentRunner({
             <CardContent className="grid gap-4">
               {plan ? <>
                 <div className="flex flex-wrap gap-2"><Badge>{plan.selectedServices.length} paid API{plan.selectedServices.length === 1 ? "" : "s"}</Badge><Badge variant="secondary">estimated {plan.estimatedSpendUsdc} USDC</Badge><Badge variant="outline">cap {plan.maxPaidCalls} calls</Badge></div>
+                <div className="rounded-md bg-secondary/30 p-3 text-xs"><p className="font-medium">Safe input preview</p><p className="mt-1 text-muted-foreground">{plan.inputPreview}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">SHA-256 {plan.inputSha256}</p></div>
                 <div className="grid gap-3">{plan.selectedServices.map((service) => <div key={service.slug} className="rounded-md border p-4"><div className="flex items-center justify-between gap-3"><p className="font-medium">{service.name}</p><Badge variant="secondary">{service.priceUsdc} USDC</Badge></div><p className="mt-2 font-mono text-xs text-muted-foreground">{service.method} {service.endpoint}</p><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p></div>)}</div>
                 {plan.skippedServices.length ? <div><p className="text-sm font-medium">Skipped by policy or relevance</p><div className="mt-2 flex flex-wrap gap-2">{plan.skippedServices.map((service) => <Badge key={service.slug} variant="outline">{service.name}</Badge>)}</div></div> : null}
                 <p className="text-xs text-muted-foreground">{plan.aggregationLabel}. No LLM analysis is claimed.</p>
@@ -222,9 +252,9 @@ export function HostedAgentRunner({
           </Card>
 
           <Card className="rounded-lg">
-            <CardHeader><CardTitle>Recent hosted workflows</CardTitle></CardHeader>
+            <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>Recent hosted workflows</CardTitle><select aria-label="Filter hosted results by workflow" value={historyFilter} onChange={(event) => void filterHistory(event.target.value as HostedWorkflowType | "all")} disabled={historyLoading} className="h-9 rounded-md border bg-background px-3 text-sm"><option value="all">All workflows</option>{WORKFLOWS.map((workflow) => <option key={workflow.value} value={workflow.value}>{workflow.label}</option>)}</select></div></CardHeader>
             <CardContent className="grid gap-3">
-              {initialHistory.length ? initialHistory.map((job) => <Link key={job.id} href={job.href} className="rounded-md border p-3 transition-colors hover:bg-secondary/30"><div className="flex items-center justify-between gap-3"><p className="font-medium">{workflowLabel(job.workflowType)}</p><Badge variant={job.status === "failed" ? "destructive" : "secondary"}>{job.status}</Badge></div><p className="mt-1 line-clamp-1 text-sm text-muted-foreground">{job.task}</p><p className="mt-2 text-xs text-muted-foreground">{job.spentUsdc} USDC · {job.receiptCount} receipts · {job.proofCount} Arc proofs</p></Link>) : <p className="text-sm text-muted-foreground">No hosted workflow history yet.</p>}
+              {historyLoading ? <p className="flex items-center gap-2 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />Filtering history…</p> : history.length ? history.map((job) => <Link key={job.id} href={job.href} className="rounded-md border p-3 transition-colors hover:bg-secondary/30"><div className="flex items-center justify-between gap-3"><p className="font-medium">{workflowLabel(job.workflowType)}</p><Badge variant={job.status === "failed" ? "destructive" : "secondary"}>{job.status}</Badge></div><p className="mt-1 line-clamp-1 text-sm text-muted-foreground">{job.inputPreview || job.task}</p><p className="mt-2 text-xs text-muted-foreground">{job.spentUsdc} USDC · {job.receiptCount} receipts · {job.proofCount} Arc proofs</p></Link>) : <p className="text-sm text-muted-foreground">No hosted workflow history for this filter.</p>}
             </CardContent>
           </Card>
         </div>

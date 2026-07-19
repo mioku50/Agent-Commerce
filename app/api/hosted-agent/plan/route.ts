@@ -6,7 +6,10 @@
 import { NextResponse } from "next/server";
 import { previewHostedWorkflow } from "@/lib/agent/hosted-jobs";
 import { safeHostedError } from "@/lib/agent/hosted-policy";
-import { validateHostedWorkflowRequest } from "@/lib/agent/hosted-workflows";
+import {
+  hostedWorkflowInputMetadata,
+  validateHostedWorkflowRequest,
+} from "@/lib/agent/hosted-workflows";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +17,17 @@ export async function POST(request: Request) {
   try {
     const workflowRequest = validateHostedWorkflowRequest(await request.json());
     const plan = await previewHostedWorkflow(workflowRequest);
-    return NextResponse.json({ request: workflowRequest, plan }, {
+    const input = hostedWorkflowInputMetadata(workflowRequest.inputText);
+    return NextResponse.json({
+      request: {
+        workflowType: workflowRequest.workflowType,
+        task: workflowRequest.task,
+        budgetUsdc: workflowRequest.budgetUsdc,
+        inputPreview: input.preview,
+        inputSha256: input.sha256,
+      },
+      plan,
+    }, {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

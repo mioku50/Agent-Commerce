@@ -343,15 +343,16 @@ export default async function DemoPage() {
               Watch an agent buy useful APIs with USDC on Arc
             </h1>
             <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-              An AI agent analyzes the tone and sentiment of a short builder
-              update by discovering paid APIs, selecting useful services,
-              paying with USDC on Arc through x402/Gateway, and producing public
-              receipts plus Agent Passport updates.
+              Paste real non-sensitive text into Sentiment & Tone, Builder
+              Update Summary, or Market Context Brief. The hosted agent
+              discovers paid APIs, selects useful services, pays with USDC on
+              Arc through x402/Gateway, and produces public receipts, a dynamic
+              report, Agent Passport updates, and verified proofs.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
                 <Link href="/agent-runner">
-                  Run a useful agent workflow
+                  Run a real-input agent workflow
                   <Bot />
                 </Link>
               </Button>

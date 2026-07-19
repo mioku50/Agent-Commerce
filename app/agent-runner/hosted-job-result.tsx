@@ -61,6 +61,10 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
   const currentIndex = STAGES.findIndex(([stage]) => stage === view.job.progressStage);
   const active = view.job.status === "queued" || view.job.status === "running";
   const report = view.job.structuredResult;
+  const reportInput = report?.input ?? {
+    preview: view.job.inputPreview,
+    sha256: view.job.inputSha256,
+  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -96,6 +100,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
           <Card className="rounded-lg"><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>Final Report</CardTitle>{report ? <Badge variant={report.completedWithWarnings ? "secondary" : "default"}>{report.completedWithWarnings ? "completed with warnings" : "complete"}</Badge> : null}</div></CardHeader><CardContent className="grid gap-5">
             {report ? <>
               <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Summary</p><p className="mt-2 leading-7">{report.summary}</p></div>
+              <div className="rounded-md bg-secondary/30 p-3"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Safe input preview</p><p className="mt-2 text-sm">{reportInput.preview}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">SHA-256 {reportInput.sha256}</p></div>
               <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key findings</p><ul className="mt-2 grid gap-2 text-sm">{report.keyFindings.map((finding, index) => <li key={`${index}-${finding}`} className="rounded-md bg-secondary/30 p-3">{finding}</li>)}</ul></div>
               <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Selected services</p><div className="mt-2 flex flex-wrap gap-2">{report.selectedServices.map((service) => <Badge key={service.slug}>{service.name}</Badge>)}</div></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Skipped services</p><div className="mt-2 flex flex-wrap gap-2">{report.skippedServices.length ? report.skippedServices.map((service) => <Badge key={service.slug} variant="outline">{service.name}</Badge>) : <span className="text-sm text-muted-foreground">None in the allowlisted plan.</span>}</div></div></div>
               <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm"><p className="font-medium">{report.aggregationLabel}</p><p className="mt-1 text-xs text-muted-foreground">This report aggregates actual API responses deterministically. No model-generated sentiment or prose is claimed.</p></div>

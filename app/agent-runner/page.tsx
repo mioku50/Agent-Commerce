@@ -9,8 +9,8 @@ import { getHostedRunnerDiagnostic } from "@/lib/agent/hosted-policy";
 import { listRecentHostedAgentJobs } from "@/lib/agent/hosted-jobs";
 
 export const metadata = {
-  title: "Useful Hosted Agent Workflows | Arc Agent Commerce",
-  description: "Preview and launch allowlisted multi-service x402 workflows with shareable deterministic reports and verified Arc proofs.",
+  title: "Real-Input Hosted Agent Workflows | Arc Agent Commerce",
+  description: "Submit real text to allowlisted multi-service x402 workflows with privacy-safe dynamic reports and verified Arc proofs.",
 };
 
 export const dynamic = "force-dynamic";

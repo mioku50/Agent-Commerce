@@ -55,6 +55,8 @@ export type ReviewHealthStatus = {
     failedProofCount: number;
     latestHostedWorkflowExists: boolean;
     latestHostedWorkflowVerified: boolean;
+    hostedRealInputWorkflowsEnabled: boolean;
+    hostedInputPrivacyEnabled: boolean;
   };
   recommendedCommand: string;
   recentFailedRuns: PublicAgentRun[];
@@ -135,6 +137,7 @@ export async function getReviewHealthStatus(
   const hostedWorkflows =
     hostedResult.status === "fulfilled" ? hostedResult.value : [];
   const latestHostedWorkflow = hostedWorkflows[0] ?? null;
+  const hostedRunner = getHostedRunnerDiagnostic();
 
   const latestSuccessfulRun =
     runs.find((run) => run.status === "completed" && (run.paid_count ?? 0) > 0) ??
@@ -183,6 +186,12 @@ export async function getReviewHealthStatus(
       failedProofCount,
       latestHostedWorkflowExists: Boolean(latestHostedWorkflow),
       latestHostedWorkflowVerified: (latestHostedWorkflow?.proofCount ?? 0) > 0,
+      hostedRealInputWorkflowsEnabled:
+        hostedRunner.supportedWorkflows.includes("sentiment_tone") &&
+        hostedRunner.supportedWorkflows.includes("builder_update") &&
+        hostedRunner.supportedWorkflows.includes("market_context"),
+      hostedInputPrivacyEnabled:
+        hostedRunner.inputPersistence === "redacted_preview_and_sha256_only",
     },
     recommendedCommand: RECOMMENDED_REVIEWER_COMMAND,
     recentFailedRuns,
@@ -202,7 +211,7 @@ export async function getReviewHealthStatus(
     warnings,
     database: getServerDatabaseDiagnostic(),
     proofRegistry: getProofRegistryDiagnostic(),
-    hostedRunner: getHostedRunnerDiagnostic(),
+    hostedRunner,
     latestHostedWorkflow,
   };
 }

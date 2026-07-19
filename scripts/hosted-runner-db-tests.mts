@@ -14,7 +14,13 @@ import {
 type LaunchRow = {
   job_id: string | null;
   created: boolean;
-  reason: "created" | "idempotent" | "active_job" | "cooldown" | "rate_limited";
+  reason:
+    | "created"
+    | "idempotent"
+    | "idempotency_conflict"
+    | "active_job"
+    | "cooldown"
+    | "rate_limited";
   retry_after_seconds: number;
 };
 
@@ -28,10 +34,12 @@ function assert(condition: unknown, message: string): asserts condition {
 
 async function launch(
   client: SupabaseClient,
-  input: { idempotency: string; fingerprint: string },
+  input: { idempotency: string; requestHash: string; fingerprint: string },
 ) {
+  const sourceInput = "This is a valid hosted workflow database test input.";
+  const inputHash = digest(sourceInput);
   const plannerSnapshot = {
-    version: 1,
+    version: 2,
     workflowType: "sentiment_tone",
     workflowLabel: "Sentiment & Tone Report",
     selectedServices: [
@@ -41,14 +49,18 @@ async function launch(
     estimatedSpendUsdc: 0.0013,
     maxPaidCalls: 3,
     aggregationMode: "deterministic_structured",
+    inputPreview: sourceInput,
+    inputSha256: inputHash,
   };
-  const { data, error } = await client.rpc("launch_hosted_agent_workflow", {
+  const { data, error } = await client.rpc("launch_hosted_agent_workflow_v2", {
     p_idempotency_hash: input.idempotency,
+    p_request_hash: input.requestHash,
     p_requester_fingerprint: input.fingerprint,
     p_requester_wallet: null,
     p_workflow_type: "sentiment_tone",
-    p_task: "Phase 20 hosted workflow database policy test",
-    p_input_text: "This is a valid hosted workflow database test input.",
+    p_task: "Phase 21 hosted workflow database policy test",
+    p_input_preview: sourceInput,
+    p_input_hash: inputHash,
     p_budget_usdc: 0.005,
     p_planner_snapshot: plannerSnapshot,
     p_selected_services: plannerSnapshot.selectedServices,
@@ -86,27 +98,55 @@ async function main() {
     .limit(1);
   assert(!activeError, `Unable to check active hosted jobs: ${activeError?.message}`);
   assert((active ?? []).length === 0, "A real hosted job is active; retry tests after it completes.");
+  const { count: persistedInputCount, error: persistedInputError } = await server
+    .from("hosted_agent_jobs")
+    .select("id", { count: "exact", head: true })
+    .not("input_text", "is", null);
+  assert(
+    !persistedInputError && persistedInputCount === 0,
+    "At least one hosted job still contains full persisted input text.",
+  );
 
   try {
     const fingerprint = digest(`${marker}:requester`);
     const idempotency = digest(`${marker}:idempotency`);
-    const first = await launch(server, { idempotency, fingerprint });
+    const requestHash = digest(`${marker}:request`);
+    const first = await launch(server, { idempotency, requestHash, fingerprint });
     assert(first.created && first.reason === "created" && first.job_id, "Initial launch was not created.");
     createdIds.push(first.job_id);
 
-    const repeated = await launch(server, { idempotency, fingerprint });
+    const repeated = await launch(server, { idempotency, requestHash, fingerprint });
     assert(
       !repeated.created && repeated.reason === "idempotent" && repeated.job_id === first.job_id,
       "Repeated idempotency key did not return the original job.",
     );
 
+    const conflict = await launch(server, {
+      idempotency,
+      requestHash: digest(`${marker}:different-input-request`),
+      fingerprint,
+    });
+    assert(
+      !conflict.created &&
+        conflict.reason === "idempotency_conflict" &&
+        conflict.job_id === null,
+      "Idempotency key reuse with a different workflow/input was not rejected.",
+    );
+
     const { data: persisted, error: persistedError } = await server
       .from("hosted_agent_jobs")
-      .select("workflow_type,input_text,planner_snapshot,selected_services,structured_result,receipt_ids,proof_transaction_hashes")
+      .select("workflow_type,input_text,input_preview,input_hash,request_hash,planner_snapshot,selected_services,structured_result,receipt_ids,proof_transaction_hashes")
       .eq("id", first.job_id)
       .single();
-    assert(!persistedError && persisted, "Unable to read persisted Phase 20 workflow metadata.");
+    assert(!persistedError && persisted, "Unable to read persisted Phase 21 workflow metadata.");
     assert(persisted.workflow_type === "sentiment_tone", "Workflow type was not persisted.");
+    assert(persisted.input_text === null, "Full hosted input was persisted unexpectedly.");
+    assert(
+      persisted.input_preview === "This is a valid hosted workflow database test input." &&
+        persisted.input_hash === digest("This is a valid hosted workflow database test input.") &&
+        persisted.request_hash === requestHash,
+      "Safe input metadata or request-bound idempotency hash was not persisted.",
+    );
     assert(
       Array.isArray(persisted.selected_services) && persisted.selected_services.length === 2,
       "Selected service snapshot was not persisted.",
@@ -118,6 +158,7 @@ async function main() {
 
     const blocked = await launch(server, {
       idempotency: digest(`${marker}:blocked`),
+      requestHash: digest(`${marker}:blocked-request`),
       fingerprint: digest(`${marker}:other-requester`),
     });
     assert(!blocked.job_id && blocked.reason === "active_job", "Global one-active-job lock failed.");
@@ -130,6 +171,7 @@ async function main() {
 
     const cooldown = await launch(server, {
       idempotency: digest(`${marker}:cooldown`),
+      requestHash: digest(`${marker}:cooldown-request`),
       fingerprint,
     });
     assert(!cooldown.job_id && cooldown.reason === "cooldown", "Requester cooldown was not enforced.");
@@ -155,6 +197,7 @@ async function main() {
 
     const rateLimited = await launch(server, {
       idempotency: digest(`${marker}:rate:blocked`),
+      requestHash: digest(`${marker}:rate:blocked-request`),
       fingerprint: rateFingerprint,
     });
     assert(!rateLimited.job_id && rateLimited.reason === "rate_limited", "Rate limit was not enforced.");
@@ -202,7 +245,7 @@ async function main() {
     assert(!publicReadError && (publicRows ?? []).length === 0, "Hosted job table leaked through public RLS.");
 
     console.log(
-      "[hosted-test] passed: workflow persistence, idempotency replay, one-active-wallet lock, cooldown, rate-limit, safe failed-job recovery, public RLS",
+      "[hosted-test] passed: privacy-safe workflow persistence, request-bound idempotency replay/conflict, one-active-wallet lock, cooldown, rate-limit, safe failed-job recovery, public RLS",
     );
   } finally {
     if (createdIds.length > 0) {

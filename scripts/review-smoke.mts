@@ -37,6 +37,8 @@ type ReviewStatus = {
     verifiedProofCount?: number;
     pendingProofCount?: number;
     failedProofCount?: number;
+    hostedRealInputWorkflowsEnabled?: boolean;
+    hostedInputPrivacyEnabled?: boolean;
   };
   proofRegistry?: {
     registryAddress?: string | null;
@@ -48,6 +50,8 @@ type ReviewStatus = {
     payerAddress?: string | null;
     chainId?: number;
     maxBudgetUsdc?: number;
+    supportedWorkflows?: string[];
+    inputPersistence?: string;
   };
 };
 
@@ -72,7 +76,14 @@ async function checkHostedWorkflowPreview(baseUrl: string) {
     }),
   });
   const json = (await readJson(response)) as {
-    plan?: { selectedServices?: unknown[]; estimatedSpendUsdc?: number; maxPaidCalls?: number };
+    request?: { inputText?: unknown; inputPreview?: string; inputSha256?: string };
+    plan?: {
+      selectedServices?: unknown[];
+      estimatedSpendUsdc?: number;
+      maxPaidCalls?: number;
+      inputPreview?: string;
+      inputSha256?: string;
+    };
   };
   const selected = json.plan?.selectedServices ?? [];
   return [
@@ -90,6 +101,15 @@ async function checkHostedWorkflowPreview(baseUrl: string) {
       name: "hosted workflow preview enforces the three-call cap",
       ok: json.plan?.maxPaidCalls === 3,
       detail: `maxPaidCalls=${json.plan?.maxPaidCalls ?? "missing"}`,
+    },
+    {
+      name: "hosted preview publishes only safe input metadata",
+      ok:
+        json.request?.inputText === undefined &&
+        Boolean(json.request?.inputPreview) &&
+        /^[0-9a-f]{64}$/.test(json.request?.inputSha256 ?? "") &&
+        json.request?.inputSha256 === json.plan?.inputSha256,
+      detail: `fullInput=${json.request?.inputText === undefined ? "absent" : "present"} hash=${json.request?.inputSha256 ? "present" : "missing"}`,
     },
   ] satisfies CheckResult[];
 }
@@ -224,8 +244,17 @@ async function checkReviewStatus(baseUrl: string) {
           new URL(baseUrl).hostname === "127.0.0.1") &&
         /^0x[0-9a-f]{40}$/i.test(json.hostedRunner?.payerAddress ?? "") &&
         json.hostedRunner?.chainId === 5_042_002 &&
-        json.hostedRunner?.maxBudgetUsdc === 0.005,
-      detail: `configured=${json.hostedRunner?.configured === true ? "yes" : "no"} payer=${json.hostedRunner?.payerAddress ?? "missing"}`,
+        json.hostedRunner?.maxBudgetUsdc === 0.005 &&
+        json.hostedRunner?.supportedWorkflows?.includes("market_context") === true &&
+        json.hostedRunner?.inputPersistence === "redacted_preview_and_sha256_only",
+      detail: `configured=${json.hostedRunner?.configured === true ? "yes" : "no"} payer=${json.hostedRunner?.payerAddress ?? "missing"} phase21=${json.hostedRunner?.inputPersistence ?? "missing"}`,
+    },
+    {
+      name: "review status exposes Phase 21 real-input privacy checks",
+      ok:
+        json.checks?.hostedRealInputWorkflowsEnabled === true &&
+        json.checks?.hostedInputPrivacyEnabled === true,
+      detail: `workflows=${json.checks?.hostedRealInputWorkflowsEnabled === true ? "ready" : "missing"} privacy=${json.checks?.hostedInputPrivacyEnabled === true ? "ready" : "missing"}`,
     },
   ] satisfies CheckResult[];
 

@@ -205,14 +205,14 @@ export default async function ReviewPage() {
             </h1>
             <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
               Arc Agent Commerce is an x402-powered API Store where AI agents
-              discover paid services, pay with USDC on Arc, and leave public
-              proof through timelines, receipts, Agent Passports, and seller
-              analytics.
+              analyze real user-supplied text with allowlisted paid services,
+              pay with USDC on Arc, and leave public proof through dynamic
+              reports, timelines, receipts, Agent Passports, and seller analytics.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
                 <Link href="/agent-runner">
-                  Run a useful agent workflow
+                  Run a real-input agent workflow
                   <Bot />
                 </Link>
               </Button>
@@ -302,6 +302,14 @@ export default async function ReviewPage() {
                 ? `${data.checks.verifiedProofCount} verified proof(s); ${data.checks.pendingProofCount} pending, ${data.checks.failedProofCount} failed.`
                 : "No verified proof is visible yet. Run the paid smoke flow."
             }
+          />
+          <StatusCard
+            title="Phase 21 real input"
+            ok={
+              data.checks.hostedRealInputWorkflowsEnabled &&
+              data.checks.hostedInputPrivacyEnabled
+            }
+            detail="Sentiment, builder, and market workflows accept ephemeral user input; Agent DB keeps only a redacted preview and SHA-256."
           />
           <StatusCard
             title="Seller-created live service"

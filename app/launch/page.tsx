@@ -59,7 +59,7 @@ const demoCommand = `AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "${demoTask}"
 const reviewSmokeCommand = "npm run review:smoke";
 
 const submissionCopy =
-  "Arc Agent Commerce turns Arc Nanopayments into an x402-powered API marketplace where AI agents discover paid services, buy useful API calls with USDC on Arc, and leave public proof through run timelines, commerce receipts, Agent Passports, and seller analytics. The browser never handles private keys or x402 signing; live paid calls still run through the local buyer-agent CLI.";
+  "Arc Agent Commerce turns Arc Nanopayments into a hosted x402 workflow product: users submit real text, preview an allowlisted plan, and launch paid API calls from the browser with a project-owned Arc Testnet wallet. Each run produces a privacy-safe dynamic report, receipts, an Agent Passport update, seller analytics, and app-owned onchain proofs. The browser never handles private keys or x402 signing.";
 
 const xThreadOutline = [
   "1/ Arc Agent Commerce is an API Store for AI agents on Arc.",
@@ -71,6 +71,7 @@ const xThreadOutline = [
 ].join("\n");
 
 const featureItems = [
+  "Hosted real-input workflows for sentiment, builder updates, and market context.",
   "API marketplace instead of a single paid endpoint.",
   "Buyer-agent planner with task, budget, and skip/buy reasoning.",
   "Seller-created safe mock services for marketplace expansion.",
@@ -80,6 +81,7 @@ const featureItems = [
 ];
 
 const proofItems = [
+  "Full workflow input is ephemeral; public jobs retain only a redacted preview and SHA-256.",
   "Unpaid protected endpoints return HTTP 402 with a payment-required challenge.",
   "Paid CLI runs create public timelines with selected, paid, skipped, and failed steps.",
   "Paid steps become shareable receipts with service, wallet, endpoint, request ID, and payment-event status.",
@@ -88,6 +90,7 @@ const proofItems = [
 ];
 
 const reviewerChecklist = [
+  "Open the hosted runner, paste a real non-sensitive input, preview two paid services, and launch.",
   "Open the Review Pack and confirm live health cards.",
   "Open the Guided Demo and copy the sentiment/tone command.",
   "Open the API Store and inspect official plus seller-created services.",
@@ -98,6 +101,7 @@ const reviewerChecklist = [
 ];
 
 const recordingChecklist = [
+  { label: "Run /agent-runner with real input", href: "/agent-runner" },
   { label: "Open /review", href: "/review" },
   { label: "Open /demo", href: "/demo" },
   { label: "Show /store", href: "/store" },
@@ -111,6 +115,7 @@ const recordingChecklist = [
 ];
 
 const demoLinks = [
+  { title: "Hosted Agent Runner", href: "/agent-runner", icon: Bot },
   { title: "Review Pack", href: "/review", icon: ClipboardCheck },
   { title: "Guided Demo", href: "/demo", icon: Sparkles },
   { title: "API Store", href: "/store", icon: Store },
@@ -206,12 +211,18 @@ export default async function LaunchPage() {
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
+                <Link href="/agent-runner">
+                  Run a real-input workflow
+                  <Bot />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="secondary">
                 <Link href="/review">
                   Review Pack
                   <ClipboardCheck />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="secondary">
+              <Button asChild size="lg" variant="outline">
                 <Link href="/demo">
                   Guided Demo
                   <Sparkles />
@@ -236,10 +247,9 @@ export default async function LaunchPage() {
             </CardHeader>
             <CardContent className="grid gap-4">
               <p className="text-sm leading-6 text-muted-foreground">
-                Arc Agent Commerce turns Arc Nanopayments into an API
-                marketplace where buyer-agents discover paid services, pay with
-                USDC through x402/Gateway, and leave public proof through
-                timelines, receipts, Agent Passports, and seller analytics.
+                Users submit real text to a guarded hosted buyer-agent, which
+                purchases allowlisted APIs with USDC and publishes a dynamic,
+                privacy-safe report with receipts and verified Arc proofs.
               </p>
               <CopyButton value={submissionCopy} label="Copy submission copy" />
             </CardContent>
