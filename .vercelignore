@@ -1,0 +1,9 @@
+.env*
+!.env.example
+.claude/
+.agents/
+.agent-runs/
+AGENTS.md
+contracts/cache/
+contracts/out/
+contracts/broadcast/

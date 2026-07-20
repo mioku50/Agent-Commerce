@@ -44,6 +44,7 @@ type ReviewStatus = {
     liveProviderEnabled?: boolean;
     llmSynthesisConfigured?: boolean;
     userPaidCheckoutEnabled?: boolean;
+    byoaCanaryReady?: boolean;
   };
   productPositioning?: {
     mode?: string;
@@ -95,6 +96,15 @@ type ReviewStatus = {
     maxPriceUsdc?: number;
     sponsoredQuota?: number;
     paymentModel?: string;
+  };
+  byoa?: {
+    configured?: boolean;
+    enabled?: boolean;
+    publicRegistrationEnabled?: boolean;
+    canaryOnly?: boolean;
+    chainId?: number;
+    custody?: string;
+    credentialStorage?: string;
   };
 };
 
@@ -371,6 +381,20 @@ async function checkReviewStatus(baseUrl: string) {
       detail: `configured=${json.checkout?.configured === true ? "yes" : "no"} fee=${json.checkout?.platformFeeUsdc ?? "missing"} sponsored=${json.checkout?.sponsoredQuota ?? "missing"}`,
     },
     {
+      name: "review status exposes canary-only non-custodial BYOA without secrets",
+      ok:
+        json.checks?.byoaCanaryReady === true &&
+        json.byoa?.configured === true &&
+        json.byoa.enabled === true &&
+        json.byoa.publicRegistrationEnabled === false &&
+        json.byoa.canaryOnly === true &&
+        json.byoa.chainId === 5_042_002 &&
+        json.byoa.custody === "none" &&
+        json.byoa.credentialStorage === "hmac_sha256_only" &&
+        !Object.keys(json.byoa ?? {}).some((key) => /(secret|private|credentialPepper|wallets)/i.test(key)),
+      detail: `configured=${json.byoa?.configured === true ? "yes" : "no"} enabled=${json.byoa?.enabled === true ? "yes" : "no"} canaryOnly=${json.byoa?.canaryOnly === true ? "yes" : "no"}`,
+    },
+    {
       name: "review status exposes the configured Pyth live provider without credentials",
       ok:
         (json.checks?.liveProviderEnabled === true ||
@@ -596,6 +620,7 @@ async function main() {
     "/runs",
     "/receipts",
     "/agents",
+    "/my-agents",
   ];
 
   for (const path of pageChecks) {

@@ -6,6 +6,7 @@
 import { NextResponse } from "next/server";
 import { getHostedAgentJobView } from "@/lib/agent/hosted-jobs";
 import { safeHostedError } from "@/lib/agent/hosted-policy";
+import { isByoaHostedJob } from "@/lib/byoa/service";
 
 type RouteContext = {
   params: Promise<{ jobId: string }>;
@@ -21,6 +22,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
   }
 
   try {
+    if (await isByoaHostedJob(jobId)) {
+      return NextResponse.json({ error: "Hosted job not found." }, { status: 404 });
+    }
     const view = await getHostedAgentJobView(jobId);
     if (!view) {
       return NextResponse.json({ error: "Hosted job not found." }, { status: 404 });

@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getHostedAgentJobView } from "@/lib/agent/hosted-jobs";
+import { isByoaHostedJob } from "@/lib/byoa/service";
 
 export const dynamic = "force-dynamic";
 
@@ -13,6 +14,7 @@ type PageProps = { params: Promise<{ jobId: string }> };
 export default async function WorkflowReceiptPage({ params }: PageProps) {
   const { jobId } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) notFound();
+  if (await isByoaHostedJob(jobId).catch(() => true)) notFound();
   const view = await getHostedAgentJobView(jobId).catch(() => null);
   if (!view) notFound();
   const payment = view.userPayment;

@@ -37,6 +37,7 @@ import { listRecentHostedAgentJobs } from "../agent/hosted-jobs";
 import { getPythProviderDiagnostic } from "../providers/pyth";
 import { getLlmSynthesisDiagnostic } from "../llm/openai-compatible";
 import { getHostedWorkflowCheckoutDiagnostic } from "../agent/workflow-pricing";
+import { getByoaDiagnostic } from "../byoa/config";
 
 export const RECOMMENDED_REVIEWER_COMMAND =
   'AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "Analyze tone and sentiment for a short builder update" --limit 0.005';
@@ -65,6 +66,7 @@ export type ReviewHealthStatus = {
     liveProviderEnabled: boolean;
     llmSynthesisConfigured: boolean;
     userPaidCheckoutEnabled: boolean;
+    byoaCanaryReady: boolean;
   };
   productPositioning: {
     mode: "workflow-first";
@@ -90,6 +92,7 @@ export type ReviewHealthStatus = {
   provider: ReturnType<typeof getPythProviderDiagnostic>;
   llm: ReturnType<typeof getLlmSynthesisDiagnostic>;
   checkout: ReturnType<typeof getHostedWorkflowCheckoutDiagnostic>;
+  byoa: ReturnType<typeof getByoaDiagnostic>;
   latestHostedWorkflow: Awaited<ReturnType<typeof listRecentHostedAgentJobs>>[number] | null;
 };
 
@@ -159,6 +162,7 @@ export async function getReviewHealthStatus(
   const hostedRunner = getHostedRunnerDiagnostic();
   const llm = getLlmSynthesisDiagnostic();
   const checkout = getHostedWorkflowCheckoutDiagnostic();
+  const byoa = getByoaDiagnostic();
 
   const latestSuccessfulRun =
     runs.find((run) => run.status === "completed" && (run.paid_count ?? 0) > 0) ??
@@ -226,6 +230,11 @@ export async function getReviewHealthStatus(
         checkout.configured &&
         checkout.paymentModel === "single_user_payment_then_internal_x402" &&
         checkout.chainId === 5_042_002,
+      byoaCanaryReady:
+        byoa.configured &&
+        byoa.enabled &&
+        byoa.canaryOnly &&
+        byoa.chainId === 5_042_002,
     },
     productPositioning: {
       mode: "workflow-first",
@@ -257,6 +266,7 @@ export async function getReviewHealthStatus(
     provider: getPythProviderDiagnostic(),
     llm,
     checkout,
+    byoa,
     latestHostedWorkflow,
   };
 }

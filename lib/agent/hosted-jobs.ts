@@ -40,6 +40,10 @@ import {
   finalizeHostedWorkflowUserPayment,
   getHostedWorkflowUserPaymentForJob,
 } from "../commerce/workflow-checkout.ts";
+import {
+  finalizeByoaWorkflow,
+  linkByoaAgentRun,
+} from "../byoa/service.ts";
 
 export type HostedJobStatus = "queued" | "running" | "completed" | "failed";
 export type HostedJobProgressStage =
@@ -80,6 +84,9 @@ export type HostedAgentJobRow = {
   workflow_quote_id: string | null;
   user_payment_id: string | null;
   payment_mode: "legacy_sponsored" | "sponsored" | "paid";
+  byoa_agent_id: string | null;
+  byoa_quote_id: string | null;
+  aggregate_payment_event_id: string | null;
 };
 
 export type HostedLaunchResult = {
@@ -308,6 +315,23 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       },
     });
 
+    if (job.byoa_agent_id) {
+      try {
+        await linkByoaAgentRun(jobId, job.byoa_agent_id, result.agentRunId);
+        await finalizeByoaWorkflow({
+          jobId,
+          succeeded: true,
+          downstreamSpentUsdc: Number(result.spentUsdc),
+          receiptCount: result.paidStepIds.length,
+          verifiedProofCount: proofTransactionHashes.length,
+        });
+      } catch (error) {
+        console.error(
+          `[byoa] job=${jobId} registered-agent accounting will require reconciliation: ${safeHostedError(error)}`,
+        );
+      }
+    }
+
     try {
       await finalizeHostedWorkflowUserPayment({
         jobId,
@@ -343,6 +367,22 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       console.error(
         `[hosted-checkout] job=${jobId} failed-payment credit will reconcile later: ${safeHostedError(accountingError)}`,
       );
+    }
+    if (job.byoa_agent_id) {
+      try {
+        await finalizeByoaWorkflow({
+          jobId,
+          succeeded: false,
+          downstreamSpentUsdc: Number((await getHostedAgentJob(jobId))?.spent_usdc ?? 0),
+          receiptCount: 0,
+          verifiedProofCount: 0,
+          failureReason: safeError,
+        });
+      } catch (accountingError) {
+        console.error(
+          `[byoa] job=${jobId} failure credit will require reconciliation: ${safeHostedError(accountingError)}`,
+        );
+      }
     }
     console.error(`[hosted-agent] job=${jobId} failed: ${safeError}`);
     return { claimed: true as const, error: safeError };
@@ -590,6 +630,7 @@ export async function listRecentHostedAgentJobs(
   let query = getHostedClient()
     .from("hosted_agent_jobs")
     .select("id,workflow_type,task,input_preview,status,spent_usdc,created_at,completed_at,receipt_ids,proof_transaction_hashes")
+    .is("byoa_agent_id", null)
     .order("created_at", { ascending: false });
   if (workflowType && isHostedWorkflowType(workflowType)) {
     query = query.eq("workflow_type", workflowType);
@@ -637,6 +678,7 @@ export async function listHostedFinalReports(
     .from("hosted_agent_jobs")
     .select("id,workflow_type,input_preview,structured_result,spent_usdc,completed_at,receipt_ids,proof_transaction_hashes")
     .eq("status", "completed")
+    .is("byoa_agent_id", null)
     .not("structured_result", "is", null)
     .order("completed_at", { ascending: false, nullsFirst: false });
   if (workflowType && isHostedWorkflowType(workflowType)) {

@@ -1,6 +1,7 @@
 export type SidebarIconName =
   | "activity"
   | "agent"
+  | "my-agents"
   | "dashboard"
   | "passport"
   | "proof"
@@ -16,6 +17,7 @@ export const sidebarNavigation = [
     items: [
       { href: "/", label: "Dashboard", icon: "dashboard" },
       { href: "/agent-runner", label: "Run Workflow", icon: "agent" },
+      { href: "/my-agents", label: "My Agents", icon: "my-agents" },
       { href: "/workflows", label: "Workflow Templates", icon: "templates" },
       { href: "/results", label: "Results", icon: "results" },
     ],

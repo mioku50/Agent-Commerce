@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Store,
   Wrench,
+  UserRoundCog,
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ type NavItem = {
 const iconByName: Record<SidebarIconName, LucideIcon> = {
   activity: Activity,
   agent: Bot,
+  "my-agents": UserRoundCog,
   dashboard: House,
   passport: BadgeCheck,
   proof: ShieldCheck,

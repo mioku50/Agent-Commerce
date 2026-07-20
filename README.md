@@ -265,6 +265,39 @@ The production Playwright smoke launched the CTA in Chromium, observed `Verified
 - shareable deterministic Final Reports;
 - explicit recovery for safe pre-payment failures.
 
+### Bring Your Own Agent (Phase 28 canary)
+
+`/my-agents` adds a non-custodial external-agent path without replacing the hosted browser product. An owner wallet signs a one-time management challenge, a distinct external agent wallet signs a binding challenge, and the owner issues a scoped API credential whose plaintext is returned once and whose HMAC-SHA256 hash is the only credential material stored in Agent DB.
+
+The payment roles remain explicit:
+
+1. the **owner wallet** manages registration, policy, and credentials but does not automatically pay;
+2. the verified **external agent wallet** is the workflow payer and signs the aggregate x402 payment locally;
+3. the **project-owned hosted payer** separately purchases allowlisted downstream APIs through the existing x402 execution core;
+4. neither wallet ever sends a private key or seed phrase to Arc Agent Commerce.
+
+An immutable BYOA quote reserves its allowance atomically before HTTP 402 is returned. The reservation checks workflow type, service types, per-run price, daily USDC spend, daily calls, active status, credential scope, and canary allowlist under a database lock. A signed execute request validates the exact quote, input hash, payer, amount, recipient, Arc chain `5042002`, and settlement event. Replaying the same `Idempotency-Key` returns the same quote/job and never creates another aggregate payment, downstream purchase, receipt, or proof.
+
+Public registration is intentionally disabled. Production enablement requires `BYOA_ENABLED=true`, `BYOA_PUBLIC_REGISTRATION_ENABLED=false`, explicit owner and agent wallet canary allowlists, allowed origins, and two independent server-only secrets for owner sessions and credential hashing. These values must be stored as Vercel Sensitive environment variables and never exposed through `NEXT_PUBLIC_*`.
+
+Phase 28 production canary (Arc Testnet, July 20, 2026):
+
+| Evidence | Value |
+| --- | --- |
+| Registered agent | [`agt_fb7116cb89b9300b7fd2`](https://agent-commerce-six.vercel.app/agents/byoa/agt_fb7116cb89b9300b7fd2) |
+| Owner wallet | `0xdCF6eF666d02DCF5CEF229b59f9Dab61e1Ef14aF` (management signature only) |
+| External agent / workflow payer | `0x26d93364A98457fe0259b0b737670614a1770aC3` |
+| Project-owned downstream payer | `0x7df1b81bB463Ddf263c1c470F7C1f3a68FE30df3` |
+| Policy | `market_context`; internal deterministic + live provider; `0.005` max/run; `0.02` daily; `10` calls/day |
+| Aggregate x402 workflow price | `0.002 USDC`; Gateway settlement reference `5ffabd0a-84ec-4323-8eda-561a4d2c40ab` |
+| Agent Run | [`68620f78-d0cb-4c7a-92ed-9d594b58aa35`](https://agent-commerce-six.vercel.app/runs/68620f78-d0cb-4c7a-92ed-9d594b58aa35) · `completed` · `0.0013 USDC` downstream spend |
+| Receipts | [`Text Analyzer`](https://agent-commerce-six.vercel.app/receipts/6f54a32d-4821-4c6e-9709-b012dcb27f39) · [`Pyth ETH/USD`](https://agent-commerce-six.vercel.app/receipts/cf537408-dfe7-4c22-be0d-b8b6d68120f1) |
+| Aggregate payment proof | [`0x851f…5e9`](https://testnet.arcscan.app/tx/0x851f8037efe6a985706c364775c1a7bc7278cb6eb9bf71f6449ff1cbec3085e9) · block `52799285` · registry read `true` |
+| Downstream proofs | [`0x536a…ac9`](https://testnet.arcscan.app/tx/0x536a6437f241f6c7c60834a7b5f0a8e5923b62ced5e98d7cedec127889208ac9) · [`0xa2b3…443`](https://testnet.arcscan.app/tx/0xa2b35db6a0bdee51764324d6f1152dca5a1695d3f0d7e67c11aaed65210d9443) |
+| Idempotency replay | Same quote, job, receipts, and proof transactions; no second aggregate or downstream payment |
+
+The canary Final Report used the actual paid Text Analyzer and Pyth responses, completed without warnings, and updated the separate registered-agent Passport to a 100% success rate. The canary credential was revoked after verification; the protected result API requires a newly issued credential with `results:read` scope. Public registration remains closed.
+
 ### x402 payments on Arc
 
 - HTTP 402 payment challenge;
@@ -396,6 +429,8 @@ The hosted payer is protected by server-side and database-enforced controls:
 | Route | Purpose |
 | --- | --- |
 | `/agent-runner` | Preview and launch useful hosted paid workflows |
+| `/my-agents` | Canary-only owner management for registered external agents |
+| `/agents/byoa/<public-id>` | Public-safe registered-agent Passport |
 | `/agent-runner/<id>` | Shareable read-only progress and Final Report |
 | `/workflow-receipts/<id>` | Aggregate user payment, downstream receipts, and Arc proofs |
 | `/store` | Browse agent-buyable services |
@@ -426,6 +461,13 @@ Useful public APIs:
 | `GET /api/agents` | Agent Passport list |
 | `GET /api/agents/<wallet>` | Agent Passport detail |
 | `GET /api/review/status` | Public production health and latest proof links |
+| `GET /api/byoa/manifest` | Safe BYOA integration manifest and payment-role boundary |
+| `POST /api/byoa/management/challenges` | Create an origin/chain/action/wallet-bound owner challenge |
+| `POST /api/byoa/management/session` | Verify the owner signature and issue an isolated signed management session |
+| `POST /api/byoa/v1/quotes` | Credential-authenticated immutable quote with atomic policy reservation |
+| `POST /api/byoa/v1/quotes/<id>/execute` | Return HTTP 402, settle the external-agent aggregate payment, and launch once |
+| `GET /api/byoa/v1/results/<job-id>` | Credential-protected result, aggregate payment, internal receipts, and proofs |
+| `GET /api/byoa/agents/<public-id>/passport` | Public-safe BYOA Agent Passport projection |
 
 ## Review the Project in Two Minutes
 
@@ -479,6 +521,7 @@ Do not commit `.env.local`, private keys, service-role keys, JWT secrets, or dat
 | Hosted checkout | `HOSTED_WORKFLOW_TREASURY_ADDRESS` (or `SELLER_ADDRESS` fallback), `HOSTED_WORKFLOW_PLATFORM_FEE_USDC`, `HOSTED_WORKFLOW_MAX_PRICE_USDC`, `HOSTED_WORKFLOW_SPONSORED_QUOTA`, `HOSTED_WORKFLOW_QUOTE_EXPIRY_SECONDS` |
 | Optional LLM synthesis | server-only `LLM_PROVIDER=openai-compatible`, `LLM_BASE_URL`, Vercel Sensitive `LLM_API_KEY`, and `LLM_MODEL` |
 | Local buyer agent | `AGENT_PRIVATE_KEY`, optional funding and Gateway reuse controls |
+| BYOA canary | `BYOA_ENABLED`, `BYOA_PUBLIC_REGISTRATION_ENABLED=false`, `BYOA_ALLOWED_ORIGINS`, `BYOA_CANARY_OWNER_WALLETS`, `BYOA_CANARY_AGENT_WALLETS`, Sensitive `BYOA_MANAGEMENT_SESSION_SECRET`, Sensitive `BYOA_CREDENTIAL_PEPPER` |
 
 The hosted payer key, rate-limit secret, Supabase privileged credentials, proof attester key, `PYTH_API_KEY`, and `LLM_API_KEY` must exist only in server-side Sensitive environment variables. The public status API reports only whether Pyth and FreeModel are configured, the fixed symbol allowlist, protocol, provider name, and model; it never returns keys, base URLs, authorization headers, full prompts, upstream raw responses, or credential-bearing metadata. `OPENAI_API_KEY` is not read or used.
 

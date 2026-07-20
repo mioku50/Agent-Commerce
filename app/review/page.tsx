@@ -84,6 +84,7 @@ const differenceItems = [
   "Actual purchased API responses assembled into Final Reports.",
   "Optional FreeModel synthesis after deterministic paid API execution, with a fail-open structured fallback.",
   "A live provider-backed crypto price service sourced from Pyth Network.",
+  "Canary-only Bring Your Own Agent registration with verified external wallets, scoped hashed credentials, atomic policy, aggregate x402 checkout, and a separate Passport.",
   "Seller-created services with safe mock fulfillment.",
   "Public receipts for paid API purchases.",
   "Agent Passports with workflows, reports, calls, proofs, spend, and success rate.",
@@ -99,6 +100,7 @@ const technicalProofItems = [
   "Passport and reputation stats rebuild from public run history.",
   "Seller analytics aggregates paid calls, buyer wallets, request IDs, and estimated USDC revenue.",
   "Each settled receipt is asynchronously attested in the app-owned AgentCommerceProofRegistry on Arc Testnet.",
+  "BYOA management auth, agent credentials, and signed Seller sessions are three isolated authentication boundaries.",
 ];
 
 const testnetNotes = [
@@ -235,6 +237,12 @@ export default async function ReviewPage() {
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
+                <Link href="/my-agents">
+                  My Agents
+                  <Bot />
+                </Link>
+              </Button>
+              <Button asChild size="lg" variant="outline">
                 <Link href="/workflows">
                   Workflow Templates
                   <Store />
@@ -282,6 +290,11 @@ export default async function ReviewPage() {
         ) : null}
 
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <StatusCard
+            title="BYOA canary"
+            ok={data.checks.byoaCanaryReady}
+            detail={data.checks.byoaCanaryReady ? "External-agent registration is restricted to explicit owner and agent wallet allowlists. Credentials are hashed, policy is atomic, and public registration remains disabled." : "BYOA remains closed until the server canary flag, origins, secrets, and wallet allowlists are configured."}
+          />
           <StatusCard
             title="Single workflow checkout"
             ok={data.checks.userPaidCheckoutEnabled}
