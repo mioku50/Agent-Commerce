@@ -32,7 +32,10 @@
     "seller:external-402-test": "node --experimental-transform-types --no-warnings scripts/external-fulfillment-tests.mts",
     "seller:proxy-test": "node --experimental-transform-types --no-warnings scripts/external-proxy-tests.mts",
     "seller:integration-test": "node --experimental-transform-types --no-warnings scripts/external-seller-integration-tests.mts",
-    "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts"
+    "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts",
+    "agy:head": "bash .agents/skills/opus-gemini-golova-ruki/scripts/agy-head.sh",
+    "agy:worker": "bash .agents/skills/opus-gemini-golova-ruki/scripts/agy-worker.sh",
+    "agy:run:new": "bash .agents/skills/opus-gemini-golova-ruki/scripts/new-run.sh"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "^2.0.4",
