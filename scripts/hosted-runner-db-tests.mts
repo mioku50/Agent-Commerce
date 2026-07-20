@@ -178,7 +178,10 @@ async function main() {
     assert(!cooldown.job_id && cooldown.reason === "cooldown", "Requester cooldown was not enforced.");
 
     const rateFingerprint = digest(`${marker}:rate-requester`);
-    const rateRows = [31, 32, 33].map((secondsAgo, index) => ({
+    // Keep synthetic rows comfortably outside the 30-second cooldown while
+    // still inside the rolling one-hour rate window. This avoids CI/database
+    // clock skew turning the intended rate-limit assertion into a cooldown.
+    const rateRows = [91, 92, 93].map((secondsAgo, index) => ({
       idempotency_hash: digest(`${marker}:rate:${index}`),
       requester_fingerprint: rateFingerprint,
       task: "Phase 20 hosted workflow rate-limit test",

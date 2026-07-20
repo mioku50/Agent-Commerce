@@ -23,8 +23,14 @@ import {
   createPublicClient,
   formatEther,
   formatUnits,
+  getAddress,
   http,
+  isAddress,
+  parseUnits,
+  stringToHex,
+  toHex,
   type Address,
+  type Hex,
 } from "viem";
 import {
   ARC_TESTNET_CHAIN_ID,
@@ -298,6 +304,63 @@ export function useArcWallet() {
     if (address) await loadBalances(address);
   }, [address, loadBalances, readWalletState]);
 
+  const signMessage = useCallback(async (message: string) => {
+    const provider = getProvider();
+    if (!provider || !address) throw new Error("Connect a wallet before signing.");
+    try {
+      const signature = await provider.request<Hex>({
+        method: "personal_sign",
+        params: [stringToHex(message), address],
+      });
+      setError(null);
+      return signature;
+    } catch (caught) {
+      const message = getErrorMessage(caught);
+      setError(message);
+      throw caught;
+    }
+  }, [address]);
+
+  const sendWorkflowPayment = useCallback(async (input: {
+    treasuryAddress: string;
+    amountUsdc: number;
+  }) => {
+    const provider = getProvider();
+    if (!provider || !address) throw new Error("Connect a wallet before paying.");
+    const currentChain = parseChainId(
+      await provider.request<string>({ method: "eth_chainId" }),
+    );
+    if (currentChain !== ARC_TESTNET_CHAIN_ID) {
+      throw new Error("Switch to Arc Testnet before paying.");
+    }
+    if (!isAddress(input.treasuryAddress)) throw new Error("Invalid workflow treasury address.");
+    const amountAtomic6 = Math.round(input.amountUsdc * 1_000_000);
+    if (
+      !Number.isFinite(input.amountUsdc) ||
+      input.amountUsdc <= 0 ||
+      Math.abs(input.amountUsdc * 1_000_000 - amountAtomic6) > 0.000001
+    ) {
+      throw new Error("Workflow price must be a positive USDC amount with at most 6 decimals.");
+    }
+    try {
+      const transactionHash = await provider.request<Hex>({
+        method: "eth_sendTransaction",
+        params: [{
+          from: address,
+          to: getAddress(input.treasuryAddress),
+          value: toHex(parseUnits((amountAtomic6 / 1_000_000).toFixed(6), 18)),
+          data: "0x",
+        }],
+      });
+      setError(null);
+      return transactionHash;
+    } catch (caught) {
+      const message = getErrorMessage(caught);
+      setError(message);
+      throw caught;
+    }
+  }, [address]);
+
   return {
     address,
     chainId,
@@ -314,6 +377,8 @@ export function useArcWallet() {
     disconnect,
     loadBalances,
     refresh,
+    signMessage,
+    sendWorkflowPayment,
     setError,
   };
 }

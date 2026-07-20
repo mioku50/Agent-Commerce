@@ -8,6 +8,7 @@ import { HostedAgentRunner } from "./hosted-agent-runner";
 import { getHostedRunnerDiagnostic } from "@/lib/agent/hosted-policy";
 import { listRecentHostedAgentJobs } from "@/lib/agent/hosted-jobs";
 import { parseHostedRunnerQuery } from "@/lib/agent/workflow-links";
+import { getHostedWorkflowCheckoutDiagnostic } from "@/lib/agent/workflow-pricing";
 
 export const metadata = {
   title: "Real-Input Hosted Agent Workflows | Arc Agent Commerce",
@@ -39,7 +40,10 @@ export default async function AgentRunnerPage({ searchParams }: PageProps) {
   if (job && /^[0-9a-f-]{36}$/i.test(job)) redirect(`/agent-runner/${job}`);
   const initialSelection = parseHostedRunnerQuery(params);
   const [diagnostic, history] = await Promise.all([
-    Promise.resolve(getHostedRunnerDiagnostic()),
+    Promise.resolve({
+      ...getHostedRunnerDiagnostic(),
+      checkout: getHostedWorkflowCheckoutDiagnostic(),
+    }),
     recentHistoryWithTimeout(),
   ]);
   return (

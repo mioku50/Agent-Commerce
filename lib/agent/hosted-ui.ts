@@ -1,10 +1,10 @@
 export const HOSTED_UI_MIN_INPUT_LENGTH = 20;
 
-export const HOSTED_REQUESTER_IDENTITY_LABEL = "Requester identity";
+export const HOSTED_REQUESTER_IDENTITY_LABEL = "Requester & workflow payer";
 export const HOSTED_REQUESTER_NOT_CHARGED_COPY =
-  "Your wallet will not be charged.";
+  "Sponsored workflows will not charge your wallet.";
 export const HOSTED_REQUESTER_PAYMENT_COPY =
-  "This wallet does not pay for hosted workflows. Payments are made by the project-owned Arc Testnet payer.";
+  "After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment. Internal x402 API purchases still use the project-owned hosted payer.";
 
 export function hostedRequesterDisplayLine(address: string | null) {
   return address ? `Requested by ${address}` : "No requester identity supplied.";

@@ -60,7 +60,7 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
         className="border-primary/35 bg-primary/10 text-primary hover:bg-primary/15"
       >
         <Wallet />
-        {connecting ? "Connecting..." : "Connect Identity"}
+        {connecting ? "Connecting..." : "Connect Wallet"}
       </Button>
     );
   }
@@ -162,7 +162,7 @@ export function WalletWidget({ compact = false }: { compact?: boolean }) {
           }}
         >
           <LogOut />
-          Disconnect identity
+          Disconnect wallet
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

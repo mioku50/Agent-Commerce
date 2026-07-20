@@ -36,6 +36,10 @@ import {
 } from "../services/presentation.ts";
 import type { ServiceSourceType } from "../services/registry.ts";
 import { synthesizeHostedFinalReport } from "./llm-synthesis.ts";
+import {
+  finalizeHostedWorkflowUserPayment,
+  getHostedWorkflowUserPaymentForJob,
+} from "../commerce/workflow-checkout.ts";
 
 export type HostedJobStatus = "queued" | "running" | "completed" | "failed";
 export type HostedJobProgressStage =
@@ -73,6 +77,9 @@ export type HostedAgentJobRow = {
   completed_at: string | null;
   last_heartbeat_at: string | null;
   raw: Record<string, unknown> | null;
+  workflow_quote_id: string | null;
+  user_payment_id: string | null;
+  payment_mode: "legacy_sponsored" | "sponsored" | "paid";
 };
 
 export type HostedLaunchResult = {
@@ -301,6 +308,18 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       },
     });
 
+    try {
+      await finalizeHostedWorkflowUserPayment({
+        jobId,
+        providerCostUsdc: Number(result.spentUsdc),
+        succeeded: true,
+      });
+    } catch (error) {
+      console.error(
+        `[hosted-checkout] job=${jobId} payment accounting will reconcile later: ${safeHostedError(error)}`,
+      );
+    }
+
     return { claimed: true as const, result };
   } catch (error) {
     const safeError = safeHostedError(error);
@@ -312,6 +331,19 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       completed_at: new Date().toISOString(),
       last_heartbeat_at: new Date().toISOString(),
     });
+    try {
+      const latest = await getHostedAgentJob(jobId);
+      await finalizeHostedWorkflowUserPayment({
+        jobId,
+        providerCostUsdc: Number(latest?.spent_usdc ?? 0),
+        succeeded: false,
+        failureReason: safeError,
+      });
+    } catch (accountingError) {
+      console.error(
+        `[hosted-checkout] job=${jobId} failed-payment credit will reconcile later: ${safeHostedError(accountingError)}`,
+      );
+    }
     console.error(`[hosted-agent] job=${jobId} failed: ${safeError}`);
     return { claimed: true as const, error: safeError };
   }
@@ -360,6 +392,8 @@ type PaymentEventView = {
 export async function getHostedAgentJobView(jobId: string) {
   const job = await getHostedAgentJob(jobId);
   if (!job) return null;
+
+  const userPayment = await getHostedWorkflowUserPaymentForJob(jobId);
 
   let agentWallet: string | null = null;
   let steps: Array<{
@@ -491,7 +525,11 @@ export async function getHostedAgentJobView(jobId: string) {
       createdAt: job.created_at,
       startedAt: job.started_at,
       completedAt: job.completed_at,
+      paymentMode: job.payment_mode,
+      workflowQuoteId: job.workflow_quote_id,
+      userPaymentId: job.user_payment_id,
     },
+    userPayment,
     payerWallet: agentWallet,
     receiptIds: paidSteps.map((step) => step.id),
     services: steps.map((step) => {
@@ -528,6 +566,7 @@ export async function getHostedAgentJobView(jobId: string) {
     proof: verifiedProof ?? proofs[0] ?? null,
     links: {
       hostedRun: `/agent-runner/${job.id}`,
+      workflowReceipt: `/workflow-receipts/${job.id}`,
       agentRun: job.agent_run_id ? `/runs/${job.agent_run_id}` : null,
       receipts: agentWallet ? `/receipts?wallet=${agentWallet}` : "/receipts",
       receipt: firstReceiptId ? `/receipts/${firstReceiptId}` : null,

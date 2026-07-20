@@ -82,8 +82,9 @@ export default async function Home() {
               </Button>
             </div>
             <p className="mt-4 text-xs text-muted-foreground">
-              Arc Testnet · project-owned payer wallet · maximum 0.005 USDC ·
-              local CLI available as an advanced operator flow.
+              Arc Testnet · sponsored quota, then one connected-wallet workflow
+              payment · project-owned payer handles downstream x402 · maximum
+              0.005 USDC · local CLI remains an advanced operator flow.
             </p>
           </div>
 

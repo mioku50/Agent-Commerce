@@ -78,6 +78,7 @@ const reviewChecklist = [
 ];
 
 const differenceItems = [
+  "One connected-wallet USDC checkout for the complete workflow, followed by server-side downstream x402 purchases.",
   "Hosted workflow outcomes instead of a fixed paid smoke.",
   "Real user input with planner preview and budget decisions.",
   "Actual purchased API responses assembled into Final Reports.",
@@ -90,6 +91,8 @@ const differenceItems = [
 ];
 
 const technicalProofItems = [
+  "Immutable server quotes separate the user payment, downstream provider cost, platform fee, and net revenue.",
+  "Sponsored quota and paid transaction replay both resolve to one job; paid workflows that cannot start receive a workflow credit.",
   "Unpaid protected endpoints return HTTP 402.",
   "Paid runs create public reasoning timelines.",
   "Paid steps create shareable receipts.",
@@ -101,7 +104,8 @@ const technicalProofItems = [
 const testnetNotes = [
   "Arc Testnet only.",
   "The browser never receives private keys.",
-  "A connected browser wallet is optional requester identity or an explicit funding source; the project wallet pays hosted runs.",
+  "The connected browser wallet is the requester and confirms at most one native-USDC payment for a paid hosted workflow; sponsored quota remains free.",
+  "The project-owned hosted payer separately buys downstream APIs through x402 after the user checkout settles.",
   "Hosted x402 signing runs only on the server with the project demo wallet; the local CLI remains the advanced own-wallet flow.",
   "The proof registry is an app-owned contract, not an infrastructure USDC, CCTP, or Gateway address.",
   "Validated workflow text may be processed by the external FreeModel LLM provider; keys and full prompts are never published.",
@@ -278,6 +282,11 @@ export default async function ReviewPage() {
         ) : null}
 
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+          <StatusCard
+            title="Single workflow checkout"
+            ok={data.checks.userPaidCheckoutEnabled}
+            detail={data.checks.userPaidCheckoutEnabled ? `Immutable Arc Testnet quotes combine internal API cost with a ${data.checkout.platformFeeUsdc.toFixed(4)} USDC platform fee. ${data.checkout.sponsoredQuota} sponsored run(s) per requester wallet remain available before paid checkout.` : "Hosted user checkout is not configured."}
+          />
           <StatusCard
             title="Latest successful run"
             ok={data.checks.latestSuccessfulRunExists}

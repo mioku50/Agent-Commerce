@@ -98,7 +98,7 @@ export function ArcWalletWidget({
         ) : (
           <Button type="button" size="sm" variant="outline" onClick={connect} disabled={connecting}>
             <Wallet />
-            {connecting ? "Connecting..." : "Connect Identity"}
+            {connecting ? "Connecting..." : "Connect Wallet"}
           </Button>
         )}
       </div>
@@ -136,7 +136,7 @@ export function ArcWalletWidget({
         ) : (
           <Button type="button" onClick={connect} disabled={connecting || !providerAvailable}>
             <Wallet />
-            {connecting ? "Connecting..." : "Connect Identity"}
+            {connecting ? "Connecting..." : "Connect Wallet"}
           </Button>
         )}
       </div>

@@ -8,7 +8,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
-import { ArrowRight, Bot, Calculator, LoaderCircle, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowRight, Bot, Calculator, CreditCard, LoaderCircle, ShieldCheck, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,7 @@ import {
 } from "@/lib/agent/workflow-templates";
 import type {
   HostedPlannerSnapshot,
+  HostedWorkflowQuote,
   PythMarketSymbol,
   HostedRunnerDiagnostic,
   HostedWorkflowType,
@@ -59,6 +60,8 @@ export function HostedAgentRunner({
   const [marketSymbol, setMarketSymbol] = useState<PythMarketSymbol>(initialMarketSymbol);
   const [budget, setBudget] = useState("0.005");
   const [plan, setPlan] = useState<HostedPlannerSnapshot | null>(null);
+  const [quote, setQuote] = useState<HostedWorkflowQuote | null>(null);
+  const [sponsoredAuthorizationMessage, setSponsoredAuthorizationMessage] = useState<string | null>(null);
   const [previewing, setPreviewing] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,12 +69,18 @@ export function HostedAgentRunner({
   const [historyFilter, setHistoryFilter] = useState<HostedWorkflowType | "all">("all");
   const [historyLoading, setHistoryLoading] = useState(false);
   const idempotencyKey = useRef<string | null>(null);
+  const paymentTransactionHash = useRef<string | null>(null);
+  const sponsoredSignature = useRef<string | null>(null);
   const inputHelper = hostedInputPreviewHelper(inputText);
 
   function invalidatePlan() {
     setPlan(null);
+    setQuote(null);
+    setSponsoredAuthorizationMessage(null);
     setError(null);
     idempotencyKey.current = null;
+    paymentTransactionHash.current = null;
+    sponsoredSignature.current = null;
   }
 
   function selectWorkflow(value: HostedWorkflowType) {
@@ -112,20 +121,39 @@ export function HostedAgentRunner({
   }
 
   async function preview() {
+    if (!wallet.address) {
+      setError("Connect a wallet before creating the immutable workflow quote.");
+      return null;
+    }
     setPreviewing(true);
     setError(null);
+    idempotencyKey.current ??= crypto.randomUUID();
     try {
-      const response = await fetch("/api/hosted-agent/plan", {
+      const response = await fetch("/api/hosted-agent/quotes", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody()),
+        headers: {
+          "Content-Type": "application/json",
+          "Idempotency-Key": idempotencyKey.current,
+        },
+        body: JSON.stringify({ ...requestBody(), requesterWallet: wallet.address }),
       });
-      const data = (await response.json()) as { plan?: HostedPlannerSnapshot; error?: string };
-      if (!response.ok || !data.plan) throw new Error(data.error ?? "Unable to preview workflow plan.");
-      setPlan(data.plan);
-      return data.plan;
+      const data = (await response.json()) as {
+        quote?: HostedWorkflowQuote;
+        sponsoredAuthorizationMessage?: string | null;
+        error?: string;
+        retryAfterSeconds?: number;
+      };
+      if (!response.ok || !data.quote) {
+        const retry = data.retryAfterSeconds ? ` Retry in about ${data.retryAfterSeconds}s.` : "";
+        throw new Error(`${data.error ?? "Unable to create workflow quote."}${retry}`);
+      }
+      setPlan(data.quote.plan);
+      setQuote(data.quote);
+      setSponsoredAuthorizationMessage(data.sponsoredAuthorizationMessage ?? null);
+      return data.quote.plan;
     } catch (caught) {
       setPlan(null);
+      setQuote(null);
       setError(caught instanceof Error ? caught.message : String(caught));
       return null;
     } finally {
@@ -134,20 +162,54 @@ export function HostedAgentRunner({
   }
 
   async function launch() {
-    if (!plan) return;
+    if (!plan || !quote || !wallet.address || !idempotencyKey.current) return;
     setLaunching(true);
     setError(null);
-    idempotencyKey.current ??= crypto.randomUUID();
     try {
-      const response = await fetch("/api/hosted-agent/jobs", {
+      if (Date.parse(quote.expiresAt) <= Date.now()) {
+        throw new Error("The workflow quote expired. Refresh the exact price before paying.");
+      }
+      if (wallet.address.toLowerCase() !== quote.requesterWallet.toLowerCase()) {
+        throw new Error("The connected wallet differs from the wallet bound to this quote.");
+      }
+
+      if (quote.paymentMode === "paid" && !paymentTransactionHash.current) {
+        if (!wallet.isArcTestnet) await wallet.switchToArc();
+        paymentTransactionHash.current = await wallet.sendWorkflowPayment({
+          treasuryAddress: quote.treasuryAddress,
+          amountUsdc: quote.pricing.amountDueUsdc,
+        });
+      }
+      if (quote.paymentMode === "sponsored" && !sponsoredSignature.current) {
+        if (!sponsoredAuthorizationMessage) {
+          throw new Error("Sponsored workflow authorization is unavailable.");
+        }
+        sponsoredSignature.current = await wallet.signMessage(
+          sponsoredAuthorizationMessage,
+        );
+      }
+
+      const response = await fetch(`/api/hosted-agent/quotes/${quote.id}/confirm`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Idempotency-Key": idempotencyKey.current,
         },
-        body: JSON.stringify({ ...requestBody(), requesterWallet: wallet.address }),
+        body: JSON.stringify({
+          ...requestBody(),
+          transactionHash: paymentTransactionHash.current,
+          signature: sponsoredSignature.current,
+        }),
       });
-      const data = (await response.json()) as { jobId?: string; error?: string; retryAfterSeconds?: number };
+      const data = (await response.json()) as {
+        jobId?: string | null;
+        error?: string;
+        retryAfterSeconds?: number;
+        creditIssued?: boolean;
+      };
+      if (data.creditIssued) {
+        throw new Error(data.error ?? "The payment was converted to a workflow credit.");
+      }
       if (!response.ok || !data.jobId) {
         const retry = data.retryAfterSeconds ? ` Retry in about ${data.retryAfterSeconds}s.` : "";
         throw new Error(`${data.error ?? "Unable to launch hosted workflow."}${retry}`);
@@ -176,8 +238,8 @@ export function HostedAgentRunner({
               <div className="flex items-center gap-2 font-medium"><ShieldCheck className="size-4 text-primary" />Project-owned payer wallet</div>
               <p className="break-all font-mono text-xs">{diagnostic.payerAddress ?? "Hosted wallet not configured"}</p>
               <p className="text-muted-foreground">Arc Testnet only · max {diagnostic.maxBudgetUsdc} USDC · max 3 paid calls · one active run.</p>
-              <p className="font-semibold">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p>
-              <p className="text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p>
+              <p className="font-semibold">One user checkout · internal x402 stays server-side</p>
+              <p className="text-muted-foreground">The connected wallet pays at most once for the complete workflow. This project-owned wallet separately pays the selected internal APIs.</p>
             </CardContent>
           </Card>
         </div>
@@ -234,17 +296,17 @@ export function HostedAgentRunner({
             </div>
             <div className="rounded-md border p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL} <span className="font-normal text-muted-foreground">(optional)</span></p><p className="mt-1 text-xs font-semibold">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p><p className="mt-1 text-xs text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p></div>
-                {wallet.address ? <Badge variant="secondary" className="font-mono">{shortenHash(wallet.address, 6)}</Badge> : <Button type="button" variant="outline" onClick={() => void wallet.connect()} disabled={!wallet.providerAvailable || wallet.connecting}><Wallet />{wallet.connecting ? "Connecting…" : "Connect Identity"}</Button>}
+                <div className="min-w-0"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL} <span className="font-normal text-muted-foreground">(required)</span></p><p className="mt-1 text-xs font-semibold">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p><p className="mt-1 text-xs text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p></div>
+                {wallet.address ? <Badge variant="secondary" className="font-mono">{shortenHash(wallet.address, 6)}</Badge> : <Button type="button" variant="outline" onClick={() => void wallet.connect()} disabled={!wallet.providerAvailable || wallet.connecting}><Wallet />{wallet.connecting ? "Connecting…" : "Connect Wallet"}</Button>}
               </div>
             </div>
             {error ? <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</div> : null}
             {inputHelper ? <p id="hosted-input-helper" role="status" className="text-sm font-medium text-amber-300">{inputHelper}</p> : <span id="hosted-input-helper" className="sr-only">Input is ready for workflow preview.</span>}
-            <Button size="lg" variant={plan ? "outline" : "default"} onClick={() => void preview()} disabled={previewing || launching || !diagnostic.configured || inputText.trim().length < 20}>
-              {previewing ? <LoaderCircle className="animate-spin" /> : <Calculator />}{previewing ? "Building safe plan…" : plan ? "Refresh plan preview" : "Preview plan and cost"}
+            <Button size="lg" variant={plan ? "outline" : "default"} onClick={() => void preview()} disabled={previewing || launching || !diagnostic.configured || !diagnostic.checkout.configured || !wallet.address || inputText.trim().length < 20}>
+              {previewing ? <LoaderCircle className="animate-spin" /> : <Calculator />}{previewing ? "Locking exact quote…" : quote ? "Refresh workflow quote" : "Preview exact workflow price"}
             </Button>
-            <Button size="lg" onClick={() => void launch()} disabled={!plan || launching || previewing || plan.selectedServices.length === 0}>
-              {launching ? <LoaderCircle className="animate-spin" /> : <Bot />}{launching ? "Queueing workflow…" : plan ? `Run workflow for ${plan.estimatedSpendUsdc.toFixed(4)} USDC` : "Run workflow"}
+            <Button size="lg" onClick={() => void launch()} disabled={!quote || !wallet.address || launching || previewing || plan?.selectedServices.length === 0}>
+              {launching ? <LoaderCircle className="animate-spin" /> : quote?.paymentMode === "paid" ? <CreditCard /> : <Bot />}{launching ? paymentTransactionHash.current ? "Confirming existing payment…" : "Confirming workflow checkout…" : quote ? quote.paymentMode === "sponsored" ? "Run sponsored workflow · 0 USDC" : paymentTransactionHash.current ? "Retry confirmation · no new payment" : `Pay ${quote.pricing.amountDueUsdc.toFixed(4)} USDC & run` : "Create quote first"}
             </Button>
             <Button asChild variant="ghost"><Link href="/agent-setup">Use your own wallet with the local CLI <ArrowRight /></Link></Button>
           </CardContent>
@@ -259,12 +321,16 @@ export function HostedAgentRunner({
                   <div><p className="text-xs text-muted-foreground">Workflow</p><p className="font-medium">{plan.workflowLabel}</p></div>
                   <div><p className="text-xs text-muted-foreground">Paid calls</p><p className="font-medium">{plan.selectedServices.length} of {plan.maxPaidCalls} maximum</p></div>
                   {plan.marketSymbol ? <div><p className="text-xs text-muted-foreground">Selected asset</p><p className="font-medium">{plan.marketSymbol}</p></div> : null}
-                  <div><p className="text-xs text-muted-foreground">Estimated total</p><p className="font-mono font-medium">{plan.estimatedSpendUsdc.toFixed(4)} USDC</p></div>
+                  <div><p className="text-xs text-muted-foreground">Internal API cost</p><p className="font-mono font-medium">{quote?.pricing.estimatedProviderCostUsdc.toFixed(4) ?? plan.estimatedSpendUsdc.toFixed(4)} USDC</p></div>
+                  <div><p className="text-xs text-muted-foreground">Platform fee</p><p className="font-mono font-medium">{quote?.pricing.platformFeeUsdc.toFixed(4) ?? "—"} USDC</p></div>
+                  <div><p className="text-xs text-muted-foreground">Workflow list price</p><p className="font-mono font-medium">{quote?.pricing.listPriceUsdc.toFixed(4) ?? "—"} USDC</p></div>
+                  <div><p className="text-xs text-muted-foreground">Due from your wallet</p><p className="font-mono font-medium">{quote?.pricing.amountDueUsdc.toFixed(4) ?? "—"} USDC</p><p className="mt-1 text-[11px] text-muted-foreground">{quote?.paymentMode === "sponsored" ? "Sponsored demo quota" : "One native USDC transfer; Arc network fee is separate"}</p></div>
                   <div className="min-w-0"><p className="text-xs text-muted-foreground">Project-owned payer</p><p className="break-all font-mono text-xs">{diagnostic.payerAddress ?? "Unavailable"}</p></div>
                   <div><p className="text-xs text-muted-foreground">Expected Final Report</p><p className="font-medium">{plan.aggregationLabel}</p></div>
                 </div>
                 <div className="rounded-md bg-secondary/30 p-3 text-xs"><p className="font-medium">Safe input preview</p><p className="mt-1 text-muted-foreground">{plan.inputPreview}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">SHA-256 {plan.inputSha256}</p></div>
                 <div className="grid gap-3">{plan.selectedServices.map((service) => <div key={service.slug} className="min-w-0 rounded-md border p-4"><div className="flex min-w-0 flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="font-medium">{service.name}</p><div className="mt-2"><ServicePresentation metadata={service.presentation} /></div></div><Badge variant="secondary" className="font-mono">{service.priceUsdc.toFixed(4)} USDC</Badge></div><p className="mt-2 break-all font-mono text-xs text-muted-foreground">{service.method} {service.endpoint}</p><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p></div>)}</div>
+                {quote ? <div className="rounded-md border border-primary/25 bg-primary/5 p-3 text-xs"><p className="font-medium">Immutable checkout quote · {quote.paymentMode}</p><p className="mt-1 text-muted-foreground">Expires {new Date(quote.expiresAt).toLocaleString()} · Arc Testnet chain {quote.chainId}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">Treasury {quote.treasuryAddress}</p></div> : null}
                 {plan.skippedServices.length ? <div><p className="text-sm font-medium">Skipped by policy or relevance</p><div className="mt-2 flex flex-wrap gap-2">{plan.skippedServices.map((service) => <Badge key={service.slug} variant="outline">{service.name}</Badge>)}</div></div> : null}
                 <p className="text-xs text-muted-foreground">{plan.aggregationLabel}. Planning, allowlisting, budgets, x402 execution, receipts, and Arc proofs remain deterministic.</p>
               </> : <p className="text-sm text-muted-foreground">Preview is calculated on the server from the fixed Arc Testnet allowlist. Browser-supplied URLs and service selections are ignored.</p>}

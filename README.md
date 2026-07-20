@@ -1,6 +1,5 @@
 # Arc Agent Commerce
 
-
 > [!IMPORTANT]
 > ## License and attribution notice
 >
@@ -12,17 +11,18 @@
 >
 > Copyright © 2026 Sergio Romanov ([@mioku50](https://github.com/mioku50)).
 
-> Submit real input → a hosted agent selects and purchases paid APIs through x402 → optionally synthesizes an AI-assisted Final Report → creates receipts → registers verified proofs on Arc.
+> Submit real input → preview one exact workflow price → confirm one user payment → the hosted agent purchases paid APIs through x402 → receive a Final Report, aggregate receipt, and verified Arc proofs.
 
 **Arc Agent Commerce is no longer positioned primarily as an API marketplace demo.**
 The workflow-first product direction is a hosted agent execution and verification layer:
 
 1. a user chooses a workflow and submits real non-sensitive input in the browser;
-2. the hosted agent previews and selects up to three allowlisted paid APIs;
-3. a project-owned server wallet pays through x402 and Circle Gateway;
-4. actual service responses become a shareable Final Report;
-5. paid calls become public activity, receipts, Passport and seller analytics updates;
-6. compact proofs are registered in the app-owned contract on Arc Testnet.
+2. the server returns an immutable quote containing up to three allowlisted APIs, provider cost, platform fee, and final price;
+3. the user consumes sponsored quota or confirms one native-USDC payment from the connected Arc Testnet wallet;
+4. only after checkout does a project-owned server wallet buy the selected APIs through x402 and Circle Gateway;
+5. actual service responses become a shareable Final Report and aggregate workflow receipt;
+6. internal paid calls become public activity, commerce receipts, Passport and seller analytics updates;
+7. compact proofs are registered in the app-owned contract on Arc Testnet.
 
 The API Store, Agent Launch, Agent Setup, and local CLI remain available under **Developer Tools**. They are secondary advanced/operator surfaces, while browser-hosted workflow execution is the primary product.
 
@@ -59,11 +59,25 @@ Arc Agent Commerce explores a different model:
 - the purchase leaves a shareable receipt and a verifiable Arc proof;
 - spending limits and service allowlists are enforced by the operator.
 
-For the end user, the hosted flow requires no repository clone, no private key, and no local CLI setup.
+For the end user, the hosted flow requires no repository clone, private-key entry, or local CLI setup. A connected wallet is used as requester and, after its sponsored quota, confirms one workflow-level USDC payment—not one confirmation per internal API.
 
 ## One-Click Hosted Flow
 
-Open [`/agent-runner`](https://agent-commerce-six.vercel.app/agent-runner), choose a workflow, paste real non-sensitive source text, inspect the server-generated plan and estimated price, then launch it.
+Open [`/agent-runner`](https://agent-commerce-six.vercel.app/agent-runner), connect an Arc Testnet wallet, choose a workflow, paste real non-sensitive source text, and inspect the immutable server-generated checkout quote. The quote shows every internal API cost, the platform fee, the exact workflow list price, and the amount due from the wallet.
+
+The first configured `1–3` runs per requester wallet can be sponsored. After that quota, the connected wallet sends one direct native-USDC payment to the configured Agent Commerce treasury. The server verifies the Arc chain, sender, recipient, exact 18-decimal native value, empty calldata, successful receipt, and one confirmation before it creates the job. Displayed prices are limited to six USDC decimals. The project-owned hosted payer then makes the independent downstream x402 purchases. The user does not approve each internal call.
+
+For the representative two-service plan:
+
+| Checkout component | Amount |
+| --- | ---: |
+| Premium Quote | `0.0010 USDC` |
+| Text Analyzer | `0.0003 USDC` |
+| Estimated downstream provider cost | `0.0013 USDC` |
+| Platform fee | `0.0007 USDC` |
+| User workflow price | `0.0020 USDC` |
+
+Accounting persists `user_payment`, actual `provider_cost`, quoted `platform_fee`, and realized `net_revenue` separately from the existing downstream x402 payment events. If a paid checkout settles but the workflow cannot start, or if the whole job fails, one idempotent workflow credit is recorded for the full user price. The credit is an auditable recovery record; automated credit redemption and onchain refunds are not claimed in this prototype.
 
 Available hosted workflows:
 
@@ -79,18 +93,19 @@ When FreeModel is absent, times out, is rate-limited, returns too much data, or 
 The application then:
 
 1. validates input type, length, emptiness, and obvious credential/private-key patterns;
-2. computes a redacted 240-character preview and SHA-256, then creates a durable Agent DB job without storing the full input;
+2. computes a redacted 240-character preview and SHA-256, then creates an immutable quote without storing the full input;
 3. binds idempotency to the key plus workflow, input hash, selected market symbol, task, and budget;
-4. applies cooldown, rate-limit, and active-job checks;
-5. plans the purchase through the shared agent execution core;
-6. calls up to three allowlisted x402-protected services within the `0.005 USDC` total cap, passing ephemeral source text to the Text Analyzer and an allowlisted symbol to the Pyth-backed service;
-7. pays with the project-owned Arc Testnet payer wallet;
-8. records the Agent Run, purchase step, payment event, and receipt;
-9. updates the payer wallet's Agent Passport and seller analytics;
-10. publishes a compact post-settlement proof to Arc;
-11. optionally sends the validated ephemeral input and successful paid API responses to the external FreeModel provider for bounded synthesis;
-12. persists either the explicitly labeled AI synthesis or the deterministic fallback with safe input metadata, reasoning, spend, receipts, and proof transactions;
-13. publishes the result at the shareable read-only route `/agent-runner/<job-id>`.
+4. applies sponsored quota, cooldown, rate-limit, and global active-job checks before requesting payment;
+5. verifies either a requester-signed sponsored authorization or one exact Arc user payment;
+6. atomically creates one user-payment record and one durable Agent DB job only after successful checkout;
+7. plans through the shared execution core and calls up to three allowlisted x402-protected services within the `0.005 USDC` internal cap;
+8. pays downstream services with the project-owned Arc Testnet payer wallet;
+9. records the Agent Run, purchase step, internal payment event, and per-call receipt;
+10. updates the hosted payer wallet's Agent Passport and seller analytics;
+11. publishes a compact post-settlement proof to Arc for each internal receipt;
+12. optionally sends validated ephemeral input and successful paid API responses to FreeModel for bounded synthesis;
+13. persists the labeled AI synthesis or deterministic fallback plus safe input metadata and checkout accounting;
+14. publishes `/agent-runner/<job-id>` and an aggregate `/workflow-receipts/<job-id>` linking the user checkout, downstream receipts, and Arc proofs.
 
 The UI exposes progress states such as:
 
@@ -101,7 +116,7 @@ The UI exposes progress states such as:
 - publishing onchain proof;
 - completed or failed.
 
-A connected browser wallet is optional and is used only as a requester label. It never pays, signs, or authorizes the hosted purchase.
+A connected browser wallet is required for new hosted checkout. It is labeled as the requester and workflow payer. Sponsored runs request a non-payment authorization signature; paid runs request exactly one native-USDC transfer for the complete workflow. Browser wallet private keys are never requested or stored, while downstream x402 signing remains entirely server-side.
 
 The original workflow input exists only in the launch request and the in-memory background execution closure, plus the transient FreeModel request when synthesis is configured. The runner warns users before launch that their validated text will be processed by an external LLM provider. Public status, history, result pages, and Agent DB expose only the redacted preview, SHA-256, bounded/redacted model output, and safe synthesis metadata. Full prompts, API keys, authorization headers, raw provider errors, and raw provider payloads are not persisted. Failed pre-payment recovery therefore requires the operator to re-submit the original text from a local file whose hash matches the job.
 
@@ -133,9 +148,32 @@ Workflow templates open the hosted runner with a safe, allowlisted selection alr
 
 Market Context accepts only `BTC/USD`, `ETH/USD`, or `SOL/USD`; invalid workflow or symbol query values fall back to the default template. The runner still requires at least 20 input characters before the server can produce a plan. Its launch price comes only from that server-generated plan.
 
-Results search, workflow/status filters, and Newest/Oldest/Highest spend sorting are reflected in the `/results` query string, so filtered views can be bookmarked or shared. Hosted browser wallets are connected through **Connect Identity** and labeled **Requester identity** throughout the workflow UI. **Your wallet will not be charged:** the separate project-owned Arc Testnet payer pays hosted workflow calls, and a connected requester appears as `Requested by 0x…` on the shareable result. Explicit wallet funding lives only under **Developer Tools → Fund Local CLI Agent** for the advanced local/operator flow.
+Results search, workflow/status filters, and Newest/Oldest/Highest spend sorting are reflected in the `/results` query string, so filtered views can be bookmarked or shared. Hosted browser wallets are connected through **Connect Wallet** and labeled **Requester & workflow payer**. Sponsored quote UI says that the wallet will not be charged; paid quote UI shows the exact one-time amount due. The shareable result identifies `Requested by 0x…`, the user payment transaction when present, separate downstream cost, fee/revenue accounting, and the aggregate workflow receipt. Explicit wallet funding remains only under **Developer Tools → Fund Local CLI Agent** for the advanced local/operator flow.
 
 ## Verified Production Example
+
+Phase 26 was validated with a real browser-triggered, user-paid **SOL/USD Market Context Brief**. The connected requester wallet confirmed one `0.002 USDC` native transfer for the complete workflow. The project-owned hosted payer then independently purchased Text Analyzer (`0.0003 USDC`) and the Pyth-backed service (`0.001 USDC`) through the unchanged x402 flow. Both internal receipts were registered in the unchanged app-owned proof registry.
+
+| Proof | Value |
+| --- | --- |
+| Production deployment | `dpl_9HbxsYy28MkX6v59qvzponaZ8n2H` · [`agent-commerce-six.vercel.app`](https://agent-commerce-six.vercel.app) |
+| Hosted result | [`4766b246-81a6-4f1e-b803-d1697c33fcbe`](https://agent-commerce-six.vercel.app/agent-runner/4766b246-81a6-4f1e-b803-d1697c33fcbe) |
+| Aggregate workflow receipt | [`4766b246-81a6-4f1e-b803-d1697c33fcbe`](https://agent-commerce-six.vercel.app/workflow-receipts/4766b246-81a6-4f1e-b803-d1697c33fcbe) |
+| Agent Run | [`e0c02fa3-e4e8-4e21-bc0a-3207d66d0c6b`](https://agent-commerce-six.vercel.app/runs/e0c02fa3-e4e8-4e21-bc0a-3207d66d0c6b) |
+| Requester / workflow payer | [`0x26d9…0aC3`](https://testnet.arcscan.app/address/0x26d93364A98457fe0259b0b737670614a1770aC3) |
+| User workflow payment | [`0x575a…fc34`](https://testnet.arcscan.app/tx/0x575a3980100e18f0deb2bdc6e828518b42972d7e745417651edf9a582c40fc34) · block `52749642` · `0.002 USDC` |
+| Actual downstream cost | `0.0013 USDC` |
+| Platform fee / net revenue | `0.0007 USDC` / `0.0007 USDC` |
+| Symbol / live price | `SOL/USD` / `75.96025302` |
+| Provider publish time | `2026-07-20T08:40:35.000Z` |
+| Text Analyzer receipt | [`d613f7d6-5da8-4e32-a08b-79b2f7d30849`](https://agent-commerce-six.vercel.app/receipts/d613f7d6-5da8-4e32-a08b-79b2f7d30849) |
+| Text Analyzer proof | [`0xac10…5e30`](https://testnet.arcscan.app/tx/0xac10d5a7e128e832c8ac56189bcfe215c57399d86d946cf7c137b461ca075e30) · block `52749651` |
+| Pyth receipt | [`b65736cb-e506-4be8-8745-fe04489c0133`](https://agent-commerce-six.vercel.app/receipts/b65736cb-e506-4be8-8745-fe04489c0133) |
+| Pyth proof | [`0xc821…0087`](https://testnet.arcscan.app/tx/0xc8217baa68039defe5b2e8221ee501b2fb8747e7510c9d0d907a148997df0087) · block `52749653` |
+| Registry | [`0x92dC…4851`](https://testnet.arcscan.app/address/0x92dC1aFC126F755ba5d5254e8D697CAe10474851) · both reads `verified` with registered proof data |
+| Idempotency replay | Same quote, user payment, job, two receipts, and two proof transactions; browser sent exactly one user transaction |
+
+The production recovery path was also exercised. A separate `0.002 USDC` settlement that could not create a job was persisted as one full workflow credit linked to its real [Arc transaction](https://testnet.arcscan.app/tx/0xda7dfb0509c6d6b23aaa34ed51dac792b01ee6cf97316acdd7e5d426c040a358) and block `52748644`; it created no downstream x402 purchases or proof records.
 
 Phase 24 was validated with a real browser-triggered **Market Context Brief** that explicitly selected `ETH/USD`. Arc Agent Commerce charged the hosted buyer-agent through x402; the normalized underlying price came from authenticated Pyth Hermes. The result records the provider confidence interval and price age at fetch. Idempotency replay returned the same job, receipts, and proof transactions without another payment.
 
@@ -216,7 +254,11 @@ The production Playwright smoke launched the CTA in Chromium, observed `Verified
 - one-click browser launch;
 - durable Agent DB job state;
 - shared execution core with the local CLI;
-- server-owned Arc Testnet payer wallet;
+- one immutable user-facing checkout quote;
+- sponsored demo quota followed by one connected-wallet Arc Testnet USDC payment;
+- server-owned Arc Testnet payer wallet for separate downstream x402 calls;
+- separate gross payment, provider cost, platform fee, net revenue, and credit accounting;
+- aggregate workflow receipt linking both payment layers and all proofs;
 - public progress and result links;
 - plan preview with exact services and estimated cost;
 - multi-service execution and honest partial-failure reports;
@@ -254,12 +296,16 @@ Developers can still fund and run their own buyer-agent wallet through the local
 
 ```mermaid
 flowchart LR
-    U[Browser user] --> R[/agent-runner]
-    R --> J[Hosted Agent Job API]
+    U[Browser user wallet] --> R[/agent-runner]
+    R --> Q[Immutable server quote]
+    Q --> W[Sponsored authorization or one native-USDC payment]
+    W --> Z[Agent Commerce treasury]
+    W --> J[Atomic payment and job creation]
     J --> D[(Agent DB)]
     J --> E[Shared Agent Execution Core]
     E --> P[Planner and policy]
-    P --> S[Allowlisted API Store service]
+    P --> B[Project-owned hosted payer]
+    B --> S[Allowlisted API Store service]
     S --> X[x402 + Circle Gateway]
     X --> A[Paid API response]
     X --> H[Arc Agent Commerce Pyth adapter]
@@ -276,6 +322,7 @@ flowchart LR
     D --> N[Seller analytics]
     A -. post-settlement attestation .-> O[AgentCommerceProofRegistry]
     O --> V[Verified on Arc]
+    D --> G[Aggregate workflow receipt]
 ```
 
 Key implementation boundaries:
@@ -337,7 +384,10 @@ The hosted payer is protected by server-side and database-enforced controls:
 - requester cooldown;
 - rolling rate limit;
 - HMAC-protected idempotency keys bound to workflow, normalized input hash, task, and budget;
-- an exact replay returns the original job, while key reuse with different input returns `409 idempotency_conflict`;
+- an exact quote/payment replay returns the original payment and job, while key reuse with different input returns `409 idempotency_conflict`;
+- user payment transaction hashes are unique and may not fund a second quote;
+- no durable job exists before sponsored authorization or paid settlement is confirmed;
+- a paid settlement that cannot launch produces one workflow credit instead of disappearing or launching twice;
 - recovery is allowed only before payment when recorded spend is zero;
 - payer and attester keys are stored only as Vercel Sensitive environment variables.
 
@@ -347,6 +397,7 @@ The hosted payer is protected by server-side and database-enforced controls:
 | --- | --- |
 | `/agent-runner` | Preview and launch useful hosted paid workflows |
 | `/agent-runner/<id>` | Shareable read-only progress and Final Report |
+| `/workflow-receipts/<id>` | Aggregate user payment, downstream receipts, and Arc proofs |
 | `/store` | Browse agent-buyable services |
 | `/agent-control` | Dry-run planning and policy preview |
 | `/runs` | Public agent execution timelines |
@@ -362,7 +413,11 @@ Useful public APIs:
 | --- | --- |
 | `GET /api/store/services` | Machine-readable service discovery |
 | `POST /api/hosted-agent/plan` | Validate input and preview the exact allowlisted plan/cost |
-| `POST /api/hosted-agent/jobs` | Create or replay a hosted job |
+| `POST /api/hosted-agent/quotes` | Create/replay an immutable server-priced quote (connected wallet required) |
+| `GET /api/hosted-agent/quotes/<id>` | Read the safe immutable quote |
+| `POST /api/hosted-agent/quotes/<id>/confirm` | Verify sponsored authorization or one Arc payment, then atomically create/replay the job |
+| `POST /api/hosted-agent/jobs` | Disabled (`410`); prevents bypassing checkout |
+| `GET /api/workflow-receipts/<job-id>` | Aggregate checkout, internal receipts, and proof links |
 | `POST /api/provider/pyth/price` | x402-protected normalized Pyth price for BTC/USD, ETH/USD, or SOL/USD |
 | `GET /api/hosted-agent/jobs?workflowType=<type>` | Recent hosted workflow history, optionally filtered by workflow |
 | `GET /api/hosted-agent/jobs/<id>` | Read hosted job progress and proof links |
@@ -375,11 +430,12 @@ Useful public APIs:
 ## Review the Project in Two Minutes
 
 1. Open the [hosted runner](https://agent-commerce-six.vercel.app/agent-runner).
-2. Choose Market Context Brief, ask for BTC/USD, ETH/USD, or SOL/USD with real non-sensitive context, preview the two-service `0.0013 USDC` plan, and launch it.
-3. Watch the job progress to `completed`, inspect the Final Report, and confirm every receipt is `Verified on Arc`.
-4. Open the generated Agent Run, receipt, Passport, and Arcscan transaction.
-5. Open the [review page](https://agent-commerce-six.vercel.app/review) for the current production status.
-6. Confirm that an unpaid protected request returns HTTP 402:
+2. Connect an Arc Testnet wallet, choose Market Context Brief, ask for BTC/USD, ETH/USD, or SOL/USD, and preview the two-service `0.0013 USDC` internal cost plus exact workflow fee/total.
+3. Use sponsored quota or confirm the single user-facing workflow payment. The wallet should not ask for one payment per internal service.
+4. Watch the job progress to `completed`, inspect its aggregate workflow receipt, and confirm every internal receipt is `Verified on Arc`.
+5. Open the generated Agent Run, commerce receipts, Passport, user payment transaction, and proof transactions.
+6. Open the [review page](https://agent-commerce-six.vercel.app/review) for the current production status.
+7. Confirm that an unpaid protected request returns HTTP 402:
 
 ```bash
 curl -i -X POST https://agent-commerce-six.vercel.app/api/provider/pyth/price \
@@ -387,7 +443,7 @@ curl -i -X POST https://agent-commerce-six.vercel.app/api/provider/pyth/price \
   -d '{"symbol":"BTC/USD"}'
 ```
 
-7. Run the public production smoke:
+8. Run the public production smoke:
 
 ```bash
 npm run review:smoke
@@ -420,6 +476,7 @@ Do not commit `.env.local`, private keys, service-role keys, JWT secrets, or dat
 | Proof registry | `AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS`, server-only `AGENT_COMMERCE_PROOF_ATTESTER_PRIVATE_KEY` |
 | Proof recovery | server-only `AGENT_COMMERCE_PROOF_RECOVERY_TOKEN` |
 | External provider | server-only Vercel Sensitive `PYTH_API_KEY` |
+| Hosted checkout | `HOSTED_WORKFLOW_TREASURY_ADDRESS` (or `SELLER_ADDRESS` fallback), `HOSTED_WORKFLOW_PLATFORM_FEE_USDC`, `HOSTED_WORKFLOW_MAX_PRICE_USDC`, `HOSTED_WORKFLOW_SPONSORED_QUOTA`, `HOSTED_WORKFLOW_QUOTE_EXPIRY_SECONDS` |
 | Optional LLM synthesis | server-only `LLM_PROVIDER=openai-compatible`, `LLM_BASE_URL`, Vercel Sensitive `LLM_API_KEY`, and `LLM_MODEL` |
 | Local buyer agent | `AGENT_PRIVATE_KEY`, optional funding and Gateway reuse controls |
 
@@ -509,7 +566,9 @@ A paid browser smoke must never run silently. It requires the explicit `--confir
 ## Current Limitations
 
 - Arc Testnet only;
-- hosted purchases use a project-owned payer wallet;
+- paid hosted workflows require a browser wallet on Arc Testnet after sponsored quota;
+- user checkout is a direct native-USDC transfer; downstream API purchases continue to use the existing project-owned x402 payer;
+- workflow credits are persisted recovery records but are not yet automatically redeemable or refunded onchain;
 - the hosted service set is allowlisted;
 - the registry is custom and unaudited;
 - seller-created external API proxying is disabled;
@@ -520,13 +579,14 @@ A paid browser smoke must never run silently. It requires the explicit `--confir
 
 ## Next Direction
 
-Phase 25 adds explicitly labeled FreeModel synthesis without granting the model control over commerce execution. Future work can focus on:
+Phase 26 adds one user-facing workflow checkout without granting the connected wallet or LLM control over downstream commerce execution. Future work can focus on:
 
 - additional low-cost allowlisted data and compute services;
 - encrypted, user-controlled prompt/result storage and provider consent controls;
 - encrypted, user-controlled private result storage for use cases that should not be public;
 - richer service-level proof and cost comparisons;
 - production-grade seller authentication and settlement configuration;
+- onchain refunds or redeemable prepaid credits backed by the current immutable credit ledger;
 - future exploration of ERC-8004 identity and ERC-8183 job coordination.
 
 These items are roadmap targets and are not presented as completed features.

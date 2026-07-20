@@ -30,6 +30,7 @@ import {
   type SellerAnalyticsService,
 } from "@/lib/seller/analytics";
 import { shortenHash } from "@/lib/utils";
+import { getHostedWorkflowCheckoutAnalytics } from "@/lib/commerce/workflow-checkout";
 
 export const metadata = {
   title: "Seller Analytics | Arc Agent Commerce",
@@ -390,7 +391,10 @@ function SourceBreakdown({ analytics }: { analytics: SellerAnalytics }) {
 
 async function SellerAnalyticsContent() {
   await connection();
-  const analytics = await getSellerAnalytics();
+  const [analytics, checkout] = await Promise.all([
+    getSellerAnalytics(),
+    getHostedWorkflowCheckoutAnalytics(),
+  ]);
 
   return (
     <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6">
@@ -435,6 +439,19 @@ async function SellerAnalyticsContent() {
         />
       </div>
 
+      <Card className="rounded-lg shadow-sm">
+        <CardHeader>
+          <CardTitle>Hosted workflow checkout economics</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-5">
+          <div className="rounded-md border p-3"><p className="text-muted-foreground">User payments</p><p className="mt-2 font-mono font-semibold">{checkout.userPaymentUsdc} USDC</p><p className="mt-1 text-xs text-muted-foreground">{checkout.paidCount} paid · {checkout.sponsoredCount} sponsored</p></div>
+          <div className="rounded-md border p-3"><p className="text-muted-foreground">Downstream provider cost</p><p className="mt-2 font-mono font-semibold">{checkout.providerCostUsdc} USDC</p><p className="mt-1 text-xs text-muted-foreground">Existing internal x402 purchases</p></div>
+          <div className="rounded-md border p-3"><p className="text-muted-foreground">Quoted platform fees</p><p className="mt-2 font-mono font-semibold">{checkout.quotedPlatformFeeUsdc} USDC</p><p className="mt-1 text-xs text-muted-foreground">Server-priced before checkout</p></div>
+          <div className="rounded-md border p-3"><p className="text-muted-foreground">Net revenue</p><p className="mt-2 font-mono font-semibold">{checkout.netRevenueUsdc} USDC</p><p className="mt-1 text-xs text-muted-foreground">User payment minus actual provider cost and credits</p></div>
+          <div className="rounded-md border p-3"><p className="text-muted-foreground">Workflow credits</p><p className="mt-2 font-mono font-semibold">{checkout.creditAmountUsdc} USDC</p><p className="mt-1 text-xs text-muted-foreground">{checkout.creditedCount} credited checkout(s)</p></div>
+        </CardContent>
+      </Card>
+
       <SourceBreakdown analytics={analytics} />
       <TopServicesTable services={analytics.topServices} />
       <RecentPurchasesTable purchases={analytics.recentPurchases} />
@@ -475,9 +492,9 @@ export default function SellerAnalyticsPage() {
               API revenue and buyer-agent usage
             </h1>
             <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-              See how seller-created APIs perform across paid calls, skipped
-              decisions, failed requests, buyer-agent wallets, request IDs, and
-              matched payment events.
+              See user-facing workflow payments, downstream provider cost,
+              platform economics, and how seller APIs perform across paid calls,
+              buyer-agent wallets, request IDs, and matched payment events.
             </p>
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">

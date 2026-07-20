@@ -89,10 +89,10 @@ const walkthrough = [
   },
   {
     step: "Step 3",
-    title: "Run the hosted buyer-agent",
+    title: "Confirm one workflow checkout",
     href: "/agent-runner",
     icon: Bot,
-    body: "Launch once. The project-owned Arc Testnet wallet pays selected APIs while the browser follows durable progress.",
+    body: "Use the sponsored quota or confirm one exact native-USDC price from the connected wallet. Only after settlement does the project-owned payer buy the selected APIs through x402.",
   },
   {
     step: "Step 4",
@@ -345,9 +345,11 @@ export default async function DemoPage() {
             <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
               Paste real non-sensitive text into Sentiment & Tone, Builder
               Update Summary, or Market Context Brief. The hosted agent
-              discovers paid APIs, selects useful services, pays with USDC on
-              Arc through x402/Gateway, and produces public receipts, a dynamic
-              report, Agent Passport updates, and verified proofs. Market
+              discovers paid APIs and shows one exact workflow price. Sponsored
+              quota is free; otherwise the connected wallet confirms one native-USDC
+              payment. The project-owned hosted payer then buys downstream APIs
+              through x402/Gateway and produces public receipts, a dynamic report,
+              Agent Passport updates, and verified proofs. Market
               Context lets the user explicitly choose BTC/USD, ETH/USD, or
               SOL/USD, then buys a 0.001 USDC provider-backed service from Arc
               Agent Commerce. Its underlying data is sourced from Pyth Network;
@@ -410,8 +412,9 @@ export default async function DemoPage() {
             <CardContent className="grid gap-4">
               <p className="text-sm leading-6 text-muted-foreground">
                 Advanced operator flow: run this locally with your own funded
-                buyer-agent wallet. The hosted demo above uses a separate
-                project-owned wallet and never exposes payment secrets.
+                buyer-agent wallet. Hosted checkout uses the connected wallet
+                only for its single user-facing payment; a separate project-owned
+                wallet signs downstream x402 purchases and never exposes secrets.
               </p>
               <div className="rounded-md border bg-muted/40 p-4">
                 <code className="break-all font-mono text-sm">{demoCommand}</code>

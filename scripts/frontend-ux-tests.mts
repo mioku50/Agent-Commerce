@@ -69,8 +69,8 @@ assert.deepEqual(
 
 assert.equal(hostedInputPreviewHelper("short"), "Enter at least 20 characters to preview the workflow.");
 assert.equal(hostedInputPreviewHelper("This input is definitely long enough."), null);
-assert.equal(HOSTED_REQUESTER_IDENTITY_LABEL, "Requester identity");
-assert.equal(HOSTED_REQUESTER_NOT_CHARGED_COPY, "Your wallet will not be charged.");
+assert.equal(HOSTED_REQUESTER_IDENTITY_LABEL, "Requester & workflow payer");
+assert.equal(HOSTED_REQUESTER_NOT_CHARGED_COPY, "Sponsored workflows will not charge your wallet.");
 assert.equal(
   hostedRequesterDisplayLine("0x1234567890abcdef1234567890abcdef12345678"),
   "Requested by 0x1234567890abcdef1234567890abcdef12345678",
@@ -78,7 +78,7 @@ assert.equal(
 assert.equal(hostedRequesterDisplayLine(null), "No requester identity supplied.");
 assert.equal(
   HOSTED_REQUESTER_PAYMENT_COPY,
-  "This wallet does not pay for hosted workflows. Payments are made by the project-owned Arc Testnet payer.",
+  "After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment. Internal x402 API purchases still use the project-owned hosted payer.",
 );
 
 const futureProvider = {
@@ -120,4 +120,4 @@ assert(sidebarNavigation.flatMap(({ items }) => items).some(({ label }) => label
 assert(DESKTOP_SIDEBAR_SCROLL_CLASS.includes("overflow-y-auto"));
 assert(MOBILE_SIDEBAR_SCROLL_CLASS.includes("overflow-y-auto"));
 
-console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester identity copy, generic provider presentation, and scrollable sidebar model");
+console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, and scrollable sidebar model");

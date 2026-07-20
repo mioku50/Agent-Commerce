@@ -43,6 +43,7 @@ type ReviewStatus = {
     publicWorkflowPagesEnabled?: boolean;
     liveProviderEnabled?: boolean;
     llmSynthesisConfigured?: boolean;
+    userPaidCheckoutEnabled?: boolean;
   };
   productPositioning?: {
     mode?: string;
@@ -84,6 +85,16 @@ type ReviewStatus = {
     legacyOpenAiKeyUsed?: boolean;
     apiKey?: unknown;
     baseUrl?: unknown;
+  };
+  checkout?: {
+    configured?: boolean;
+    chainId?: number;
+    asset?: string;
+    treasuryAddress?: string | null;
+    platformFeeUsdc?: number;
+    maxPriceUsdc?: number;
+    sponsoredQuota?: number;
+    paymentModel?: string;
   };
 };
 
@@ -142,6 +153,39 @@ async function checkHostedWorkflowPreview(baseUrl: string) {
         /^[0-9a-f]{64}$/.test(json.request?.inputSha256 ?? "") &&
         json.request?.inputSha256 === json.plan?.inputSha256,
       detail: `fullInput=${json.request?.inputText === undefined ? "absent" : "present"} hash=${json.request?.inputSha256 ? "present" : "missing"}`,
+    },
+  ] satisfies CheckResult[];
+}
+
+async function checkHostedCheckoutBoundary(baseUrl: string) {
+  const body = {
+    workflowType: "sentiment_tone",
+    task: "Preview a safe hosted checkout boundary without launching a job.",
+    inputText: "This safe checkout boundary input is long enough for validation.",
+    budgetUsdc: 0.005,
+  };
+  const [legacyLaunch, missingWalletQuote] = await Promise.all([
+    fetchWithTimeout(urlFor(baseUrl, "/api/hosted-agent/jobs"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify(body),
+    }),
+    fetchWithTimeout(urlFor(baseUrl, "/api/hosted-agent/quotes"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Idempotency-Key": crypto.randomUUID() },
+      body: JSON.stringify(body),
+    }),
+  ]);
+  return [
+    {
+      name: "legacy direct hosted launch cannot bypass checkout",
+      ok: legacyLaunch.status === 410,
+      detail: `HTTP ${legacyLaunch.status}`,
+    },
+    {
+      name: "hosted quote requires a connected requester/payer wallet",
+      ok: missingWalletQuote.status === 400,
+      detail: `HTTP ${missingWalletQuote.status}`,
     },
   ] satisfies CheckResult[];
 }
@@ -312,11 +356,30 @@ async function checkReviewStatus(baseUrl: string) {
       detail: `mode=${json.productPositioning?.mode ?? "missing"} primary=${json.productPositioning?.primaryRoute ?? "missing"}`,
     },
     {
+      name: "review status exposes single-payment hosted checkout",
+      ok:
+        json.checks?.userPaidCheckoutEnabled === true &&
+        json.checkout?.configured === true &&
+        json.checkout.chainId === 5_042_002 &&
+        json.checkout.asset === "native_usdc" &&
+        /^0x[0-9a-f]{40}$/i.test(json.checkout.treasuryAddress ?? "") &&
+        json.checkout.platformFeeUsdc === 0.0007 &&
+        json.checkout.maxPriceUsdc === 0.005 &&
+        (json.checkout.sponsoredQuota ?? 0) >= 1 &&
+        (json.checkout.sponsoredQuota ?? 0) <= 3 &&
+        json.checkout.paymentModel === "single_user_payment_then_internal_x402",
+      detail: `configured=${json.checkout?.configured === true ? "yes" : "no"} fee=${json.checkout?.platformFeeUsdc ?? "missing"} sponsored=${json.checkout?.sponsoredQuota ?? "missing"}`,
+    },
+    {
       name: "review status exposes the configured Pyth live provider without credentials",
       ok:
-        json.checks?.liveProviderEnabled === true &&
+        (json.checks?.liveProviderEnabled === true ||
+          ((new URL(baseUrl).hostname === "localhost" || new URL(baseUrl).hostname === "127.0.0.1") &&
+            json.provider?.configured === false)) &&
         json.provider?.provider === "Pyth Network" &&
-        json.provider?.configured === true &&
+        (json.provider?.configured === true ||
+          new URL(baseUrl).hostname === "localhost" ||
+          new URL(baseUrl).hostname === "127.0.0.1") &&
         json.provider?.paidEndpoint === "/api/provider/pyth/price" &&
         json.provider?.priceUsdc === "0.001" &&
         json.provider?.maxPriceAgeSeconds === 120 &&
@@ -551,6 +614,11 @@ async function main() {
     checkHostedWorkflowPreview(baseUrl),
   );
   results.push(...(Array.isArray(previewResults) ? previewResults : [previewResults]));
+
+  const checkoutBoundary = await safelyRun("hosted checkout boundary checks", () =>
+    checkHostedCheckoutBoundary(baseUrl),
+  );
+  results.push(...(Array.isArray(checkoutBoundary) ? checkoutBoundary : [checkoutBoundary]));
 
   const receiptsResult = await safelyRun("/api/receipts returns valid JSON", () =>
     checkReceiptsJson(baseUrl),

@@ -41,6 +41,29 @@ export type HostedPlannerSnapshot = {
   warnings: string[];
 };
 
+export type HostedWorkflowQuote = {
+  id: string;
+  requesterWallet: string;
+  workflowType: HostedWorkflowType;
+  inputPreview: string;
+  inputSha256: string;
+  plan: HostedPlannerSnapshot;
+  pricing: {
+    estimatedProviderCostUsdc: number;
+    platformFeeUsdc: number;
+    listPriceUsdc: number;
+    amountDueUsdc: number;
+  };
+  paymentMode: "sponsored" | "paid";
+  treasuryAddress: string;
+  chainId: number;
+  asset: "native_usdc";
+  status: "quoted" | "consumed" | "completed" | "expired" | "credited" | "cancelled";
+  expiresAt: string;
+  jobId: string | null;
+  userPaymentId: string | null;
+};
+
 export type HostedApiResult = {
   serviceSlug: string;
   serviceName: string;
@@ -128,7 +151,33 @@ export type HostedJobView = {
     createdAt: string;
     startedAt: string | null;
     completedAt: string | null;
+    paymentMode: "legacy_sponsored" | "sponsored" | "paid";
+    workflowQuoteId: string | null;
+    userPaymentId: string | null;
   };
+  userPayment: {
+    id: string;
+    quoteId: string;
+    paymentMode: "sponsored" | "paid";
+    status: "sponsored" | "settled" | "credit_issued" | "refund_pending" | "refunded";
+    requesterWallet: string;
+    grossAmountUsdc: string;
+    estimatedProviderCostUsdc: string;
+    providerCostUsdc: string;
+    platformFeeUsdc: string;
+    netRevenueUsdc: string;
+    creditAmountUsdc: string;
+    transactionHash: string | null;
+    blockNumber: number | null;
+    treasuryAddress: string;
+    chainId: number;
+    asset: "native_usdc";
+    settledAt: string | null;
+    creditedAt: string | null;
+    completedAt: string | null;
+    failureReason: string | null;
+    transactionUrl: string | null;
+  } | null;
   payerWallet: string | null;
   receiptIds: string[];
   services: Array<{
@@ -153,6 +202,7 @@ export type HostedJobView = {
   }>;
   links: {
     hostedRun: string;
+    workflowReceipt: string;
     agentRun: string | null;
     receipts: string;
     receipt: string | null;
@@ -171,6 +221,17 @@ export type HostedRunnerDiagnostic = {
   cooldownSeconds: number;
   rateLimitWindowSeconds: number;
   rateLimitMaxRuns: number;
+  checkout: {
+    configured: boolean;
+    chainId: number;
+    asset: "native_usdc";
+    treasuryAddress: string | null;
+    platformFeeUsdc: number;
+    maxPriceUsdc: number;
+    sponsoredQuota: number;
+    quoteExpirySeconds: number;
+    paymentModel: "single_user_payment_then_internal_x402";
+  };
 };
 
 export type RecentHostedJob = {

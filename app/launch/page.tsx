@@ -60,18 +60,19 @@ const demoCommand = `AGENT_MAX_IN_FLIGHT=1 npm run agent -- --task "${demoTask}"
 const reviewSmokeCommand = "npm run review:smoke";
 
 const submissionCopy =
-  "Arc Agent Commerce turns Arc Nanopayments into a hosted x402 workflow product: users submit real text, preview an allowlisted plan, and launch paid API calls from the browser with a project-owned Arc Testnet wallet. Market Context explicitly selects BTC/USD, ETH/USD, or SOL/USD and can purchase Arc Agent Commerce's 0.001 USDC provider-backed API, which normalizes fresh Pyth Network data with confidence and age metadata. Each run produces a privacy-safe dynamic report, receipts, an Agent Passport update, seller analytics, and app-owned onchain proofs. The browser never handles private keys or x402 signing.";
+  "Arc Agent Commerce turns Arc Nanopayments into a hosted x402 workflow product: users submit real text, preview an immutable allowlisted plan and final workflow price, then use sponsored quota or confirm one native-USDC payment from their connected Arc Testnet wallet. After settlement, the project-owned hosted payer purchases downstream APIs through x402. Market Context explicitly selects BTC/USD, ETH/USD, or SOL/USD and can purchase Arc Agent Commerce's 0.001 USDC provider-backed API, which normalizes fresh Pyth Network data with confidence and age metadata. Each run produces a privacy-safe dynamic report, an aggregate workflow receipt, internal commerce receipts, an Agent Passport update, seller analytics, and app-owned onchain proofs. The browser never handles private keys or downstream x402 signing.";
 
 const xThreadOutline = [
   "1/ Arc Agent Commerce turns real user input into a hosted, verifiable agent workflow on Arc.",
-  "2/ The agent previews and purchases allowlisted paid APIs through x402 within a 0.005 USDC cap.",
-  "3/ Actual API responses become a shareable Final Report with service reasoning and spend.",
-  "4/ Every paid call creates a receipt, Passport update, seller analytics, and app-owned Arc registry proof.",
-  "5/ The project payer and attester keys stay server-only; the local CLI remains an advanced operator flow.",
-  "6/ Review the live demo: https://agent-commerce-six.vercel.app/review",
+  "2/ The user previews one exact price and confirms at most one workflow payment; sponsored quota remains available.",
+  "3/ The hosted payer separately purchases allowlisted APIs through x402 within a 0.005 USDC cap.",
+  "4/ Actual API responses become a shareable Final Report with service reasoning and spend.",
+  "5/ Every paid call creates a receipt, Passport update, seller analytics, and app-owned Arc registry proof.",
+  "6/ Project payer and attester keys stay server-only; review the live demo: https://agent-commerce-six.vercel.app/review",
 ].join("\n");
 
 const featureItems = [
+  "One immutable native-USDC checkout per paid workflow, with sponsored demo quota and replay-safe confirmation.",
   "Hosted real-input workflows for sentiment, builder updates, and market context.",
   "Workflow templates with prices, selected services, and expected results.",
   "Explicit BTC/USD, ETH/USD, and SOL/USD selection with fresh Pyth Network price, confidence interval, publish time, and age behind an Arc Agent Commerce x402 service.",
@@ -83,6 +84,8 @@ const featureItems = [
 ];
 
 const proofItems = [
+  "User payment, provider cost, platform fee, and net revenue are recorded independently from downstream x402 events.",
+  "A paid workflow that cannot start receives one persisted workflow credit; retries cannot duplicate payment, job, or credit.",
   "Full workflow input is ephemeral; public jobs retain only a redacted preview and SHA-256.",
   "Unpaid protected endpoints return HTTP 402 with a payment-required challenge.",
   "Paid hosted and CLI workflows create public timelines with selected, paid, skipped, and failed steps.",
@@ -92,7 +95,8 @@ const proofItems = [
 ];
 
 const reviewerChecklist = [
-  "Open the hosted runner, paste a real non-sensitive input, preview two paid services, and launch.",
+  "Open the hosted runner, connect an Arc Testnet wallet, paste real non-sensitive input, and preview the immutable API/fee/total breakdown.",
+  "Use sponsored quota or confirm the one user-facing USDC checkout; do not expect per-API wallet confirmations.",
   "Open the Review Pack and confirm live health cards.",
   "Open Results and confirm the Final Report contains actual purchased API responses.",
   "Open Arc Proofs and inspect receipt, transaction, block, contract, and Arcscan links.",
