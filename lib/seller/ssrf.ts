@@ -17,6 +17,9 @@
  */
 
 import { promises as dns } from "node:dns";
+import http from "node:http";
+import https from "node:https";
+import { isIP } from "node:net";
 import { isTransientNetworkError, toErrorMessage } from "../agent/fetch-with-retry.ts";
 
 export class SSRFProtectionError extends Error {
@@ -42,6 +45,22 @@ export type SsrfFetchOptions = {
   pinnedResolvedIps?: string[];
   onDnsResolved?: (ips: string[]) => void;
 };
+
+type SellerRequestAdapter = (
+  url: URL,
+  init: RequestInit,
+  pinnedIp: string,
+  limits: { timeoutMs: number; maxSizeBytes: number },
+) => Promise<Response>;
+
+let testRequestAdapter: SellerRequestAdapter | null = null;
+
+export function setSellerRequestAdapterForTests(adapter: SellerRequestAdapter | null) {
+  if (process.env.NODE_ENV !== "test") {
+    throw new Error("Seller request adapter overrides are test-only.");
+  }
+  testRequestAdapter = adapter;
+}
 
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_SIZE_BYTES = 1_048_576; // 1 MB
@@ -269,6 +288,89 @@ export function filterSafeHeaders(
   return result;
 }
 
+function headersFromIncoming(headers: http.IncomingHttpHeaders) {
+  const result = new Headers();
+  for (const [name, value] of Object.entries(headers)) {
+    if (Array.isArray(value)) {
+      for (const item of value) result.append(name, item);
+    } else if (value !== undefined) {
+      result.set(name, value);
+    }
+  }
+  return result;
+}
+
+/**
+ * Opens the socket to the already validated IP while retaining the registered
+ * hostname for Host/SNI certificate validation. Node's request API never follows
+ * redirects, so the same request-scoped transport protects preflight and payment.
+ */
+async function requestPinnedAddress(
+  url: URL,
+  init: RequestInit,
+  pinnedIp: string,
+  limits: { timeoutMs: number; maxSizeBytes: number },
+): Promise<Response> {
+  const body = init.body;
+  if (body !== undefined && body !== null && typeof body !== "string" && !Buffer.isBuffer(body)) {
+    throw new SSRFProtectionError("SSRF protection: external seller request body must be buffered text or bytes");
+  }
+
+  return new Promise<Response>((resolve, reject) => {
+    const requester = url.protocol === "https:" ? https.request : http.request;
+    const request = requester(url, {
+      method: init.method ?? "GET",
+      headers: init.headers as http.OutgoingHttpHeaders,
+      servername: url.hostname,
+      lookup: ((_hostname: string, _options: unknown, callback: (error: NodeJS.ErrnoException | null, address: string, family: number) => void) => {
+        callback(null, pinnedIp, isIP(pinnedIp));
+      }) as never,
+    }, (response) => {
+      if ((response.statusCode ?? 0) >= 300 && (response.statusCode ?? 0) < 400) {
+        response.resume();
+        reject(new SSRFProtectionError("SSRF protection: redirects are strictly forbidden for external seller fulfillment"));
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      let size = 0;
+      response.on("data", (chunk: Buffer | string) => {
+        const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+        size += bytes.length;
+        if (size > limits.maxSizeBytes) {
+          request.destroy(new ResponseSizeLimitExceededError(limits.maxSizeBytes));
+          return;
+        }
+        chunks.push(bytes);
+      });
+      response.on("end", () => {
+        resolve(new Response(Buffer.concat(chunks), {
+          status: response.statusCode ?? 502,
+          statusText: response.statusMessage,
+          headers: headersFromIncoming(response.headers),
+        }));
+      });
+      response.on("error", reject);
+    });
+
+    const onAbort = () => request.destroy(new Error(toErrorMessage(init.signal?.reason ?? "Request aborted")));
+    if (init.signal) {
+      if (init.signal.aborted) {
+        onAbort();
+        return;
+      }
+      init.signal.addEventListener("abort", onAbort, { once: true });
+    }
+    request.setTimeout(limits.timeoutMs, () => {
+      request.destroy(new Error(`SSRF protection: request timed out after ${limits.timeoutMs}ms`));
+    });
+    request.on("error", reject);
+    request.on("close", () => init.signal?.removeEventListener("abort", onAbort));
+    if (body !== undefined && body !== null) request.write(body);
+    request.end();
+  });
+}
+
 /**
  * Executes an HTTP fetch request with comprehensive SSRF protection, strict timeout,
  * forbidden redirects, and response size limiting.
@@ -310,10 +412,7 @@ export async function fetchWithSsrfProtection(
     controller.abort(new Error(`SSRF protection: request timed out after ${timeoutMs}ms`));
   }, timeoutMs);
 
-  const signals = init.signal ? [controller.signal, init.signal] : [controller.signal];
-
-  // Merge signals if needed
-  let combinedSignal = controller.signal;
+  // Merge a caller abort into the request-local timeout controller.
   if (init.signal) {
     if (init.signal.aborted) {
       clearTimeout(timeoutId);
@@ -324,13 +423,19 @@ export async function fetchWithSsrfProtection(
   }
 
   try {
-    const response = await fetch(validatedUrl.toString(), {
+    const pinnedIp = options.pinnedResolvedIps?.find((ip) => resolvedIps.includes(ip)) ?? resolvedIps[0];
+    if (!pinnedIp) {
+      throw new SSRFProtectionError("SSRF protection: no validated address available for connection");
+    }
+    const adapter = process.env.NODE_ENV === "test" && testRequestAdapter
+      ? testRequestAdapter
+      : requestPinnedAddress;
+    const response = await adapter(validatedUrl, {
       ...init,
       headers: safeHeaders,
-      signal: combinedSignal,
-      // Strictly disallow automatic following of redirects to prevent redirecting to internal/metadata IPs
+      signal: controller.signal,
       redirect: "manual",
-    });
+    }, pinnedIp, { timeoutMs, maxSizeBytes });
 
     // Check for redirects
     if (
@@ -341,44 +446,6 @@ export async function fetchWithSsrfProtection(
       throw new SSRFProtectionError(
         `SSRF protection: redirects are strictly forbidden for external seller fulfillment. Endpoint attempted redirect to "${location}"`,
       );
-    }
-
-    // Step 4: Wrap response body to enforce maximum response size limiting
-    if (response.body) {
-      let bytesRead = 0;
-      const reader = response.body.getReader();
-
-      const limitedStream = new ReadableStream({
-        async pull(controllerStream) {
-          try {
-            const { done, value } = await reader.read();
-            if (done) {
-              controllerStream.close();
-              return;
-            }
-            if (value) {
-              bytesRead += value.byteLength;
-              if (bytesRead > maxSizeBytes) {
-                await reader.cancel();
-                controllerStream.error(new ResponseSizeLimitExceededError(maxSizeBytes));
-                return;
-              }
-              controllerStream.enqueue(value);
-            }
-          } catch (err) {
-            controllerStream.error(err);
-          }
-        },
-        cancel(reason) {
-          return reader.cancel(reason);
-        },
-      });
-
-      return new Response(limitedStream, {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers,
-      });
     }
 
     return response;

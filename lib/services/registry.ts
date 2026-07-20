@@ -64,6 +64,7 @@ export type ApiService = {
   endpointVerificationStatus?: "unverified" | "verified" | "failed";
   walletVerificationChallenge?: string | null;
   endpointVerificationNonce?: string | null;
+  endpointVerificationExpiresAt?: string | null;
 };
 
 const emptyInputSchema = {

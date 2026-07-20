@@ -17,13 +17,18 @@
  */
 
 import assert from "node:assert/strict";
+import { createServer } from "node:http";
 import {
   isRestrictedIpAddress,
   validateUrlSsrf,
   verifyDnsSsrf,
   filterSafeHeaders,
   SSRFProtectionError,
+  fetchWithSsrfProtection,
+  setSellerRequestAdapterForTests,
 } from "../lib/seller/ssrf.ts";
+
+process.env.NODE_ENV = "test";
 
 async function runTests() {
   console.log("Running SSRF protection tests...");
@@ -72,7 +77,30 @@ async function runTests() {
   assert.equal(filtered["Authorization"], undefined, "Authorization must be stripped");
   assert.equal(filtered["Cookie"], undefined, "Cookie must be stripped");
 
-  console.log("All SSRF protection tests passed! ✅");
+  // Test 4: the production request-scoped transport never follows redirects.
+  setSellerRequestAdapterForTests(null);
+  const server = createServer((_request, response) => {
+    response.writeHead(302, { Location: "http://169.254.169.254/latest/meta-data" });
+    response.end();
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const address = server.address();
+    assert(address && typeof address === "object");
+    await assert.rejects(
+      () => fetchWithSsrfProtection(
+        `http://127.0.0.1:${address.port}/redirect`,
+        { method: "GET" },
+        { allowLocalhostForTesting: true, maxTimeoutMs: 2000, maxResponseSizeBytes: 1024 },
+      ),
+      (error: unknown) => error instanceof SSRFProtectionError && error.message.includes("redirects are strictly forbidden"),
+      "Actual external seller transport must reject redirects without following them",
+    );
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+
+  console.log("All SSRF protection tests passed, including pinned request transport redirect rejection! ✅");
 }
 
 runTests().catch((err) => {

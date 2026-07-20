@@ -1,18 +1,5 @@
 /**
  * Copyright 2026 Circle Internet Group, Inc.  All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
  * SPDX-License-Identifier: Apache-2.0
  */
 
@@ -20,9 +7,10 @@ import { createHash } from "node:crypto";
 import { parseUnits } from "viem";
 import type { ApiService } from "../services/registry.ts";
 
-const ARC_TESTNET_NETWORK = "eip155:5042002";
-const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
-const ALLOWED_SCHEMES = new Set(["exact"]);
+export const ARC_TESTNET_NETWORK = "eip155:5042002";
+export const ARC_TESTNET_USDC = "0x3600000000000000000000000000000000000000";
+export const ARC_TESTNET_GATEWAY_WALLET = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9";
+const MAX_GATEWAY_TIMEOUT_SECONDS = 604_900;
 
 export class ExternalPaymentValidationError extends Error {
   constructor(message: string) {
@@ -31,18 +19,21 @@ export class ExternalPaymentValidationError extends Error {
   }
 }
 
+export type ExternalPaymentAcceptance = {
+  scheme: string;
+  network: string;
+  asset: string;
+  amount: string;
+  payTo: string;
+  maxTimeoutSeconds: number;
+  extra: Record<string, unknown>;
+};
+
 export type ExternalChallengeSummary = {
-  x402Version?: unknown;
-  resource?: { url?: string };
+  x402Version: number;
+  resource: { url: string };
   acceptsCount: number;
-  firstAccept?: {
-    scheme?: string;
-    network?: string;
-    asset?: string;
-    amount?: string;
-    payTo?: string;
-    extra?: Record<string, unknown>;
-  };
+  selectedAccept: ExternalPaymentAcceptance;
 };
 
 function decodeBase64Json(value: string): unknown | null {
@@ -53,48 +44,101 @@ function decodeBase64Json(value: string): unknown | null {
   }
 }
 
+function parseAcceptance(value: unknown): ExternalPaymentAcceptance | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const accept = value as Record<string, unknown>;
+  if (
+    typeof accept.scheme !== "string" ||
+    typeof accept.network !== "string" ||
+    typeof accept.asset !== "string" ||
+    typeof accept.amount !== "string" ||
+    typeof accept.payTo !== "string" ||
+    typeof accept.maxTimeoutSeconds !== "number" ||
+    !Number.isInteger(accept.maxTimeoutSeconds) ||
+    !accept.extra ||
+    typeof accept.extra !== "object" ||
+    Array.isArray(accept.extra)
+  ) return null;
+  return {
+    scheme: accept.scheme,
+    network: accept.network,
+    asset: accept.asset,
+    amount: accept.amount,
+    payTo: accept.payTo,
+    maxTimeoutSeconds: accept.maxTimeoutSeconds,
+    extra: accept.extra as Record<string, unknown>,
+  };
+}
+
 export function parsePaymentRequiredChallenge(
   headerValue: string | null | undefined,
 ): ExternalChallengeSummary | null {
   if (!headerValue) return null;
   const decoded = decodeBase64Json(headerValue);
-  if (!decoded || typeof decoded !== "object") return null;
-
-  const challenge = decoded as {
-    x402Version?: unknown;
-    resource?: { url?: string };
-    accepts?: Array<{
-      scheme?: string;
-      network?: string;
-      asset?: string;
-      amount?: string;
-      payTo?: string;
-      extra?: Record<string, unknown>;
-    }>;
-  };
-
-  const firstAccept = challenge.accepts?.[0];
-  if (!firstAccept) {
-    return {
-      x402Version: challenge.x402Version,
-      resource: challenge.resource,
-      acceptsCount: 0,
-    };
-  }
-
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) return null;
+  const challenge = decoded as Record<string, unknown>;
+  const resource = challenge.resource;
+  const accepts = challenge.accepts;
+  if (
+    (challenge.x402Version !== 1 && challenge.x402Version !== 2) ||
+    !resource ||
+    typeof resource !== "object" ||
+    Array.isArray(resource) ||
+    typeof (resource as Record<string, unknown>).url !== "string" ||
+    !Array.isArray(accepts) ||
+    accepts.length !== 1
+  ) return null;
+  const selectedAccept = parseAcceptance(accepts[0]);
+  if (!selectedAccept) return null;
   return {
     x402Version: challenge.x402Version,
-    resource: challenge.resource,
-    acceptsCount: challenge.accepts?.length ?? 0,
-    firstAccept: {
-      scheme: firstAccept.scheme,
-      network: firstAccept.network,
-      asset: firstAccept.asset,
-      amount: firstAccept.amount,
-      payTo: firstAccept.payTo,
-      extra: firstAccept.extra,
-    },
+    resource: { url: (resource as Record<string, unknown>).url as string },
+    acceptsCount: accepts.length,
+    selectedAccept,
   };
+}
+
+function normalizedResourceUrl(input: string) {
+  let url: URL;
+  try {
+    url = new URL(input);
+  } catch {
+    throw new ExternalPaymentValidationError(`Invalid resource URL format: "${input}".`);
+  }
+  if (url.protocol !== "https:" && url.protocol !== "http:") {
+    throw new ExternalPaymentValidationError(`Unsupported resource URL protocol: "${url.protocol}".`);
+  }
+  if (url.username || url.password || url.hash) {
+    throw new ExternalPaymentValidationError("Resource URL credentials and fragments are forbidden.");
+  }
+  const effectivePort = url.port || (url.protocol === "https:" ? "443" : "80");
+  const query = [...url.searchParams.entries()]
+    .sort(([aKey, aValue], [bKey, bValue]) => aKey.localeCompare(bKey) || aValue.localeCompare(bValue))
+    .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
+    .join("&");
+  return {
+    protocol: url.protocol.toLowerCase(),
+    hostname: url.hostname.toLowerCase(),
+    port: effectivePort,
+    pathname: url.pathname || "/",
+    query,
+  };
+}
+
+function assertFullResourceUrl(actual: string, expected: string) {
+  const actualUrl = normalizedResourceUrl(actual);
+  const expectedUrl = normalizedResourceUrl(expected);
+  if (
+    actualUrl.protocol !== expectedUrl.protocol ||
+    actualUrl.hostname !== expectedUrl.hostname ||
+    actualUrl.port !== expectedUrl.port ||
+    actualUrl.pathname !== expectedUrl.pathname ||
+    actualUrl.query !== expectedUrl.query
+  ) {
+    throw new ExternalPaymentValidationError(
+      `Resource URL mismatch: challenge "${actual}" does not match registered fulfillment URL "${expected}".`,
+    );
+  }
 }
 
 export type ValidateChallengeInput = {
@@ -104,10 +148,7 @@ export type ValidateChallengeInput = {
   fulfillmentUrl: string;
 };
 
-/**
- * Validates external HTTP 402 challenge against immutable listing parameters.
- * Prohibits unauthorized networks, schemes, wallets, price increases, or redirects.
- */
+/** Validates the single exact acceptance that will be signed and submitted. */
 export function validateExternal402Challenge({
   service,
   status,
@@ -119,84 +160,59 @@ export function validateExternal402Challenge({
       `Expected HTTP 402 Payment Required from external seller endpoint "${fulfillmentUrl}", but received status ${status}.`,
     );
   }
-
   if (!paymentRequiredHeader) {
     throw new ExternalPaymentValidationError(
-      `External seller endpoint "${fulfillmentUrl}" returned HTTP 402 without a valid PAYMENT-REQUIRED challenge header.`,
+      `External seller endpoint "${fulfillmentUrl}" returned HTTP 402 without PAYMENT-REQUIRED.`,
     );
   }
 
   const summary = parsePaymentRequiredChallenge(paymentRequiredHeader);
-  if (!summary || !summary.firstAccept) {
+  if (!summary) {
     throw new ExternalPaymentValidationError(
-      `Could not decode a valid x402 PAYMENT-REQUIRED challenge from external seller endpoint "${fulfillmentUrl}".`,
+      "PAYMENT-REQUIRED must contain resource.url and exactly one complete, supported acceptance.",
     );
   }
-
-  const { scheme, network, asset, amount, payTo } = summary.firstAccept;
-
-  // 1. Network check
-  if (network !== ARC_TESTNET_NETWORK) {
+  const acceptance = summary.selectedAccept;
+  if (acceptance.scheme.toLowerCase() !== "exact") {
+    throw new ExternalPaymentValidationError(`Unauthorized x402 scheme: "${acceptance.scheme}".`);
+  }
+  if (service.expectedNetwork !== ARC_TESTNET_NETWORK || acceptance.network !== ARC_TESTNET_NETWORK) {
     throw new ExternalPaymentValidationError(
-      `Unauthorized network in x402 challenge: expected "${ARC_TESTNET_NETWORK}", got "${String(network)}".`,
+      `Unauthorized network in x402 challenge: expected "${ARC_TESTNET_NETWORK}", got "${acceptance.network}".`,
     );
   }
-
-  // 2. Scheme check
-  if (typeof scheme !== "string" || !ALLOWED_SCHEMES.has(scheme.toLowerCase())) {
+  if (
+    service.expectedAsset?.toLowerCase() !== ARC_TESTNET_USDC.toLowerCase() ||
+    acceptance.asset.toLowerCase() !== ARC_TESTNET_USDC.toLowerCase()
+  ) {
     throw new ExternalPaymentValidationError(
-      `Unauthorized x402 scheme: expected "exact", got "${String(scheme)}".`,
+      `Unauthorized asset in x402 challenge: expected Arc Testnet USDC "${ARC_TESTNET_USDC}".`,
     );
   }
-
-  // 3. payTo wallet check
-  const registeredWallet = service.sellerWallet || "";
-  if (!registeredWallet || typeof payTo !== "string" || payTo.toLowerCase() !== registeredWallet.toLowerCase()) {
+  const registeredWallet = service.sellerWallet ?? "";
+  if (!/^0x[a-fA-F0-9]{40}$/.test(acceptance.payTo) || acceptance.payTo.toLowerCase() !== registeredWallet.toLowerCase()) {
     throw new ExternalPaymentValidationError(
-      `Unauthorized payTo wallet in x402 challenge: expected registered seller wallet "${registeredWallet}", got "${String(payTo)}".`,
+      `Unauthorized payTo wallet in x402 challenge: expected registered seller wallet "${registeredWallet}".`,
     );
   }
-
-  // 4. Amount quote check (must not exceed immutable listing price)
-  const quoteAtomic = parseUnits(String(service.priceUsd || 0), 6);
-  if (typeof amount !== "string" || !/^\d+$/.test(amount)) {
+  const quoteAtomic = parseUnits(String(service.priceUsd), 6);
+  if (!/^\d+$/.test(acceptance.amount) || BigInt(acceptance.amount) !== quoteAtomic) {
     throw new ExternalPaymentValidationError(
-      `Invalid amount format in x402 challenge: "${String(amount)}".`,
+      `Price quote mismatch: expected exactly ${quoteAtomic} atomic USDC units, got "${acceptance.amount}".`,
     );
   }
-
-  if (BigInt(amount) > quoteAtomic) {
-    throw new ExternalPaymentValidationError(
-      `Price quote violation: x402 challenge requests ${amount} atomic units, exceeding registered service listing price of ${quoteAtomic} (${service.priceUsd} USDC).`,
-    );
+  if (acceptance.maxTimeoutSeconds < 1 || acceptance.maxTimeoutSeconds > MAX_GATEWAY_TIMEOUT_SECONDS) {
+    throw new ExternalPaymentValidationError("Unsupported acceptance timeout.");
   }
-
-  // 5. Asset check
-  if (typeof asset !== "string" || asset.toLowerCase() !== ARC_TESTNET_USDC.toLowerCase()) {
-    throw new ExternalPaymentValidationError(
-      `Unauthorized asset in x402 challenge: expected Arc Testnet USDC "${ARC_TESTNET_USDC}", got "${String(asset)}".`,
-    );
+  if (
+    acceptance.extra.name !== "GatewayWalletBatched" ||
+    acceptance.extra.version !== "1" ||
+    typeof acceptance.extra.verifyingContract !== "string" ||
+    acceptance.extra.verifyingContract.toLowerCase() !== ARC_TESTNET_GATEWAY_WALLET.toLowerCase()
+  ) {
+    throw new ExternalPaymentValidationError("Unsupported or ambiguous Gateway acceptance metadata.");
   }
-
-  // 6. Resource URL check
-  if (summary.resource?.url) {
-    let challengeHost = "";
-    let targetHost = "";
-    try {
-      challengeHost = new URL(summary.resource.url).host.toLowerCase();
-      targetHost = new URL(fulfillmentUrl).host.toLowerCase();
-    } catch {
-      throw new ExternalPaymentValidationError(
-        `Invalid resource URL format in x402 challenge: "${summary.resource.url}".`,
-      );
-    }
-    if (challengeHost !== targetHost) {
-      throw new ExternalPaymentValidationError(
-        `Domain mismatch: challenge resource URL host "${challengeHost}" does not match registered fulfillment host "${targetHost}".`,
-      );
-    }
-  }
-
+  assertFullResourceUrl(summary.resource.url, fulfillmentUrl);
   return summary;
 }
 

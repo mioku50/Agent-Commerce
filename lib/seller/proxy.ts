@@ -3,17 +3,19 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { GatewayClient } from "@circle-fin/x402-batching/client";
+import { BatchEvmScheme } from "@circle-fin/x402-batching/client";
+import { formatUnits } from "viem";
+import { privateKeyToAccount } from "viem/accounts";
 import {
   fetchWithSsrfProtection,
   SSRFProtectionError,
-  verifyDnsSsrf,
   type SsrfFetchOptions,
 } from "./ssrf.ts";
 import {
   validateExternal402Challenge,
   ExternalPaymentValidationError,
   hashChallenge,
+  type ExternalChallengeSummary,
 } from "./external-fulfillment.ts";
 import type { ApiService } from "../services/registry.ts";
 
@@ -38,13 +40,30 @@ export type ProxyExecutionResult = {
   status: number;
   data: unknown;
   paidAmountUsdc?: string;
-  paymentRequiredChallenge?: unknown;
+  downstreamTransaction?: string;
+  paymentRequiredChallenge?: ExternalChallengeSummary;
   sourceType: "external_seller";
 };
 
-/**
- * Resolves the platform buyer agent private key used for paying external sellers.
- */
+type PreparedRequestBase = {
+  service: ApiService;
+  method: "GET" | "POST";
+  safeHeaders: Record<string, string>;
+  serializedBody?: string;
+  pinnedIps: string[];
+  ssrfOptions: SsrfFetchOptions;
+};
+
+export type PreparedExternalSellerRequest = PreparedRequestBase & {
+  kind: "payment-required";
+  paymentRequiredHeader: string;
+  challenge: ExternalChallengeSummary;
+};
+
+export type PreparedExternalSellerResult =
+  | { kind: "free-response"; result: ProxyExecutionResult }
+  | PreparedExternalSellerRequest;
+
 export function getPlatformBuyerPrivateKey(override?: string): string | null {
   if (override?.trim()) return override.trim();
   const candidates = [
@@ -53,231 +72,223 @@ export function getPlatformBuyerPrivateKey(override?: string): string | null {
     process.env.AGENT_PRIVATE_KEY,
   ];
   for (const key of candidates) {
-    if (key?.trim() && /^0x[a-fA-F0-9]{64}$/.test(key.trim())) {
-      return key.trim();
-    }
+    if (key?.trim() && /^0x[a-fA-F0-9]{64}$/.test(key.trim())) return key.trim();
   }
   return null;
 }
 
-/**
- * Safely invokes an external seller endpoint with strict SSRF protection, 402 challenge verification,
- * and x402 payment execution via Circle Gateway.
- */
-export async function executeExternalSellerProxy({
-  service,
-  method,
-  body,
-  headers,
-  payerPrivateKey,
-}: ProxyExecutionInput): Promise<ProxyExecutionResult> {
+function safeRequestParts(input: ProxyExecutionInput) {
+  const safeHeaders: Record<string, string> = { Accept: "application/json" };
+  if (input.method === "POST") safeHeaders["Content-Type"] = "application/json";
+  if (input.headers?.["x-agent-commerce-request-id"]) {
+    safeHeaders["X-Agent-Commerce-Request-Id"] = input.headers["x-agent-commerce-request-id"];
+  }
+  const serializedBody = input.method === "POST" && input.body !== undefined
+    ? typeof input.body === "string" ? input.body : JSON.stringify(input.body)
+    : undefined;
+  return { safeHeaders, serializedBody };
+}
+
+function parseResponseData(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { rawResponse: text };
+  }
+}
+
+function validateService(service: ApiService) {
   if (!service.fulfillmentUrl) {
-    throw new ExternalProxyError(
-      `Service "${service.slug}" has no fulfillmentUrl configured.`,
-      500,
-    );
+    throw new ExternalProxyError(`Service "${service.slug}" has no fulfillmentUrl configured.`, 500);
   }
-
   if (!service.sellerWallet) {
-    throw new ExternalProxyError(
-      `Service "${service.slug}" has no registered sellerWallet configured.`,
-      500,
-    );
+    throw new ExternalProxyError(`Service "${service.slug}" has no registered sellerWallet configured.`, 500);
   }
+}
 
+/**
+ * Performs the sole unpaid request. Paid listings must yield a valid 402 before
+ * the caller is allowed to enter its own buyer-settlement wrapper.
+ */
+export async function prepareExternalSellerRequest(
+  input: ProxyExecutionInput,
+): Promise<PreparedExternalSellerResult> {
+  validateService(input.service);
+  const service = input.service;
+  const fulfillmentUrl = service.fulfillmentUrl!;
+  const { safeHeaders, serializedBody } = safeRequestParts(input);
   let pinnedIps: string[] = [];
   const ssrfOptions: SsrfFetchOptions = {
-    maxResponseSizeBytes: service.maxResponseSizeBytes ?? 1_048_576, // 1MB
-    maxTimeoutMs: service.maxTimeoutMs ?? 15_000, // 15s
-    onDnsResolved: (ips) => {
-      pinnedIps = ips;
-    },
+    maxResponseSizeBytes: service.maxResponseSizeBytes ?? 1_048_576,
+    maxTimeoutMs: service.maxTimeoutMs ?? 15_000,
+    onDnsResolved: (ips) => { pinnedIps = [...ips]; },
   };
 
-  // Only forward safe, sanitized headers
-  const safeHeaders: Record<string, string> = {
-    Accept: "application/json",
-  };
-  if (method === "POST") {
-    safeHeaders["Content-Type"] = "application/json";
-  }
-  if (headers?.["x-agent-commerce-request-id"]) {
-    safeHeaders["X-Agent-Commerce-Request-Id"] = headers["x-agent-commerce-request-id"];
-  }
-
-  const serializedBody =
-    method === "POST" && body !== undefined
-      ? typeof body === "string"
-        ? body
-        : JSON.stringify(body)
-      : undefined;
-
-  let preflightResponse: Response;
+  let response: Response;
   try {
-    preflightResponse = await fetchWithSsrfProtection(
-      service.fulfillmentUrl,
+    response = await fetchWithSsrfProtection(
+      fulfillmentUrl,
       {
-        method,
+        method: input.method,
         headers: safeHeaders,
         ...(serializedBody !== undefined ? { body: serializedBody } : {}),
       },
       ssrfOptions,
     );
-  } catch (err) {
-    if (err instanceof SSRFProtectionError) {
-      throw new ExternalProxyError(
-        `External seller endpoint rejected due to security rules: ${err.message}`,
-        502,
-      );
-    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     throw new ExternalProxyError(
-      `Failed to connect to external seller endpoint: ${err instanceof Error ? err.message : String(err)}`,
+      error instanceof SSRFProtectionError
+        ? `External seller endpoint rejected due to security rules: ${message}`
+        : `Failed to connect to external seller endpoint: ${message}`,
       502,
     );
   }
 
-  // If the external seller returned 2xx directly (free endpoint or already satisfied)
-  if (preflightResponse.status >= 200 && preflightResponse.status < 300) {
-    let data: unknown;
-    const text = await preflightResponse.text();
-    try {
-      data = JSON.parse(text);
-    } catch {
-      data = { rawResponse: text };
+  if (response.status >= 200 && response.status < 300) {
+    if (service.priceUsd !== 0) {
+      throw new ExternalProxyError(
+        "Paid external seller returned a direct success without x402; buyer settlement was not started.",
+        502,
+      );
     }
     return {
-      status: preflightResponse.status,
-      data,
-      sourceType: "external_seller",
+      kind: "free-response",
+      result: {
+        status: response.status,
+        data: parseResponseData(await response.text()),
+        sourceType: "external_seller",
+      },
     };
   }
-
-  // If status is not 402, return error from upstream
-  if (preflightResponse.status !== 402) {
-    const errorText = await preflightResponse.text().catch(() => "");
+  if (response.status !== 402) {
+    const detail = (await response.text().catch(() => "")).slice(0, 300);
     throw new ExternalProxyError(
-      `External seller endpoint returned unexpected status ${preflightResponse.status}: ${errorText.slice(0, 300)}`,
-      preflightResponse.status >= 400 && preflightResponse.status < 600
-        ? preflightResponse.status
-        : 502,
+      `External seller endpoint returned unexpected status ${response.status}${detail ? `: ${detail}` : ""}`,
+      response.status >= 400 && response.status < 600 ? response.status : 502,
     );
   }
+  if (service.priceUsd === 0) {
+    throw new ExternalProxyError("A free external listing unexpectedly required downstream payment.", 502);
+  }
 
-  // Handle 402 Payment Required
-  const paymentRequiredHeader =
-    preflightResponse.headers.get("PAYMENT-REQUIRED") ||
-    preflightResponse.headers.get("payment-required");
-
-  let challengeSummary;
+  const paymentRequiredHeader = response.headers.get("PAYMENT-REQUIRED");
   try {
-    challengeSummary = validateExternal402Challenge({
+    const challenge = validateExternal402Challenge({
       service,
-      status: 402,
+      status: response.status,
       paymentRequiredHeader,
-      fulfillmentUrl: service.fulfillmentUrl,
+      fulfillmentUrl,
     });
-  } catch (err) {
-    if (err instanceof ExternalPaymentValidationError) {
+    return {
+      kind: "payment-required",
+      service,
+      method: input.method,
+      safeHeaders,
+      serializedBody,
+      pinnedIps,
+      ssrfOptions,
+      paymentRequiredHeader: paymentRequiredHeader!,
+      challenge,
+    };
+  } catch (error) {
+    if (error instanceof ExternalPaymentValidationError) {
       throw new ExternalProxyError(
-        `External seller 402 challenge failed security validation: ${err.message}`,
+        `External seller 402 challenge failed security validation: ${error.message}`,
         502,
       );
     }
-    throw err;
+    throw error;
   }
+}
 
-  const initialChallengeHash = hashChallenge(paymentRequiredHeader!);
-
-  let preflightResponse2: Response;
+function parsePaymentResponse(header: string | null) {
+  if (!header) throw new ExternalProxyError("External seller omitted PAYMENT-RESPONSE after payment.", 502);
   try {
-    preflightResponse2 = await fetchWithSsrfProtection(
-      service.fulfillmentUrl,
-      {
-        method,
-        headers: safeHeaders,
-        ...(serializedBody !== undefined ? { body: serializedBody } : {}),
-      },
-      {
-        ...ssrfOptions,
-        pinnedResolvedIps: pinnedIps,
-      },
-    );
-  } catch (err) {
-    if (err instanceof SSRFProtectionError) {
-      throw new ExternalProxyError(
-        `External seller endpoint rejected due to security rules: ${err.message}`,
-        502,
-      );
+    const value = JSON.parse(Buffer.from(header, "base64").toString("utf8")) as Record<string, unknown>;
+    if (value.success !== true || typeof value.transaction !== "string" || !value.transaction) {
+      throw new Error("missing successful transaction confirmation");
     }
-    throw new ExternalProxyError(
-      `Failed to connect to external seller endpoint on challenge re-validation: ${err instanceof Error ? err.message : String(err)}`,
-      502,
-    );
+    return value.transaction;
+  } catch (error) {
+    if (error instanceof ExternalProxyError) throw error;
+    throw new ExternalProxyError("External seller returned an invalid PAYMENT-RESPONSE.", 502);
   }
+}
 
-  if (preflightResponse2.status !== 402) {
-    throw new ExternalProxyError(
-      `External seller endpoint returned status ${preflightResponse2.status} instead of 402 during challenge re-validation.`,
-      502,
-    );
-  }
-
-  const paymentRequiredHeader2 =
-    preflightResponse2.headers.get("PAYMENT-REQUIRED") ||
-    preflightResponse2.headers.get("payment-required");
-
-  if (!paymentRequiredHeader2 || hashChallenge(paymentRequiredHeader2) !== initialChallengeHash) {
-    throw new ExternalProxyError(
-      "Payment-Required challenge changed between attempts — aborting",
-      422,
-    );
-  }
-
+/** Signs the exact prevalidated acceptance and submits it over the pinned transport. */
+export async function executePreparedExternalSellerPayment(
+  prepared: PreparedExternalSellerRequest,
+  payerPrivateKey?: string,
+): Promise<ProxyExecutionResult> {
+  // Re-validate immutable listing fields and the exact acceptance immediately
+  // before signing. No new challenge is fetched here.
+  const challenge = validateExternal402Challenge({
+    service: prepared.service,
+    status: 402,
+    paymentRequiredHeader: prepared.paymentRequiredHeader,
+    fulfillmentUrl: prepared.service.fulfillmentUrl!,
+  });
   const resolvedPrivateKey = getPlatformBuyerPrivateKey(payerPrivateKey);
   if (!resolvedPrivateKey) {
-    throw new ExternalProxyError(
-      "Platform buyer agent private key (HOSTED_AGENT_PRIVATE_KEY or BUYER_PRIVATE_KEY) is not configured to pay external sellers.",
-      500,
-    );
+    throw new ExternalProxyError("Platform buyer agent private key is not configured to pay external sellers.", 500);
   }
 
-  const gateway = new GatewayClient({
-    chain: "arcTestnet",
-    privateKey: resolvedPrivateKey as `0x${string}`,
-  });
+  const signer = privateKeyToAccount(resolvedPrivateKey as `0x${string}`);
+  const scheme = new BatchEvmScheme(signer);
+  const payload = await scheme.createPaymentPayload(
+    challenge.x402Version,
+    challenge.selectedAccept,
+  );
+  const paymentSignature = Buffer.from(JSON.stringify({
+    ...payload,
+    resource: challenge.resource,
+    accepted: challenge.selectedAccept,
+  })).toString("base64");
 
+  let paidResponse: Response;
   try {
-    const targetUrlObj = new URL(service.fulfillmentUrl);
-    await verifyDnsSsrf(targetUrlObj.hostname, {
-      allowLocalhost:
-        ssrfOptions.allowLocalhostForTesting ??
-        (process.env.ALLOW_LOCAL_SSRF === "true" || process.env.NODE_ENV === "test"),
-      pinnedResolvedIps: pinnedIps,
-    });
-
-    const payResult = await gateway.pay(service.fulfillmentUrl, {
-      method,
-      body: method === "POST" ? body : undefined,
-      headers: safeHeaders,
-    });
-
-    return {
-      status: 200,
-      data: payResult.data,
-      paidAmountUsdc: payResult.formattedAmount,
-      paymentRequiredChallenge: challengeSummary,
-      sourceType: "external_seller",
-    };
-  } catch (err) {
-    if (err instanceof SSRFProtectionError) {
-      throw new ExternalProxyError(
-        `External seller payment request rejected due to SSRF rules: ${err.message}`,
-        502,
-      );
-    }
-    throw new ExternalProxyError(
-      `Failed to execute x402 payment to external seller: ${err instanceof Error ? err.message : String(err)}`,
-      502,
+    paidResponse = await fetchWithSsrfProtection(
+      prepared.service.fulfillmentUrl!,
+      {
+        method: prepared.method,
+        headers: { ...prepared.safeHeaders, "Payment-Signature": paymentSignature },
+        ...(prepared.serializedBody !== undefined ? { body: prepared.serializedBody } : {}),
+      },
+      {
+        ...prepared.ssrfOptions,
+        pinnedResolvedIps: prepared.pinnedIps,
+      },
     );
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new ExternalProxyError(`Failed to submit protected external seller payment request: ${message}`, 502);
   }
+
+  if (paidResponse.status === 402) {
+    const actualHeader = paidResponse.headers.get("PAYMENT-REQUIRED");
+    if (!actualHeader || hashChallenge(actualHeader) !== hashChallenge(prepared.paymentRequiredHeader)) {
+      throw new ExternalProxyError("Actual payment challenge changed after preflight — aborting", 422);
+    }
+    throw new ExternalProxyError("External seller rejected the signed downstream payment.", 502);
+  }
+  if (!paidResponse.ok) {
+    throw new ExternalProxyError(`External seller payment request failed with HTTP ${paidResponse.status}.`, 502);
+  }
+
+  const transaction = parsePaymentResponse(paidResponse.headers.get("PAYMENT-RESPONSE"));
+  return {
+    status: paidResponse.status,
+    data: parseResponseData(await paidResponse.text()),
+    paidAmountUsdc: formatUnits(BigInt(challenge.selectedAccept.amount), 6),
+    downstreamTransaction: transaction,
+    paymentRequiredChallenge: challenge,
+    sourceType: "external_seller",
+  };
+}
+
+export async function executeExternalSellerProxy(input: ProxyExecutionInput): Promise<ProxyExecutionResult> {
+  const prepared = await prepareExternalSellerRequest(input);
+  if (prepared.kind === "free-response") return prepared.result;
+  return executePreparedExternalSellerPayment(prepared, input.payerPrivateKey);
 }

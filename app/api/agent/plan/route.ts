@@ -6,7 +6,7 @@ import {
   planAgentPurchases,
   type AgentPlanningPolicy,
 } from "@/lib/agent/planner";
-import { listAllStoreServices } from "@/lib/services/store-service-persistence";
+import { listPublicStoreServices } from "@/lib/services/store-service-persistence";
 
 type PlanRequest = {
   task?: unknown;
@@ -87,7 +87,7 @@ export async function POST(request: Request) {
     allowSellerCreated: body.allowSellerCreated !== false,
     allowOfficial: body.allowOfficial !== false,
   };
-  const { services, warning } = await listAllStoreServices();
+  const { services, warning } = await listPublicStoreServices();
   const plan = planAgentPurchases({
     task,
     budgetUsdc,

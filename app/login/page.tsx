@@ -18,10 +18,9 @@
 
 "use client";
 
-import { useState } from "react";
+import { type FormEvent, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, LayoutDashboard, LockKeyhole } from "lucide-react";
-import { login } from "@/app/actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,12 +31,26 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
     setPending(true);
     setError(null);
-    const result = await login(formData);
-    if (result?.error) {
-      setError(result.error);
+    const formData = new FormData(event.currentTarget);
+    try {
+      const response = await fetch("/api/seller/auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: formData.get("password") }),
+      });
+      const result = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(result.error ?? "Unable to sign in");
+        setPending(false);
+        return;
+      }
+      window.location.assign("/dashboard");
+    } catch {
+      setError("Seller authentication is temporarily unavailable");
       setPending(false);
     }
   }
@@ -48,7 +61,7 @@ export default function LoginPage() {
         <div>
           <div className="mb-4 flex flex-wrap items-center gap-2">
             <Badge variant="secondary">Protected seller area</Badge>
-            <Badge variant="outline">Email/password access</Badge>
+            <Badge variant="outline">Signed operator session</Badge>
           </div>
           <h1 className="max-w-3xl text-4xl font-bold tracking-normal text-foreground sm:text-5xl">
             Sign in to manage API commerce.
@@ -87,17 +100,7 @@ export default function LoginPage() {
             </p>
           </CardHeader>
           <CardContent>
-            <form action={handleSubmit} className="flex flex-col gap-4">
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="admin@example.com"
-                  required
-                />
-              </div>
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="password">Password</Label>
                 <Input

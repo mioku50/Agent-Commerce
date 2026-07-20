@@ -1,163 +1,93 @@
-/**
- * Copyright 2026 Circle Internet Group, Inc.  All rights reserved.
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import assert from "node:assert/strict";
 import {
-  validateExternal402Challenge,
+  ARC_TESTNET_GATEWAY_WALLET,
+  ARC_TESTNET_NETWORK,
+  ARC_TESTNET_USDC,
   ExternalPaymentValidationError,
+  validateExternal402Challenge,
 } from "../lib/seller/external-fulfillment.ts";
 import type { ApiService } from "../lib/services/registry.ts";
 
-async function runTests() {
-  console.log("Running external fulfillment 402 challenge validation tests...");
+const wallet = "0x8888888888888888888888888888888888888888";
+const fulfillmentUrl = "https://external-seller.api.com:443/v1/risk?asset=BTC%2FUSD&mode=brief";
+const service: ApiService = {
+  id: "test-service",
+  slug: "risk-score",
+  name: "Risk Score API",
+  shortDescription: "Risk score evaluation",
+  longDescription: "Detailed risk evaluation",
+  category: "Signals",
+  method: "POST",
+  endpoint: "/api/store/services/risk-score/invoke",
+  fulfillmentUrl,
+  priceLabel: "0.0005 USDC",
+  priceUsd: 0.0005,
+  status: "live",
+  sourceType: "external_seller",
+  isPaid: true,
+  inputSchema: {}, outputSchema: {}, exampleRequest: {}, exampleResponse: {},
+  exampleUseCase: "Risk scoring", agentReasoningHint: "Risk scoring",
+  sellerWallet: wallet,
+  expectedNetwork: ARC_TESTNET_NETWORK,
+  expectedAsset: ARC_TESTNET_USDC,
+};
 
-  const mockService: ApiService = {
-    id: "test-service",
-    slug: "risk-score",
-    name: "Risk Score API",
-    shortDescription: "Risk score evaluation",
-    longDescription: "Detailed risk evaluation",
-    category: "Signals",
-    method: "POST",
-    endpoint: "/api/store/services/risk-score/invoke",
-    fulfillmentUrl: "https://external-seller.api.com/v1/risk",
-    priceLabel: "0.0005 USDC",
-    priceUsd: 0.0005,
-    status: "live",
-    sourceType: "external_seller",
-    isPaid: true,
-    inputSchema: {},
-    outputSchema: {},
-    exampleRequest: {},
-    exampleResponse: {},
-    exampleUseCase: "Risk scoring",
-    agentReasoningHint: "Use for risk evaluation",
-    sellerWallet: "0x8888888888888888888888888888888888888888",
-    expectedNetwork: "eip155:5042002",
-    expectedAsset: "0x3600000000000000000000000000000000000000",
+function acceptance(overrides: Record<string, unknown> = {}) {
+  return {
+    scheme: "exact",
+    network: ARC_TESTNET_NETWORK,
+    asset: ARC_TESTNET_USDC,
+    amount: "500",
+    payTo: wallet,
+    maxTimeoutSeconds: 600,
+    extra: {
+      name: "GatewayWalletBatched",
+      version: "1",
+      verifyingContract: ARC_TESTNET_GATEWAY_WALLET,
+    },
+    ...overrides,
   };
-
-  function encodeChallenge(obj: unknown) {
-    return Buffer.from(JSON.stringify(obj)).toString("base64");
-  }
-
-  const validChallenge = encodeChallenge({
-    x402Version: 1,
-    resource: { url: "https://external-seller.api.com/v1/risk" },
-    accepts: [
-      {
-        scheme: "exact",
-        network: "eip155:5042002",
-        asset: "0x3600000000000000000000000000000000000000",
-        amount: "500", // exactly 0.0005 USDC (6 decimals)
-        payTo: "0x8888888888888888888888888888888888888888",
-      },
-    ],
-  });
-
-  // Test 1: Valid challenge succeeds
-  const summary = validateExternal402Challenge({
-    service: mockService,
-    status: 402,
-    paymentRequiredHeader: validChallenge,
-    fulfillmentUrl: "https://external-seller.api.com/v1/risk",
-  });
-  assert.equal(summary.firstAccept?.payTo, "0x8888888888888888888888888888888888888888");
-
-  // Test 2: Status not 402
-  assert.throws(
-    () =>
-      validateExternal402Challenge({
-        service: mockService,
-        status: 200,
-        paymentRequiredHeader: validChallenge,
-        fulfillmentUrl: "https://external-seller.api.com/v1/risk",
-      }),
-    (err: unknown) => err instanceof ExternalPaymentValidationError && err.message.includes("Expected HTTP 402"),
-    "Non-402 status must throw",
-  );
-
-  // Test 3: Unauthorized network
-  const wrongNetwork = encodeChallenge({
-    x402Version: 1,
-    accepts: [
-      {
-        scheme: "exact",
-        network: "eip155:1", // mainnet instead of Arc
-        asset: "0x3600000000000000000000000000000000000000",
-        amount: "500",
-        payTo: "0x8888888888888888888888888888888888888888",
-      },
-    ],
-  });
-  assert.throws(
-    () =>
-      validateExternal402Challenge({
-        service: mockService,
-        status: 402,
-        paymentRequiredHeader: wrongNetwork,
-        fulfillmentUrl: "https://external-seller.api.com/v1/risk",
-      }),
-    (err: unknown) => err instanceof ExternalPaymentValidationError && err.message.includes("Unauthorized network"),
-    "Wrong network must throw",
-  );
-
-  // Test 4: Price increase violation (trying to charge 1000 atomic units instead of 500)
-  const priceViolation = encodeChallenge({
-    x402Version: 1,
-    accepts: [
-      {
-        scheme: "exact",
-        network: "eip155:5042002",
-        asset: "0x3600000000000000000000000000000000000000",
-        amount: "1000",
-        payTo: "0x8888888888888888888888888888888888888888",
-      },
-    ],
-  });
-  assert.throws(
-    () =>
-      validateExternal402Challenge({
-        service: mockService,
-        status: 402,
-        paymentRequiredHeader: priceViolation,
-        fulfillmentUrl: "https://external-seller.api.com/v1/risk",
-      }),
-    (err: unknown) => err instanceof ExternalPaymentValidationError && err.message.includes("Price quote violation"),
-    "Exceeding listing price quote must throw",
-  );
-
-  // Test 5: Unauthorized payTo address
-  const wrongPayTo = encodeChallenge({
-    x402Version: 1,
-    accepts: [
-      {
-        scheme: "exact",
-        network: "eip155:5042002",
-        asset: "0x3600000000000000000000000000000000000000",
-        amount: "500",
-        payTo: "0x1111111111111111111111111111111111111111", // attacker wallet
-      },
-    ],
-  });
-  assert.throws(
-    () =>
-      validateExternal402Challenge({
-        service: mockService,
-        status: 402,
-        paymentRequiredHeader: wrongPayTo,
-        fulfillmentUrl: "https://external-seller.api.com/v1/risk",
-      }),
-    (err: unknown) => err instanceof ExternalPaymentValidationError && err.message.includes("Unauthorized payTo wallet"),
-    "Attacker payTo address must throw",
-  );
-
-  console.log("All external fulfillment validation tests passed! ✅");
 }
 
-runTests().catch((err) => {
-  console.error("External fulfillment tests failed:", err);
-  process.exit(1);
+function challenge(overrides: { resourceUrl?: string; accepts?: unknown[]; x402Version?: number } = {}) {
+  return Buffer.from(JSON.stringify({
+    x402Version: overrides.x402Version ?? 2,
+    resource: { url: overrides.resourceUrl ?? "https://external-seller.api.com/v1/risk?mode=brief&asset=BTC%2FUSD" },
+    accepts: overrides.accepts ?? [acceptance()],
+  })).toString("base64");
+}
+
+function expectInvalid(header: string, fragment: string) {
+  assert.throws(
+    () => validateExternal402Challenge({ service, status: 402, paymentRequiredHeader: header, fulfillmentUrl }),
+    (error: unknown) => error instanceof ExternalPaymentValidationError && error.message.includes(fragment),
+  );
+}
+
+console.log("[seller-external-402] validating exact challenge and acceptance");
+const valid = validateExternal402Challenge({
+  service,
+  status: 402,
+  paymentRequiredHeader: challenge(),
+  fulfillmentUrl,
 });
+assert.equal(valid.selectedAccept.payTo, wallet);
+assert.equal(valid.acceptsCount, 1);
+
+expectInvalid(challenge({ resourceUrl: "https://external-seller.api.com/v1/other?asset=BTC%2FUSD&mode=brief" }), "Resource URL mismatch");
+expectInvalid(challenge({ resourceUrl: "https://external-seller.api.com/v1/risk?asset=ETH%2FUSD&mode=brief" }), "Resource URL mismatch");
+expectInvalid(challenge({ accepts: [acceptance(), acceptance({ payTo: "0x1111111111111111111111111111111111111111" })] }), "exactly one");
+expectInvalid(challenge({ accepts: [acceptance({ network: "eip155:1" })] }), "Unauthorized network");
+expectInvalid(challenge({ accepts: [acceptance({ asset: "0x1111111111111111111111111111111111111111" })] }), "Unauthorized asset");
+expectInvalid(challenge({ accepts: [acceptance({ amount: "501" })] }), "Price quote mismatch");
+expectInvalid(challenge({ accepts: [acceptance({ amount: "499" })] }), "Price quote mismatch");
+expectInvalid(challenge({ accepts: [acceptance({ scheme: "upto" })] }), "Unauthorized x402 scheme");
+expectInvalid(challenge({ accepts: [acceptance({ extra: { name: "malicious" } })] }), "Gateway acceptance");
+
+const noResource = Buffer.from(JSON.stringify({ x402Version: 2, accepts: [acceptance()] })).toString("base64");
+expectInvalid(noResource, "resource.url");
+assert.throws(
+  () => validateExternal402Challenge({ service, status: 200, paymentRequiredHeader: challenge(), fulfillmentUrl }),
+  (error: unknown) => error instanceof ExternalPaymentValidationError && error.message.includes("Expected HTTP 402"),
+);
+console.log("[seller-external-402] passed: full URL, exact price/wallet/network/asset, single supported acceptance");

@@ -14,6 +14,12 @@ type RouteContext = {
   }>;
 };
 
+const ENDPOINT_CHALLENGE_TTL_MS = 10 * 60 * 1000;
+
+async function persistEndpointFailure(id: string) {
+  await updateVerificationStatus(id, { endpointVerificationStatus: "failed" });
+}
+
 export async function POST(request: Request, { params }: RouteContext): Promise<NextResponse> {
   const authReject = requireSellerAuth(request);
   if (authReject) return authReject as NextResponse;
@@ -43,22 +49,51 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const cleanFulfillmentUrl = service.fulfillmentUrl.replace(/\/$/, "");
-  const wellKnownUrl = `${cleanFulfillmentUrl}/.well-known/arc-agent-commerce.json`;
+  const fulfillmentUrl = new URL(service.fulfillmentUrl).toString();
+  const wellKnownUrl = new URL(
+    "/.well-known/arc-agent-commerce-seller.json",
+    new URL(service.fulfillmentUrl).origin,
+  ).toString();
 
   if (!body.confirm || body.confirm !== true) {
     const nonce = randomBytes(32).toString("hex");
+    const expiresAt = new Date(Date.now() + ENDPOINT_CHALLENGE_TTL_MS).toISOString();
     try {
-      await updateVerificationStatus(id, { endpointVerificationNonce: nonce });
-      return NextResponse.json({ nonce, wellKnownUrl });
+      await updateVerificationStatus(id, {
+        endpointVerificationNonce: nonce,
+        endpointVerificationExpiresAt: expiresAt,
+      });
+      return NextResponse.json({
+        nonce,
+        expiresAt,
+        wellKnownUrl,
+        requiredPayload: {
+          serviceId: id,
+          nonce,
+          fulfillmentUrl,
+          sellerWallet: service.sellerWallet,
+          expiresAt,
+        },
+      });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to store nonce";
       return NextResponse.json({ error: msg }, { status: 500 });
     }
   }
 
-  if (!service.endpointVerificationNonce) {
+  if (!service.endpointVerificationNonce || !service.endpointVerificationExpiresAt) {
     return NextResponse.json({ error: "No endpoint verification nonce active. Generate a nonce first." }, { status: 400 });
+  }
+
+  const expectedExpiry = Date.parse(service.endpointVerificationExpiresAt);
+  if (!Number.isFinite(expectedExpiry) || expectedExpiry <= Date.now()) {
+    try {
+      await persistEndpointFailure(id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to persist endpoint verification failure";
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
+    return NextResponse.json({ error: "Endpoint verification challenge expired" }, { status: 400 });
   }
 
   let resp: Response;
@@ -75,29 +110,66 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
       },
     );
   } catch (err) {
-    await updateVerificationStatus(id, { endpointVerificationStatus: "failed" }).catch(() => {});
+    try {
+      await persistEndpointFailure(id);
+    } catch (persistenceError) {
+      const msg = persistenceError instanceof Error ? persistenceError.message : "Failed to persist endpoint verification failure";
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
     const msg = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: `Failed to fetch well-known endpoint: ${msg}` }, { status: 400 });
   }
 
   if (!resp.ok) {
-    await updateVerificationStatus(id, { endpointVerificationStatus: "failed" }).catch(() => {});
+    try {
+      await persistEndpointFailure(id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to persist endpoint verification failure";
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
     return NextResponse.json({ error: `Well-known endpoint returned HTTP ${resp.status}` }, { status: 400 });
   }
 
-  let data: { serviceId?: unknown; nonce?: unknown } | null = null;
+  let data: {
+    serviceId?: unknown;
+    nonce?: unknown;
+    fulfillmentUrl?: unknown;
+    sellerWallet?: unknown;
+    expiresAt?: unknown;
+  } | null = null;
   try {
     const text = await resp.text();
     data = JSON.parse(text);
   } catch {
-    await updateVerificationStatus(id, { endpointVerificationStatus: "failed" }).catch(() => {});
+    try {
+      await persistEndpointFailure(id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to persist endpoint verification failure";
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
     return NextResponse.json({ error: "Well-known endpoint did not return valid JSON" }, { status: 400 });
   }
 
-  if (!data || data.serviceId !== id || data.nonce !== service.endpointVerificationNonce) {
-    await updateVerificationStatus(id, { endpointVerificationStatus: "failed" }).catch(() => {});
+  const payloadMatches = Boolean(
+    data &&
+    data.serviceId === id &&
+    data.nonce === service.endpointVerificationNonce &&
+    data.fulfillmentUrl === fulfillmentUrl &&
+    typeof data.sellerWallet === "string" &&
+    typeof service.sellerWallet === "string" &&
+    data.sellerWallet.toLowerCase() === service.sellerWallet.toLowerCase() &&
+    typeof data.expiresAt === "string" &&
+    Date.parse(data.expiresAt) === expectedExpiry,
+  );
+  if (!payloadMatches) {
+    try {
+      await persistEndpointFailure(id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to persist endpoint verification failure";
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
     return NextResponse.json(
-      { error: "Well-known JSON verification mismatch (serviceId or nonce does not match)" },
+      { error: "Well-known JSON verification mismatch" },
       { status: 400 },
     );
   }
@@ -107,6 +179,7 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
     await updateVerificationStatus(id, {
       endpointVerificationStatus: "verified",
       endpointVerificationNonce: null,
+      endpointVerificationExpiresAt: null,
       ...(bothVerified ? { status: "live" } : {}),
     });
     return NextResponse.json({

@@ -1,13 +1,16 @@
-import { NextRequest, NextResponse } from "next/server";
-import { withGateway } from "@/lib/x402";
+import { NextRequest, NextResponse } from "next/server.js";
+import { withGateway } from "../../../../../../lib/x402.ts";
 import {
   getDynamicStoreServiceRowBySlug,
   rowToApiService,
-} from "@/lib/services/store-service-persistence";
+} from "../../../../../../lib/services/store-service-persistence.ts";
 import {
-  executeExternalSellerProxy,
+  executePreparedExternalSellerPayment,
   ExternalProxyError,
-} from "@/lib/seller/proxy";
+  prepareExternalSellerRequest,
+  type PreparedExternalSellerResult,
+} from "../../../../../../lib/seller/proxy.ts";
+import { issueExternalFulfillmentCredit } from "../../../../../../lib/seller/recovery.ts";
 
 type RouteContext = {
   params: Promise<{
@@ -21,7 +24,7 @@ async function invokeSellerService(
   method: "GET" | "POST",
 ) {
   const { slug } = await params;
-  const row = await getDynamicStoreServiceRowBySlug(slug, { publicOnly: false });
+  const row = await getDynamicStoreServiceRowBySlug(slug);
 
   if (!row) {
     return NextResponse.json({ error: "Service not found" }, { status: 404 });
@@ -74,26 +77,44 @@ async function invokeSellerService(
   }
 
   const service = rowToApiService(row);
+  let requestBody: unknown;
+  if (service.sourceType === "external_seller" && method === "POST") {
+    try {
+      requestBody = await req.clone().json();
+    } catch {
+      try {
+        requestBody = await req.clone().text();
+      } catch {
+        requestBody = undefined;
+      }
+    }
+  }
+
+  let preparedExternal: PreparedExternalSellerResult | null = null;
+  if (service.sourceType === "external_seller") {
+    try {
+      preparedExternal = await prepareExternalSellerRequest({
+        service,
+        method,
+        body: requestBody,
+        headers: Object.fromEntries(req.headers.entries()),
+      });
+    } catch (error) {
+      if (error instanceof ExternalProxyError) {
+        return NextResponse.json({ error: error.message }, { status: error.statusCode });
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      return NextResponse.json({ error: `External seller preflight failed: ${message}` }, { status: 502 });
+    }
+  }
+
   const handler = async (_paidRequest: NextRequest) => {
     if (service.sourceType === "external_seller") {
-      let body: unknown;
-      if (method === "POST") {
-        try {
-          body = await _paidRequest.clone().json();
-        } catch {
-          try {
-            body = await _paidRequest.clone().text();
-          } catch {}
-        }
-      }
-
       try {
-        const proxyResult = await executeExternalSellerProxy({
-          service,
-          method,
-          body,
-          headers: Object.fromEntries(_paidRequest.headers.entries()),
-        });
+        if (!preparedExternal) throw new ExternalProxyError("External seller request was not prepared.", 500);
+        const proxyResult = preparedExternal.kind === "free-response"
+          ? preparedExternal.result
+          : await executePreparedExternalSellerPayment(preparedExternal);
 
         const responseHeaders: Record<string, string> = {
           "X-Agent-Commerce-Source": "external_seller",
@@ -107,15 +128,36 @@ async function invokeSellerService(
           headers: responseHeaders,
         });
       } catch (err) {
+        const paymentSignature = _paidRequest.headers.get("payment-signature");
+        let creditIssued = false;
+        if (service.isPaid && paymentSignature) {
+          try {
+            await issueExternalFulfillmentCredit({
+              paymentSignature,
+              serviceId: service.id,
+              endpoint: service.endpoint,
+              amountUsdc: service.priceUsd,
+              reason: err instanceof Error ? err.message : "Downstream external seller fulfillment failed",
+            });
+            creditIssued = true;
+          } catch (creditError) {
+            const message = creditError instanceof Error ? creditError.message : "Credit persistence failed";
+            console.error(`[external-seller] ${message}`);
+            return NextResponse.json(
+              { error: "Downstream fulfillment failed and recovery persistence requires operator attention." },
+              { status: 500 },
+            );
+          }
+        }
         if (err instanceof ExternalProxyError) {
           return NextResponse.json(
-            { error: err.message, status: err.statusCode },
+            { error: err.message, status: err.statusCode, creditIssued },
             { status: err.statusCode },
           );
         }
         const message = err instanceof Error ? err.message : String(err);
         return NextResponse.json(
-          { error: `External seller execution error: ${message}`, status: 502 },
+          { error: `External seller execution error: ${message}`, status: 502, creditIssued },
           { status: 502 },
         );
       }

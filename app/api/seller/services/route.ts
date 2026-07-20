@@ -1,16 +1,16 @@
-import { revalidatePath } from "next/cache";
-import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache.js";
+import { NextResponse } from "next/server.js";
 import {
   createDynamicStoreService,
   listDynamicStoreServiceRows,
   rowToSellerService,
-} from "@/lib/services/store-service-persistence";
+} from "../../../../lib/services/store-service-persistence.ts";
 import {
   getErrorMessage,
   parseSellerServiceRequest,
   type ValidationContext,
-} from "@/app/api/seller/services/validation";
-import { requireSellerAuth } from "@/lib/seller/session";
+} from "./validation.ts";
+import { requireSellerAuth } from "../../../../lib/seller/session.ts";
 
 function logValidationError(
   action: string,
@@ -31,7 +31,10 @@ function logValidationError(
   );
 }
 
-export async function GET() {
+export async function GET(request: Request) {
+  const authReject = requireSellerAuth(request);
+  if (authReject) return authReject;
+
   const { services, warning } = await listDynamicStoreServiceRows();
 
   return NextResponse.json({

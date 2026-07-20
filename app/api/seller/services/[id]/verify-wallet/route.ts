@@ -71,7 +71,12 @@ export async function POST(request: Request, { params }: RouteContext): Promise<
   }
 
   if (!isValid) {
-    await updateVerificationStatus(id, { walletVerificationStatus: "failed" }).catch(() => {});
+    try {
+      await updateVerificationStatus(id, { walletVerificationStatus: "failed" });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to persist wallet verification failure";
+      return NextResponse.json({ error: msg }, { status: 500 });
+    }
     return NextResponse.json({ error: "Invalid signature" }, { status: 400 });
   }
 

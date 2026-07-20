@@ -42,6 +42,7 @@ export type StoreServiceRow = {
   endpoint_verification_status?: "unverified" | "verified" | "failed";
   wallet_verification_challenge?: string | null;
   endpoint_verification_nonce?: string | null;
+  endpoint_verification_expires_at?: string | null;
 };
 
 export type SellerStoreService = {
@@ -75,6 +76,7 @@ export type SellerStoreService = {
   endpointVerificationStatus?: "unverified" | "verified" | "failed";
   walletVerificationChallenge?: string | null;
   endpointVerificationNonce?: string | null;
+  endpointVerificationExpiresAt?: string | null;
 };
 
 export type DynamicStoreServiceInput = {
@@ -103,6 +105,7 @@ export type DynamicStoreServiceInput = {
   endpointVerificationStatus?: "unverified" | "verified" | "failed";
   walletVerificationChallenge?: string | null;
   endpointVerificationNonce?: string | null;
+  endpointVerificationExpiresAt?: string | null;
 };
 
 export const storeServiceStatuses: readonly StoreServiceStatus[] = [
@@ -153,13 +156,10 @@ const storeServiceColumns = [
   "endpoint_verification_status",
   "wallet_verification_challenge",
   "endpoint_verification_nonce",
+  "endpoint_verification_expires_at",
 ].join(",");
 
-const publicDynamicStatuses: readonly StoreServiceStatus[] = [
-  "live",
-  "verifying",
-  "coming-soon",
-];
+const publicDynamicStatuses: readonly StoreServiceStatus[] = ["live", "coming-soon"];
 
 export const mockStoreServicesById: Map<string, StoreServiceRow> = new Map();
 
@@ -261,6 +261,36 @@ export function rowToApiService(row: StoreServiceRow): ApiService {
     endpointVerificationStatus: row.endpoint_verification_status || (row.raw?.endpointVerificationStatus as "unverified" | "verified" | "failed") || "unverified",
     walletVerificationChallenge: row.wallet_verification_challenge !== undefined ? row.wallet_verification_challenge : (typeof row.raw?.walletVerificationChallenge === "string" || row.raw?.walletVerificationChallenge === null ? row.raw.walletVerificationChallenge : null),
     endpointVerificationNonce: row.endpoint_verification_nonce !== undefined ? row.endpoint_verification_nonce : (typeof row.raw?.endpointVerificationNonce === "string" || row.raw?.endpointVerificationNonce === null ? row.raw.endpointVerificationNonce : null),
+    endpointVerificationExpiresAt: row.endpoint_verification_expires_at !== undefined ? row.endpoint_verification_expires_at : (typeof row.raw?.endpointVerificationExpiresAt === "string" || row.raw?.endpointVerificationExpiresAt === null ? row.raw.endpointVerificationExpiresAt : null),
+  };
+}
+
+/**
+ * Marketplace-safe service representation. Operator routing, ownership, and
+ * verification material must never cross the public Store API boundary.
+ */
+export function toPublicApiService(service: ApiService): ApiService {
+  return {
+    id: service.id,
+    slug: service.slug,
+    name: service.name,
+    shortDescription: service.shortDescription,
+    longDescription: service.longDescription,
+    category: service.category,
+    method: service.method,
+    endpoint: service.endpoint,
+    priceLabel: service.priceLabel,
+    priceUsd: service.priceUsd,
+    status: service.status,
+    sourceType: service.sourceType,
+    presentation: service.presentation,
+    isPaid: service.isPaid,
+    inputSchema: service.inputSchema,
+    outputSchema: service.outputSchema,
+    exampleRequest: service.exampleRequest,
+    exampleResponse: service.exampleResponse,
+    exampleUseCase: service.exampleUseCase,
+    agentReasoningHint: service.agentReasoningHint,
   };
 }
 
@@ -298,6 +328,7 @@ export function rowToSellerService(row: StoreServiceRow): SellerStoreService {
     endpointVerificationStatus: service.endpointVerificationStatus,
     walletVerificationChallenge: service.walletVerificationChallenge,
     endpointVerificationNonce: service.endpointVerificationNonce,
+    endpointVerificationExpiresAt: service.endpointVerificationExpiresAt,
   };
 }
 
@@ -329,6 +360,7 @@ function inputToPayload(input: DynamicStoreServiceInput) {
       endpointVerificationStatus: input.endpointVerificationStatus,
       walletVerificationChallenge: input.walletVerificationChallenge,
       endpointVerificationNonce: input.endpointVerificationNonce,
+      endpointVerificationExpiresAt: input.endpointVerificationExpiresAt,
     },
   };
   if (input.fulfillmentUrl !== undefined) base.fulfillment_url = input.fulfillmentUrl;
@@ -345,6 +377,7 @@ function inputToPayload(input: DynamicStoreServiceInput) {
   }
   if (input.walletVerificationChallenge !== undefined) base.wallet_verification_challenge = input.walletVerificationChallenge;
   if (input.endpointVerificationNonce !== undefined) base.endpoint_verification_nonce = input.endpointVerificationNonce;
+  if (input.endpointVerificationExpiresAt !== undefined) base.endpoint_verification_expires_at = input.endpointVerificationExpiresAt;
   return base;
 }
 
@@ -376,6 +409,7 @@ function baseInputPayload(input: DynamicStoreServiceInput) {
       endpointVerificationStatus: input.endpointVerificationStatus ?? (input.sourceType === "external_seller" ? "unverified" : undefined),
       walletVerificationChallenge: input.walletVerificationChallenge,
       endpointVerificationNonce: input.endpointVerificationNonce,
+      endpointVerificationExpiresAt: input.endpointVerificationExpiresAt,
     },
   };
 }
@@ -394,6 +428,13 @@ function assertNoStaticSlug(slug: string) {
 export async function listDynamicStoreServiceRows({
   publicOnly = false,
 }: { publicOnly?: boolean } = {}) {
+  if (process.env.NODE_ENV === "test" && mockStoreServicesById.size > 0) {
+    const rows = [...mockStoreServicesById.values()]
+      .filter((row) => !publicOnly || publicDynamicStatuses.includes(row.status))
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    return { services: rows, warning: null };
+  }
+
   const client = getServiceSupabase();
   if (!client) {
     return {
@@ -457,6 +498,16 @@ export async function listAllStoreServices() {
   return {
     services: [...serviceRegistry, ...safeDynamicServices],
     warning: dynamic.warning,
+  };
+}
+
+export async function listPublicStoreServices() {
+  const result = await listAllStoreServices();
+  return {
+    services: result.services
+      .filter((service) => service.status !== "draft" && service.status !== "disabled" && service.status !== "verifying")
+      .map(toPublicApiService),
+    warning: result.warning,
   };
 }
 
@@ -636,6 +687,7 @@ export async function updateVerificationStatus(
     endpointVerificationStatus?: string;
     walletVerificationChallenge?: string | null;
     endpointVerificationNonce?: string | null;
+    endpointVerificationExpiresAt?: string | null;
     status?: StoreServiceStatus;
   },
 ): Promise<void> {
@@ -645,12 +697,14 @@ export async function updateVerificationStatus(
     if (updates.endpointVerificationStatus !== undefined) row.endpoint_verification_status = updates.endpointVerificationStatus as any;
     if (updates.walletVerificationChallenge !== undefined) row.wallet_verification_challenge = updates.walletVerificationChallenge;
     if (updates.endpointVerificationNonce !== undefined) row.endpoint_verification_nonce = updates.endpointVerificationNonce;
+    if (updates.endpointVerificationExpiresAt !== undefined) row.endpoint_verification_expires_at = updates.endpointVerificationExpiresAt;
     if (updates.status !== undefined) row.status = updates.status;
     if (row.raw) {
       if (updates.walletVerificationStatus !== undefined) (row.raw as any).walletVerificationStatus = updates.walletVerificationStatus;
       if (updates.endpointVerificationStatus !== undefined) (row.raw as any).endpointVerificationStatus = updates.endpointVerificationStatus;
       if (updates.walletVerificationChallenge !== undefined) (row.raw as any).walletVerificationChallenge = updates.walletVerificationChallenge;
       if (updates.endpointVerificationNonce !== undefined) (row.raw as any).endpointVerificationNonce = updates.endpointVerificationNonce;
+      if (updates.endpointVerificationExpiresAt !== undefined) (row.raw as any).endpointVerificationExpiresAt = updates.endpointVerificationExpiresAt;
     }
     return;
   }
@@ -663,6 +717,7 @@ export async function updateVerificationStatus(
   if (updates.endpointVerificationStatus !== undefined) payload.endpoint_verification_status = updates.endpointVerificationStatus;
   if (updates.walletVerificationChallenge !== undefined) payload.wallet_verification_challenge = updates.walletVerificationChallenge;
   if (updates.endpointVerificationNonce !== undefined) payload.endpoint_verification_nonce = updates.endpointVerificationNonce;
+  if (updates.endpointVerificationExpiresAt !== undefined) payload.endpoint_verification_expires_at = updates.endpointVerificationExpiresAt;
   if (updates.status !== undefined) payload.status = updates.status;
 
   const existing = await getDynamicStoreServiceRowById(id);
@@ -672,6 +727,7 @@ export async function updateVerificationStatus(
     if (updates.endpointVerificationStatus !== undefined) newRaw.endpointVerificationStatus = updates.endpointVerificationStatus;
     if (updates.walletVerificationChallenge !== undefined) newRaw.walletVerificationChallenge = updates.walletVerificationChallenge;
     if (updates.endpointVerificationNonce !== undefined) newRaw.endpointVerificationNonce = updates.endpointVerificationNonce;
+    if (updates.endpointVerificationExpiresAt !== undefined) newRaw.endpointVerificationExpiresAt = updates.endpointVerificationExpiresAt;
     payload.raw = newRaw;
   }
 
@@ -688,4 +744,3 @@ export async function updateVerificationStatus(
     throw new Error(safeErrorMessage(error));
   }
 }
-

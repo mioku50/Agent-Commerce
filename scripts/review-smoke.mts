@@ -625,12 +625,17 @@ async function main() {
   );
   results.push(...(Array.isArray(receiptsResult) ? receiptsResult : [receiptsResult]));
 
-  for (const path of ["/api/agent/runs", "/api/agents", "/api/seller/analytics"]) {
+  for (const path of ["/api/agent/runs", "/api/agents"]) {
     const result = await safelyRun(`${path} returns 200`, () =>
       checkStatus(baseUrl, path, 200),
     );
     results.push(...(Array.isArray(result) ? result : [result]));
   }
+
+  const sellerBoundary = await safelyRun("Seller operator API rejects public reads", () =>
+    checkStatus(baseUrl, "/api/seller/analytics", 401),
+  );
+  results.push(...(Array.isArray(sellerBoundary) ? sellerBoundary : [sellerBoundary]));
 
   try {
     const result = await checkReviewStatus(baseUrl);

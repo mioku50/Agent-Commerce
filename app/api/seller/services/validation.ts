@@ -244,6 +244,12 @@ export async function parseSellerServiceRequest(
     if (!sellerWallet || !/^0x[a-fA-F0-9]{40}$/.test(sellerWallet)) {
       return fail("sellerWallet must be a valid 40-character EVM hex address when sourceType is external_seller.", context);
     }
+    if (expectedNetwork !== "eip155:5042002") {
+      return fail("external_seller expectedNetwork must be Arc Testnet (eip155:5042002).", context);
+    }
+    if (expectedAsset.toLowerCase() !== "0x3600000000000000000000000000000000000000") {
+      return fail("external_seller expectedAsset must be Arc Testnet USDC.", context);
+    }
   }
 
   const inputSchema = readJsonObject(body, ["inputSchema", "input_schema"]);

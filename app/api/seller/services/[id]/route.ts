@@ -37,7 +37,10 @@ function logValidationError(
   );
 }
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export async function GET(request: Request, { params }: RouteContext) {
+  const authReject = requireSellerAuth(request);
+  if (authReject) return authReject;
+
   const { id } = await params;
   const row = await getDynamicStoreServiceRowById(id);
 

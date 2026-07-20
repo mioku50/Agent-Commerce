@@ -20,7 +20,7 @@ import { StoreMarketplace } from "@/app/store/store-marketplace";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   categoriesForServices,
-  listAllStoreServices,
+  listPublicStoreServices,
 } from "@/lib/services/store-service-persistence";
 import { connection } from "next/server";
 import { Suspense } from "react";
@@ -33,7 +33,7 @@ export const metadata = {
 
 async function StoreMarketplaceData() {
   await connection();
-  const { services, warning } = await listAllStoreServices();
+  const { services, warning } = await listPublicStoreServices();
 
   return (
     <StoreMarketplace

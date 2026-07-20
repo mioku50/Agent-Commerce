@@ -16,21 +16,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest } from "next/server.js";
+import { COOKIE_NAME, verifySellerSession } from "./lib/seller/session.ts";
 
 export function proxy(request: NextRequest) {
-  const session = request.cookies.get("session")?.value;
+  const authenticated = verifySellerSession(request.cookies.get(COOKIE_NAME)?.value);
   const { pathname } = request.nextUrl;
 
   // Logged-in user trying to access sign-in page -> redirect to dashboard
-  if (pathname === "/login" && session === "authenticated") {
+  if (pathname === "/login" && authenticated) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   // Logged-out user trying to access protected seller routes -> redirect to sign-in
   if (
     (pathname.startsWith("/dashboard") || pathname.startsWith("/seller")) &&
-    session !== "authenticated"
+    !authenticated
   ) {
     return NextResponse.redirect(new URL("/login", request.url));
   }

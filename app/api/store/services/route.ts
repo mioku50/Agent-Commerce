@@ -16,13 +16,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { NextResponse } from "next/server";
-import { listAllStoreServices } from "@/lib/services/store-service-persistence";
+import { NextResponse } from "next/server.js";
+import { listPublicStoreServices } from "../../../../lib/services/store-service-persistence.ts";
 
 export const revalidate = 0;
 
 export async function GET() {
-  const { services, warning } = await listAllStoreServices();
+  const { services, warning } = await listPublicStoreServices();
 
   return NextResponse.json({
     services,

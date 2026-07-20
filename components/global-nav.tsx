@@ -19,10 +19,11 @@
 import { cookies } from "next/headers";
 import type React from "react";
 import { CommandCenterLayout } from "@/components/layout/layout";
+import { COOKIE_NAME, verifySellerSession } from "@/lib/seller/session";
 
 export async function GlobalNav({ children }: { children: React.ReactNode }) {
   const cookieStore = await cookies();
-  const loggedIn = cookieStore.get("session")?.value === "authenticated";
+  const loggedIn = verifySellerSession(cookieStore.get(COOKIE_NAME)?.value);
 
   return <CommandCenterLayout loggedIn={loggedIn}>{children}</CommandCenterLayout>;
 }

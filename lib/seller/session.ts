@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createHmac } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 export const COOKIE_NAME = "seller_session";
 export const EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 hours
@@ -11,6 +11,14 @@ export const EXPIRY_MS = 8 * 60 * 60 * 1000; // 8 hours
 function getSecret(): string | null {
   const secret = process.env.SELLER_SESSION_SECRET?.trim() || "";
   if (!secret || secret.length < 32) return null;
+  return secret;
+}
+
+export function getSellerSessionSecret(): string {
+  const secret = getSecret();
+  if (!secret) {
+    throw new Error("SELLER_SESSION_SECRET must be configured and at least 32 characters long.");
+  }
   return secret;
 }
 
@@ -31,12 +39,16 @@ function getCookieValue(cookieHeader: string | null, name: string): string | und
 }
 
 export function issueSellerSession(): string {
-  const secret = getSecret();
-  if (!secret) {
-    throw new Error("SELLER_SESSION_SECRET must be configured and at least 32 characters long.");
-  }
-  const exp = Date.now() + EXPIRY_MS;
-  const payloadStr = JSON.stringify({ exp });
+  const secret = getSellerSessionSecret();
+  const now = Date.now();
+  const exp = now + EXPIRY_MS;
+  const payloadStr = JSON.stringify({
+    sub: "seller",
+    version: 1,
+    iat: now,
+    exp,
+    jti: randomBytes(16).toString("hex"),
+  });
   const base64Payload = Buffer.from(payloadStr, "utf8").toString("base64url");
   const hmacHex = sign(base64Payload, secret);
   return `${base64Payload}.${hmacHex}`;
@@ -56,22 +68,37 @@ export function verifySellerSession(cookieValue: string | undefined): boolean {
   const expectedBuf = Buffer.from(expectedHmac, "hex");
   const actualBuf = Buffer.from(hmacHex, "hex");
   if (expectedBuf.length !== actualBuf.length) return false;
-  let mismatch = 0;
-  for (let i = 0; i < expectedBuf.length; i++) {
-    mismatch |= expectedBuf[i] ^ actualBuf[i];
-  }
-  if (mismatch !== 0) return false;
+  if (!timingSafeEqual(expectedBuf, actualBuf)) return false;
 
   try {
     const jsonStr = Buffer.from(base64Payload, "base64url").toString("utf8");
     const payload = JSON.parse(jsonStr);
-    if (!payload || typeof payload.exp !== "number") return false;
-    if (Date.now() >= payload.exp) return false;
+    if (
+      !payload ||
+      payload.sub !== "seller" ||
+      payload.version !== 1 ||
+      typeof payload.iat !== "number" ||
+      typeof payload.exp !== "number" ||
+      typeof payload.jti !== "string" ||
+      !/^[a-f0-9]{32}$/.test(payload.jti)
+    ) return false;
+    const now = Date.now();
+    if (payload.iat > now + 60_000 || payload.exp <= now || payload.exp - payload.iat !== EXPIRY_MS) {
+      return false;
+    }
     return true;
   } catch {
     return false;
   }
 }
+
+export const sellerSessionCookieOptions = {
+  httpOnly: true,
+  sameSite: "strict" as const,
+  secure: process.env.NODE_ENV === "production",
+  path: "/",
+  maxAge: EXPIRY_MS / 1000,
+};
 
 export function requireSellerAuth(request: Request): Response | null {
   const cookieHeader = request.headers.get("cookie");

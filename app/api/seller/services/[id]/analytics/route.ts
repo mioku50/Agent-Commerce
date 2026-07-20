@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSellerAnalytics } from "@/lib/seller/analytics";
+import { requireSellerAuth } from "@/lib/seller/session";
 
 type RouteContext = {
   params: Promise<{
@@ -7,7 +8,10 @@ type RouteContext = {
   }>;
 };
 
-export async function GET(_request: Request, { params }: RouteContext) {
+export async function GET(request: Request, { params }: RouteContext) {
+  const authReject = requireSellerAuth(request);
+  if (authReject) return authReject;
+
   const { id } = await params;
 
   try {

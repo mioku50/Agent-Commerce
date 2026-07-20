@@ -31,7 +31,7 @@
     "seller:ssrf-test": "node --experimental-transform-types --no-warnings scripts/ssrf-protection-tests.mts",
     "seller:external-402-test": "node --experimental-transform-types --no-warnings scripts/external-fulfillment-tests.mts",
     "seller:proxy-test": "node --experimental-transform-types --no-warnings scripts/external-proxy-tests.mts",
-    "seller:integration-test": "node --experimental-transform-types --no-warnings scripts/external-seller-integration-tests.mts",
+    "seller:integration-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/external-seller-integration-tests.mts",
     "seller:security-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/security-exploit-tests.mts",
     "test:security": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/security-exploit-tests.mts",
     "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts",

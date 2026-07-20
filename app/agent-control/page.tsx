@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   categoriesForServices,
-  listAllStoreServices,
+  listPublicStoreServices,
 } from "@/lib/services/store-service-persistence";
 
 export const metadata = {
@@ -19,7 +19,7 @@ export const metadata = {
 
 async function AgentControlData() {
   await connection();
-  const { services } = await listAllStoreServices();
+  const { services } = await listPublicStoreServices();
 
   return <AgentControlClient categories={categoriesForServices(services)} />;
 }
