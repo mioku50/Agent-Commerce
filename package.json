@@ -35,7 +35,10 @@
     "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts",
     "agy:head": "bash .agents/skills/opus-gemini-golova-ruki/scripts/agy-head.sh",
     "agy:worker": "bash .agents/skills/opus-gemini-golova-ruki/scripts/agy-worker.sh",
-    "agy:run:new": "bash .agents/skills/opus-gemini-golova-ruki/scripts/new-run.sh"
+    "agy:run:new": "bash .agents/skills/opus-gemini-golova-ruki/scripts/new-run.sh",
+    "codex:head": "bash .agents/skills/codex-gemini-golova-ruki/scripts/codex-head.sh",
+    "codex:worker": "bash .agents/skills/codex-gemini-golova-ruki/scripts/gemini-worker.sh",
+    "codex:run:new": "bash .agents/skills/codex-gemini-golova-ruki/scripts/new-run.sh"
   },
   "dependencies": {
     "@circle-fin/x402-batching": "^2.0.4",
