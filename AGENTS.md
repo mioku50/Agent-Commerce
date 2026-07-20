@@ -6,9 +6,13 @@ The primary product is not a generic API marketplace demo. A user selects a work
 
 Legacy API Store, Agent Launch, Agent Setup, and local CLI surfaces remain available under Developer Tools.
 
-## Required orchestration workflow
+## Supported orchestration workflows
 
-For non-trivial development, use the project skill:
+For non-trivial development, choose exactly one project workflow per run.
+
+### Option A — Opus head, Gemini hands
+
+Skill:
 
 ```text
 .agents/skills/opus-gemini-golova-ruki/SKILL.md
@@ -32,7 +36,15 @@ Gemini 3.1 Pro (High)
 = fresh adversarial reviewer
 ```
 
-Canonical pipeline:
+Commands:
+
+```bash
+npm run agy:head
+npm run agy:worker -- <scout|executor|verifier|reviewer> <prompt-file> [report-file]
+npm run agy:run:new -- <task-slug>
+```
+
+Pipeline:
 
 ```text
 fresh Gemini scout
@@ -43,25 +55,68 @@ fresh Gemini scout
 → Opus final acceptance
 ```
 
-The final verdict always belongs to Opus.
+The final verdict belongs to Opus.
 
-All Antigravity processes in this workflow must be launched through the repository commands:
+### Option B — Codex head, Gemini hands
 
-```bash
-npm run agy:head
-npm run agy:worker -- <scout|executor|verifier|reviewer> <prompt-file> [report-file]
-npm run agy:run:new -- <task-slug>
+Skill:
+
+```text
+.agents/skills/codex-gemini-golova-ruki/SKILL.md
 ```
 
-The launchers always include:
+Role split:
+
+```text
+Codex via ChatGPT subscription and ~/.codex/config.toml
+= head
+= decisions
+= issue-spec
+= final acceptance
+
+Gemini 3.1 Pro (High)
+= fresh scout
+= coding executor
+= CLI / git / gh
+= tests and commits
+= fresh DoD verifier
+= fresh adversarial reviewer
+```
+
+Commands:
+
+```bash
+npm run codex:head
+npm run codex:worker -- <scout|executor|verifier|reviewer> <prompt-file> [report-file]
+npm run codex:run:new -- <task-slug>
+```
+
+Pipeline:
+
+```text
+fresh Gemini scout
+→ Codex issue-spec
+→ fresh Gemini executor
+→ fresh Gemini DoD verifier
+→ fresh Gemini adversarial reviewer
+→ Codex final acceptance
+```
+
+The final verdict belongs to Codex.
+
+Do not mix acceptance authorities inside one run. `STATE.md` must identify the selected workflow and head.
+
+## Antigravity worker permission mode
+
+All Gemini workers in both workflows must be launched through their repository wrappers. Every wrapper always includes:
 
 ```text
 --dangerously-skip-permissions
 ```
 
-Do not bypass the wrappers or remove that flag in this workflow.
+Do not bypass the wrappers or remove that flag.
 
-Because permissions are auto-approved, every agent must still obey the repository safety rules below.
+Because Antigravity permissions are auto-approved, every head and worker must still obey the repository safety rules below.
 
 ## Required MCP usage
 
