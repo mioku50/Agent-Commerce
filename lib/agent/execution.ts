@@ -256,6 +256,7 @@ function sleep(ms: number) {
 function isServiceStatus(value: unknown): value is ServiceStatus {
   return (
     value === "draft" ||
+    value === "verifying" ||
     value === "live" ||
     value === "mock" ||
     value === "coming-soon" ||
@@ -272,7 +273,8 @@ function isServiceSourceType(value: unknown): value is ServiceSourceType {
     value === "static" ||
     value === "provider_backed" ||
     value === "seller_mock" ||
-    value === "external_placeholder"
+    value === "external_placeholder" ||
+    value === "external_seller"
   );
 }
 

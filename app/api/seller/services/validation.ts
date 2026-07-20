@@ -6,7 +6,7 @@ import {
   normalizeSlug,
   sellerServiceEndpoint,
   type DynamicStoreServiceInput,
-} from "@/lib/services/store-service-persistence";
+} from "../../../../lib/services/store-service-persistence.ts";
 
 type ValidationResult =
   | { input: DynamicStoreServiceInput; context: ValidationContext }
@@ -80,6 +80,9 @@ function normalizeStatus(value: unknown) {
   if (normalized === "coming-soon" || normalized === "comingsoon") {
     return "coming-soon";
   }
+  if (normalized === "verifying" || normalized === "pending-verification") {
+    return "verifying";
+  }
   return normalized;
 }
 
@@ -99,6 +102,13 @@ function normalizeSourceType(value: unknown) {
     normalized === "external-api"
   ) {
     return "external_placeholder";
+  }
+  if (
+    normalized === "external-seller" ||
+    normalized === "real-seller" ||
+    normalized === "seller-fulfillment-proxy"
+  ) {
+    return "external_seller";
   }
   return normalized.replace(/-/g, "_");
 }
@@ -150,6 +160,13 @@ export async function parseSellerServiceRequest(
   const status = normalizeStatus(readValue(body, "status"));
   const sourceType = normalizeSourceType(readValue(body, "sourceType", "source_type"));
   const priceUsd = normalizePrice(readValue(body, "priceUsd", "price_usd", "price_usdc"));
+  const fulfillmentUrl = readString(body, "fulfillmentUrl", "fulfillment_url");
+  const sellerWallet = readString(body, "sellerWallet", "seller_wallet");
+  const expectedNetwork = readString(body, "expectedNetwork", "expected_network") || "eip155:5042002";
+  const expectedAsset = readString(body, "expectedAsset", "expected_asset") || "0x3600000000000000000000000000000000000000";
+  const maxTimeoutMs = typeof body.maxTimeoutMs === "number" ? body.maxTimeoutMs : (typeof body.max_timeout_ms === "number" ? body.max_timeout_ms : 15000);
+  const maxResponseSizeBytes = typeof body.maxResponseSizeBytes === "number" ? body.maxResponseSizeBytes : (typeof body.max_response_size_bytes === "number" ? body.max_response_size_bytes : 1048576);
+
   const context: ValidationContext = {
     slug: slug || null,
     normalizedStatus: status || null,
@@ -177,10 +194,27 @@ export async function parseSellerServiceRequest(
     return fail("Price must be a valid number like 0.002", context);
   }
   if (!isStoreServiceStatus(status)) {
-    return fail("status must be draft, live, coming-soon, or disabled.", context);
+    return fail("status must be draft, verifying, live, coming-soon, or disabled.", context);
   }
   if (!isStoreServiceSourceType(sourceType)) {
-    return fail("sourceType must be seller_mock or external_placeholder.", context);
+    return fail("sourceType must be seller_mock, external_placeholder, or external_seller.", context);
+  }
+
+  if (sourceType === "external_seller") {
+    if (!fulfillmentUrl) {
+      return fail("fulfillmentUrl is required when sourceType is external_seller.", context);
+    }
+    try {
+      const parsedUrl = new URL(fulfillmentUrl);
+      if (parsedUrl.protocol !== "https:" && parsedUrl.protocol !== "http:") {
+        return fail("fulfillmentUrl must use HTTPS (or HTTP for testing).", context);
+      }
+    } catch {
+      return fail("fulfillmentUrl must be a valid URL.", context);
+    }
+    if (!sellerWallet || !/^0x[a-fA-F0-9]{40}$/.test(sellerWallet)) {
+      return fail("sellerWallet must be a valid 40-character EVM hex address when sourceType is external_seller.", context);
+    }
   }
 
   const inputSchema = readJsonObject(body, ["inputSchema", "input_schema"]);
@@ -218,6 +252,12 @@ export async function parseSellerServiceRequest(
       exampleResponse,
       exampleUseCase,
       agentReasoningHint,
+      fulfillmentUrl,
+      sellerWallet,
+      expectedNetwork,
+      expectedAsset,
+      maxTimeoutMs,
+      maxResponseSizeBytes,
     },
   };
 }

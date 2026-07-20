@@ -54,6 +54,7 @@ import type {
 
 const statusLabels: Record<ServiceStatus, string> = {
   draft: "Draft",
+  verifying: "Verifying",
   live: "Live",
   mock: "Mock",
   "coming-soon": "Coming soon",
@@ -70,6 +71,7 @@ const sourceLabels: Record<ServiceSourceType, string> = {
   provider_backed: "Live Provider",
   seller_mock: "Seller-created mock",
   external_placeholder: "Seller-created placeholder",
+  external_seller: "External Seller API",
 };
 
 const howItWorks = [

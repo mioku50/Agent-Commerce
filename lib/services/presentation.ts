@@ -7,12 +7,13 @@ export type ServiceProviderType =
   | "live_provider"
   | "internal_deterministic"
   | "seller_mock"
-  | "external_placeholder";
+  | "external_placeholder"
+  | "external_seller";
 
 export type ServicePresentationMetadata = {
   providerType: ServiceProviderType;
   providerName: string | null;
-  providerStatus: "live" | "deterministic" | "mock" | "placeholder";
+  providerStatus: "live" | "deterministic" | "mock" | "placeholder" | "external";
   assetSymbol: string | null;
   dataFreshness: string | null;
   billingLabel: string;
@@ -51,6 +52,16 @@ export function defaultServicePresentation(
       billingLabel: "External fulfillment is not enabled for this placeholder service.",
     };
   }
+  if (sourceType === "external_seller") {
+    return {
+      providerType: "external_seller",
+      providerName: "Real external seller",
+      providerStatus: "external",
+      assetSymbol: null,
+      dataFreshness: null,
+      billingLabel: "Arc Agent Commerce validates the payment challenge and pays the external seller via x402.",
+    };
+  }
   return {
     providerType: "internal_deterministic",
     providerName: null,
@@ -81,6 +92,7 @@ export function servicePresentationLabel(metadata: ServicePresentationMetadata) 
   }
   if (metadata.providerType === "seller_mock") return "Seller-created mock";
   if (metadata.providerType === "external_placeholder") return "External placeholder";
+  if (metadata.providerType === "external_seller") return "External Seller API";
   return "Internal deterministic";
 }
 

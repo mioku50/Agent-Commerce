@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { tryGetServerSupabaseConfig } from "../supabase/server-env";
+import { tryGetServerSupabaseConfig } from "../supabase/server-env.ts";
 import {
   getServiceBySlug,
   serviceRegistry,
@@ -7,10 +7,10 @@ import {
   type ServiceMethod,
   type ServiceSourceType,
   type ServiceStatus,
-} from "@/lib/services/registry";
+} from "./registry.ts";
 
-export type StoreServiceStatus = "draft" | "live" | "disabled" | "coming-soon";
-export type StoreServiceSourceType = "seller_mock" | "external_placeholder";
+export type StoreServiceStatus = "draft" | "verifying" | "live" | "disabled" | "coming-soon";
+export type StoreServiceSourceType = "seller_mock" | "external_placeholder" | "external_seller";
 
 export type StoreServiceRow = {
   id: string;
@@ -32,6 +32,16 @@ export type StoreServiceRow = {
   example_use_case: string;
   agent_reasoning_hint: string;
   raw: Record<string, unknown> | null;
+  fulfillment_url?: string;
+  seller_wallet?: string;
+  expected_network?: string;
+  expected_asset?: string;
+  max_timeout_ms?: number;
+  max_response_size_bytes?: number;
+  wallet_verification_status?: "unverified" | "verified";
+  endpoint_verification_status?: "unverified" | "verified";
+  wallet_verification_challenge?: string;
+  endpoint_verification_nonce?: string;
 };
 
 export type SellerStoreService = {
@@ -55,6 +65,16 @@ export type SellerStoreService = {
   exampleResponse: unknown;
   exampleUseCase: string;
   agentReasoningHint: string;
+  fulfillmentUrl?: string;
+  sellerWallet?: string;
+  expectedNetwork?: string;
+  expectedAsset?: string;
+  maxTimeoutMs?: number;
+  maxResponseSizeBytes?: number;
+  walletVerificationStatus?: "unverified" | "verified";
+  endpointVerificationStatus?: "unverified" | "verified";
+  walletVerificationChallenge?: string;
+  endpointVerificationNonce?: string;
 };
 
 export type DynamicStoreServiceInput = {
@@ -73,10 +93,21 @@ export type DynamicStoreServiceInput = {
   exampleResponse: unknown;
   exampleUseCase: string;
   agentReasoningHint: string;
+  fulfillmentUrl?: string;
+  sellerWallet?: string;
+  expectedNetwork?: string;
+  expectedAsset?: string;
+  maxTimeoutMs?: number;
+  maxResponseSizeBytes?: number;
+  walletVerificationStatus?: "unverified" | "verified";
+  endpointVerificationStatus?: "unverified" | "verified";
+  walletVerificationChallenge?: string;
+  endpointVerificationNonce?: string;
 };
 
 export const storeServiceStatuses: readonly StoreServiceStatus[] = [
   "draft",
+  "verifying",
   "live",
   "coming-soon",
   "disabled",
@@ -85,9 +116,10 @@ export const storeServiceStatuses: readonly StoreServiceStatus[] = [
 export const storeServiceSourceTypes: readonly StoreServiceSourceType[] = [
   "seller_mock",
   "external_placeholder",
+  "external_seller",
 ];
 
-const storeServiceColumns = [
+const storeServiceBaseColumns = [
   "id",
   "created_at",
   "updated_at",
@@ -109,8 +141,23 @@ const storeServiceColumns = [
   "raw",
 ].join(",");
 
+const storeServiceColumns = [
+  storeServiceBaseColumns,
+  "fulfillment_url",
+  "seller_wallet",
+  "expected_network",
+  "expected_asset",
+  "max_timeout_ms",
+  "max_response_size_bytes",
+  "wallet_verification_status",
+  "endpoint_verification_status",
+  "wallet_verification_challenge",
+  "endpoint_verification_nonce",
+].join(",");
+
 const publicDynamicStatuses: readonly StoreServiceStatus[] = [
   "live",
+  "verifying",
   "coming-soon",
 ];
 
@@ -202,6 +249,16 @@ export function rowToApiService(row: StoreServiceRow): ApiService {
     exampleResponse: row.example_response ?? {},
     exampleUseCase: row.example_use_case,
     agentReasoningHint: row.agent_reasoning_hint,
+    fulfillmentUrl: row.fulfillment_url || (typeof row.raw?.fulfillmentUrl === "string" ? row.raw.fulfillmentUrl : undefined),
+    sellerWallet: row.seller_wallet || (typeof row.raw?.sellerWallet === "string" ? row.raw.sellerWallet : undefined),
+    expectedNetwork: row.expected_network || (typeof row.raw?.expectedNetwork === "string" ? row.raw.expectedNetwork : "eip155:5042002"),
+    expectedAsset: row.expected_asset || (typeof row.raw?.expectedAsset === "string" ? row.raw.expectedAsset : "0x3600000000000000000000000000000000000000"),
+    maxTimeoutMs: typeof row.max_timeout_ms === "number" ? row.max_timeout_ms : (typeof row.raw?.maxTimeoutMs === "number" ? row.raw.maxTimeoutMs : 15000),
+    maxResponseSizeBytes: typeof row.max_response_size_bytes === "number" ? row.max_response_size_bytes : (typeof row.raw?.maxResponseSizeBytes === "number" ? row.raw.maxResponseSizeBytes : 1048576),
+    walletVerificationStatus: row.wallet_verification_status || (row.raw?.walletVerificationStatus as "unverified" | "verified") || "unverified",
+    endpointVerificationStatus: row.endpoint_verification_status || (row.raw?.endpointVerificationStatus as "unverified" | "verified") || "unverified",
+    walletVerificationChallenge: row.wallet_verification_challenge || (typeof row.raw?.walletVerificationChallenge === "string" ? row.raw.walletVerificationChallenge : ""),
+    endpointVerificationNonce: row.endpoint_verification_nonce || (typeof row.raw?.endpointVerificationNonce === "string" ? row.raw.endpointVerificationNonce : ""),
   };
 }
 
@@ -229,10 +286,63 @@ export function rowToSellerService(row: StoreServiceRow): SellerStoreService {
     exampleResponse: service.exampleResponse,
     exampleUseCase: service.exampleUseCase,
     agentReasoningHint: service.agentReasoningHint,
+    fulfillmentUrl: service.fulfillmentUrl,
+    sellerWallet: service.sellerWallet,
+    expectedNetwork: service.expectedNetwork,
+    expectedAsset: service.expectedAsset,
+    maxTimeoutMs: service.maxTimeoutMs,
+    maxResponseSizeBytes: service.maxResponseSizeBytes,
+    walletVerificationStatus: service.walletVerificationStatus,
+    endpointVerificationStatus: service.endpointVerificationStatus,
+    walletVerificationChallenge: service.walletVerificationChallenge,
+    endpointVerificationNonce: service.endpointVerificationNonce,
   };
 }
 
 function inputToPayload(input: DynamicStoreServiceInput) {
+  const base: Record<string, unknown> = {
+    name: input.name.trim(),
+    slug: input.slug.trim(),
+    short_description: input.shortDescription.trim(),
+    long_description: input.longDescription.trim(),
+    category: input.category.trim(),
+    method: input.method,
+    price_usdc: input.priceUsd,
+    status: input.status,
+    source_type: input.sourceType,
+    input_schema: input.inputSchema,
+    output_schema: input.outputSchema,
+    example_request: input.exampleRequest,
+    example_response: input.exampleResponse,
+    example_use_case: input.exampleUseCase.trim(),
+    agent_reasoning_hint: input.agentReasoningHint.trim(),
+    raw: {
+      fulfillmentUrl: input.fulfillmentUrl,
+      sellerWallet: input.sellerWallet,
+      expectedNetwork: input.expectedNetwork,
+      expectedAsset: input.expectedAsset,
+      maxTimeoutMs: input.maxTimeoutMs,
+      maxResponseSizeBytes: input.maxResponseSizeBytes,
+      walletVerificationStatus: input.walletVerificationStatus,
+      endpointVerificationStatus: input.endpointVerificationStatus,
+      walletVerificationChallenge: input.walletVerificationChallenge,
+      endpointVerificationNonce: input.endpointVerificationNonce,
+    },
+  };
+  if (input.fulfillmentUrl !== undefined) base.fulfillment_url = input.fulfillmentUrl;
+  if (input.sellerWallet !== undefined) base.seller_wallet = input.sellerWallet;
+  if (input.expectedNetwork !== undefined) base.expected_network = input.expectedNetwork;
+  if (input.expectedAsset !== undefined) base.expected_asset = input.expectedAsset;
+  if (input.maxTimeoutMs !== undefined) base.max_timeout_ms = input.maxTimeoutMs;
+  if (input.maxResponseSizeBytes !== undefined) base.max_response_size_bytes = input.maxResponseSizeBytes;
+  if (input.walletVerificationStatus !== undefined) base.wallet_verification_status = input.walletVerificationStatus;
+  if (input.endpointVerificationStatus !== undefined) base.endpoint_verification_status = input.endpointVerificationStatus;
+  if (input.walletVerificationChallenge !== undefined) base.wallet_verification_challenge = input.walletVerificationChallenge;
+  if (input.endpointVerificationNonce !== undefined) base.endpoint_verification_nonce = input.endpointVerificationNonce;
+  return base;
+}
+
+function baseInputPayload(input: DynamicStoreServiceInput) {
   return {
     name: input.name.trim(),
     slug: input.slug.trim(),
@@ -249,7 +359,24 @@ function inputToPayload(input: DynamicStoreServiceInput) {
     example_response: input.exampleResponse,
     example_use_case: input.exampleUseCase.trim(),
     agent_reasoning_hint: input.agentReasoningHint.trim(),
+    raw: {
+      fulfillmentUrl: input.fulfillmentUrl,
+      sellerWallet: input.sellerWallet,
+      expectedNetwork: input.expectedNetwork,
+      expectedAsset: input.expectedAsset,
+      maxTimeoutMs: input.maxTimeoutMs,
+      maxResponseSizeBytes: input.maxResponseSizeBytes,
+      walletVerificationStatus: input.walletVerificationStatus,
+      endpointVerificationStatus: input.endpointVerificationStatus,
+      walletVerificationChallenge: input.walletVerificationChallenge,
+      endpointVerificationNonce: input.endpointVerificationNonce,
+    },
   };
+}
+
+function isMissingColumnError(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  return error.code === "42703" || (typeof error.message === "string" && error.message.includes("does not exist"));
 }
 
 function assertNoStaticSlug(slug: string) {
@@ -278,7 +405,18 @@ export async function listDynamicStoreServiceRows({
     query = query.in("status", [...publicDynamicStatuses]);
   }
 
-  const { data, error } = await query;
+  let { data, error } = await query;
+
+  if (error && isMissingColumnError(error)) {
+    let fallbackQuery = client
+      .from("store_services")
+      .select(storeServiceBaseColumns)
+      .order("created_at", { ascending: false });
+    if (publicOnly) fallbackQuery = fallbackQuery.in("status", [...publicDynamicStatuses]);
+    const res = await fallbackQuery;
+    data = res.data;
+    error = res.error;
+  }
 
   if (error) {
     console.warn(`[store-services] Failed to list dynamic services: ${error.message}`);
@@ -332,7 +470,18 @@ export async function getDynamicStoreServiceRowBySlug(
     query = query.in("status", [...publicDynamicStatuses]);
   }
 
-  const { data, error } = await query.maybeSingle();
+  let { data, error } = await query.maybeSingle();
+
+  if (error && isMissingColumnError(error)) {
+    let fallbackQuery = client
+      .from("store_services")
+      .select(storeServiceBaseColumns)
+      .eq("slug", slug);
+    if (publicOnly) fallbackQuery = fallbackQuery.in("status", [...publicDynamicStatuses]);
+    const res = await fallbackQuery.maybeSingle();
+    data = res.data;
+    error = res.error;
+  }
 
   if (error) {
     console.warn(`[store-services] Failed to get service by slug: ${error.message}`);
@@ -351,11 +500,21 @@ export async function getDynamicStoreServiceRowById(id: string) {
   const client = getServiceSupabase();
   if (!client) return null;
 
-  const { data, error } = await client
+  let { data, error } = await client
     .from("store_services")
     .select(storeServiceColumns)
     .eq("id", id)
     .maybeSingle();
+
+  if (error && isMissingColumnError(error)) {
+    const res = await client
+      .from("store_services")
+      .select(storeServiceBaseColumns)
+      .eq("id", id)
+      .maybeSingle();
+    data = res.data;
+    error = res.error;
+  }
 
   if (error) {
     console.warn(`[store-services] Failed to get service by id: ${error.message}`);
@@ -375,11 +534,21 @@ export async function createDynamicStoreService(input: DynamicStoreServiceInput)
   assertNoStaticSlug(input.slug);
   const client = getServiceSupabase({ required: true });
   if (!client) throw new Error("Supabase service role env is required for seller services.");
-  const { data, error } = await client
+  let { data, error } = await client
     .from("store_services")
     .insert(inputToPayload(input))
     .select(storeServiceColumns)
     .single();
+
+  if (error && isMissingColumnError(error)) {
+    const res = await client
+      .from("store_services")
+      .insert(baseInputPayload(input))
+      .select(storeServiceBaseColumns)
+      .single();
+    data = res.data;
+    error = res.error;
+  }
 
   if (error) {
     throw new Error(safeErrorMessage(error));
@@ -395,12 +564,23 @@ export async function updateDynamicStoreService(
   assertNoStaticSlug(input.slug);
   const client = getServiceSupabase({ required: true });
   if (!client) throw new Error("Supabase service role env is required for seller services.");
-  const { data, error } = await client
+  let { data, error } = await client
     .from("store_services")
     .update(inputToPayload(input))
     .eq("id", id)
     .select(storeServiceColumns)
     .single();
+
+  if (error && isMissingColumnError(error)) {
+    const res = await client
+      .from("store_services")
+      .update(baseInputPayload(input))
+      .eq("id", id)
+      .select(storeServiceBaseColumns)
+      .single();
+    data = res.data;
+    error = res.error;
+  }
 
   if (error) {
     throw new Error(safeErrorMessage(error));

@@ -119,6 +119,7 @@ export type CommerceReceipt = {
     | "Internal deterministic"
     | "Live Provider"
     | "Seller-created mock"
+    | "External Seller API"
     | "Seller-created placeholder";
   method: ServiceMethod | string | null;
   endpoint: string | null;
@@ -225,7 +226,8 @@ function sourceTypeFromValue(value: string | null | undefined): ServiceSourceTyp
   if (
     value === "provider_backed" ||
     value === "seller_mock" ||
-    value === "external_placeholder"
+    value === "external_placeholder" ||
+    value === "external_seller"
   ) return value;
   return "static";
 }
@@ -234,6 +236,7 @@ export function receiptSourceLabel(sourceType: ServiceSourceType) {
   if (sourceType === "static") return "Internal deterministic";
   if (sourceType === "provider_backed") return "Live Provider";
   if (sourceType === "seller_mock") return "Seller-created mock";
+  if (sourceType === "external_seller") return "External Seller API";
   return "Seller-created placeholder";
 }
 

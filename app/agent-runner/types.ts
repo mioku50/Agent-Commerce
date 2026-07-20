@@ -6,14 +6,9 @@ export type HostedWorkflowType =
 
 export type PythMarketSymbol = "BTC/USD" | "ETH/USD" | "SOL/USD";
 
-export type ServicePresentationMetadata = {
-  providerType: "live_provider" | "internal_deterministic" | "seller_mock" | "external_placeholder";
-  providerName: string | null;
-  providerStatus: "live" | "deterministic" | "mock" | "placeholder";
-  assetSymbol: string | null;
-  dataFreshness: string | null;
-  billingLabel: string;
-};
+import type { ServicePresentationMetadata } from "@/lib/services/presentation";
+
+export type { ServicePresentationMetadata };
 
 export type HostedPlanService = {
   id: string;

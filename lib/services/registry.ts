@@ -21,6 +21,7 @@ import type { ServicePresentationMetadata } from "./presentation.ts";
 export type ServiceMethod = "GET" | "POST";
 export type ServiceStatus =
   | "draft"
+  | "verifying"
   | "live"
   | "mock"
   | "coming-soon"
@@ -29,7 +30,8 @@ export type ServiceSourceType =
   | "static"
   | "provider_backed"
   | "seller_mock"
-  | "external_placeholder";
+  | "external_placeholder"
+  | "external_seller";
 
 export type ApiService = {
   id: string;
@@ -52,6 +54,16 @@ export type ApiService = {
   exampleResponse: unknown;
   exampleUseCase: string;
   agentReasoningHint: string;
+  fulfillmentUrl?: string;
+  sellerWallet?: string;
+  expectedNetwork?: string;
+  expectedAsset?: string;
+  maxTimeoutMs?: number;
+  maxResponseSizeBytes?: number;
+  walletVerificationStatus?: "unverified" | "verified";
+  endpointVerificationStatus?: "unverified" | "verified";
+  walletVerificationChallenge?: string;
+  endpointVerificationNonce?: string;
 };
 
 const emptyInputSchema = {
