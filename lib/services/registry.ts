@@ -60,10 +60,10 @@ export type ApiService = {
   expectedAsset?: string;
   maxTimeoutMs?: number;
   maxResponseSizeBytes?: number;
-  walletVerificationStatus?: "unverified" | "verified";
-  endpointVerificationStatus?: "unverified" | "verified";
-  walletVerificationChallenge?: string;
-  endpointVerificationNonce?: string;
+  walletVerificationStatus?: "unverified" | "verified" | "failed";
+  endpointVerificationStatus?: "unverified" | "verified" | "failed";
+  walletVerificationChallenge?: string | null;
+  endpointVerificationNonce?: string | null;
 };
 
 const emptyInputSchema = {

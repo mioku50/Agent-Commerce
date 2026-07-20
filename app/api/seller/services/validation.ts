@@ -6,6 +6,7 @@ import {
   normalizeSlug,
   sellerServiceEndpoint,
   type DynamicStoreServiceInput,
+  type StoreServiceStatus,
 } from "../../../../lib/services/store-service-persistence.ts";
 
 type ValidationResult =
@@ -138,6 +139,7 @@ function fail(
 
 export async function parseSellerServiceRequest(
   request: Request,
+  options?: { isCreation?: boolean; isUpdate?: boolean },
 ): Promise<ValidationResult> {
   let body: Record<string, unknown>;
 
@@ -157,15 +159,13 @@ export async function parseSellerServiceRequest(
   const agentReasoningHint =
     readString(body, "agentReasoningHint", "agent_reasoning_hint") || exampleUseCase;
   const method = normalizeMethod(readValue(body, "method"));
-  const status = normalizeStatus(readValue(body, "status"));
+  let status = normalizeStatus(readValue(body, "status"));
   const sourceType = normalizeSourceType(readValue(body, "sourceType", "source_type"));
   const priceUsd = normalizePrice(readValue(body, "priceUsd", "price_usd", "price_usdc"));
   const fulfillmentUrl = readString(body, "fulfillmentUrl", "fulfillment_url");
   const sellerWallet = readString(body, "sellerWallet", "seller_wallet");
   const expectedNetwork = readString(body, "expectedNetwork", "expected_network") || "eip155:5042002";
   const expectedAsset = readString(body, "expectedAsset", "expected_asset") || "0x3600000000000000000000000000000000000000";
-  const maxTimeoutMs = typeof body.maxTimeoutMs === "number" ? body.maxTimeoutMs : (typeof body.max_timeout_ms === "number" ? body.max_timeout_ms : 15000);
-  const maxResponseSizeBytes = typeof body.maxResponseSizeBytes === "number" ? body.maxResponseSizeBytes : (typeof body.max_response_size_bytes === "number" ? body.max_response_size_bytes : 1048576);
 
   const context: ValidationContext = {
     slug: slug || null,
@@ -174,6 +174,28 @@ export async function parseSellerServiceRequest(
     normalizedMethod: method || null,
     price: priceUsd,
   };
+
+  if (sourceType === "external_seller" && status === "live") {
+    return fail("external_seller status cannot be set to live by client", context);
+  }
+
+  const rawMaxTimeoutMs = readValue(body, "maxTimeoutMs", "max_timeout_ms");
+  let maxTimeoutMs = 15000;
+  if (rawMaxTimeoutMs !== undefined) {
+    if (typeof rawMaxTimeoutMs !== "number" || !Number.isInteger(rawMaxTimeoutMs) || rawMaxTimeoutMs < 1000 || rawMaxTimeoutMs > 30000) {
+      return fail("maxTimeoutMs must be an integer between 1000 and 30000.", context);
+    }
+    maxTimeoutMs = rawMaxTimeoutMs;
+  }
+
+  const rawMaxResponseSizeBytes = readValue(body, "maxResponseSizeBytes", "max_response_size_bytes");
+  let maxResponseSizeBytes = 1048576;
+  if (rawMaxResponseSizeBytes !== undefined) {
+    if (typeof rawMaxResponseSizeBytes !== "number" || !Number.isInteger(rawMaxResponseSizeBytes) || rawMaxResponseSizeBytes < 1024 || rawMaxResponseSizeBytes > 1048576) {
+      return fail("maxResponseSizeBytes must be an integer between 1024 and 1048576.", context);
+    }
+    maxResponseSizeBytes = rawMaxResponseSizeBytes;
+  }
 
   if (!name) return fail("name is required.", context);
   if (!slug) return fail("slug is required.", context);
@@ -201,6 +223,13 @@ export async function parseSellerServiceRequest(
   }
 
   if (sourceType === "external_seller") {
+    if (status === "live") {
+      return fail("external_seller status cannot be set to live by client", context);
+    }
+    if (!options?.isUpdate) {
+      status = "draft" as StoreServiceStatus;
+      context.normalizedStatus = status;
+    }
     if (!fulfillmentUrl) {
       return fail("fulfillmentUrl is required when sourceType is external_seller.", context);
     }
@@ -244,7 +273,7 @@ export async function parseSellerServiceRequest(
       category,
       method,
       priceUsd,
-      status,
+      status: status as StoreServiceStatus,
       sourceType,
       inputSchema,
       outputSchema,

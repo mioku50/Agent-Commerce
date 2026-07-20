@@ -38,10 +38,10 @@ export type StoreServiceRow = {
   expected_asset?: string;
   max_timeout_ms?: number;
   max_response_size_bytes?: number;
-  wallet_verification_status?: "unverified" | "verified";
-  endpoint_verification_status?: "unverified" | "verified";
-  wallet_verification_challenge?: string;
-  endpoint_verification_nonce?: string;
+  wallet_verification_status?: "unverified" | "verified" | "failed";
+  endpoint_verification_status?: "unverified" | "verified" | "failed";
+  wallet_verification_challenge?: string | null;
+  endpoint_verification_nonce?: string | null;
 };
 
 export type SellerStoreService = {
@@ -71,10 +71,10 @@ export type SellerStoreService = {
   expectedAsset?: string;
   maxTimeoutMs?: number;
   maxResponseSizeBytes?: number;
-  walletVerificationStatus?: "unverified" | "verified";
-  endpointVerificationStatus?: "unverified" | "verified";
-  walletVerificationChallenge?: string;
-  endpointVerificationNonce?: string;
+  walletVerificationStatus?: "unverified" | "verified" | "failed";
+  endpointVerificationStatus?: "unverified" | "verified" | "failed";
+  walletVerificationChallenge?: string | null;
+  endpointVerificationNonce?: string | null;
 };
 
 export type DynamicStoreServiceInput = {
@@ -99,10 +99,10 @@ export type DynamicStoreServiceInput = {
   expectedAsset?: string;
   maxTimeoutMs?: number;
   maxResponseSizeBytes?: number;
-  walletVerificationStatus?: "unverified" | "verified";
-  endpointVerificationStatus?: "unverified" | "verified";
-  walletVerificationChallenge?: string;
-  endpointVerificationNonce?: string;
+  walletVerificationStatus?: "unverified" | "verified" | "failed";
+  endpointVerificationStatus?: "unverified" | "verified" | "failed";
+  walletVerificationChallenge?: string | null;
+  endpointVerificationNonce?: string | null;
 };
 
 export const storeServiceStatuses: readonly StoreServiceStatus[] = [
@@ -160,6 +160,8 @@ const publicDynamicStatuses: readonly StoreServiceStatus[] = [
   "verifying",
   "coming-soon",
 ];
+
+export const mockStoreServicesById: Map<string, StoreServiceRow> = new Map();
 
 let supabase: SupabaseClient | null = null;
 
@@ -255,10 +257,10 @@ export function rowToApiService(row: StoreServiceRow): ApiService {
     expectedAsset: row.expected_asset || (typeof row.raw?.expectedAsset === "string" ? row.raw.expectedAsset : "0x3600000000000000000000000000000000000000"),
     maxTimeoutMs: typeof row.max_timeout_ms === "number" ? row.max_timeout_ms : (typeof row.raw?.maxTimeoutMs === "number" ? row.raw.maxTimeoutMs : 15000),
     maxResponseSizeBytes: typeof row.max_response_size_bytes === "number" ? row.max_response_size_bytes : (typeof row.raw?.maxResponseSizeBytes === "number" ? row.raw.maxResponseSizeBytes : 1048576),
-    walletVerificationStatus: row.wallet_verification_status || (row.raw?.walletVerificationStatus as "unverified" | "verified") || "unverified",
-    endpointVerificationStatus: row.endpoint_verification_status || (row.raw?.endpointVerificationStatus as "unverified" | "verified") || "unverified",
-    walletVerificationChallenge: row.wallet_verification_challenge || (typeof row.raw?.walletVerificationChallenge === "string" ? row.raw.walletVerificationChallenge : ""),
-    endpointVerificationNonce: row.endpoint_verification_nonce || (typeof row.raw?.endpointVerificationNonce === "string" ? row.raw.endpointVerificationNonce : ""),
+    walletVerificationStatus: row.wallet_verification_status || (row.raw?.walletVerificationStatus as "unverified" | "verified" | "failed") || "unverified",
+    endpointVerificationStatus: row.endpoint_verification_status || (row.raw?.endpointVerificationStatus as "unverified" | "verified" | "failed") || "unverified",
+    walletVerificationChallenge: row.wallet_verification_challenge !== undefined ? row.wallet_verification_challenge : (typeof row.raw?.walletVerificationChallenge === "string" || row.raw?.walletVerificationChallenge === null ? row.raw.walletVerificationChallenge : null),
+    endpointVerificationNonce: row.endpoint_verification_nonce !== undefined ? row.endpoint_verification_nonce : (typeof row.raw?.endpointVerificationNonce === "string" || row.raw?.endpointVerificationNonce === null ? row.raw.endpointVerificationNonce : null),
   };
 }
 
@@ -335,8 +337,12 @@ function inputToPayload(input: DynamicStoreServiceInput) {
   if (input.expectedAsset !== undefined) base.expected_asset = input.expectedAsset;
   if (input.maxTimeoutMs !== undefined) base.max_timeout_ms = input.maxTimeoutMs;
   if (input.maxResponseSizeBytes !== undefined) base.max_response_size_bytes = input.maxResponseSizeBytes;
-  if (input.walletVerificationStatus !== undefined) base.wallet_verification_status = input.walletVerificationStatus;
-  if (input.endpointVerificationStatus !== undefined) base.endpoint_verification_status = input.endpointVerificationStatus;
+  if (input.walletVerificationStatus !== undefined || input.sourceType === "external_seller") {
+    base.wallet_verification_status = input.walletVerificationStatus ?? "unverified";
+  }
+  if (input.endpointVerificationStatus !== undefined || input.sourceType === "external_seller") {
+    base.endpoint_verification_status = input.endpointVerificationStatus ?? "unverified";
+  }
   if (input.walletVerificationChallenge !== undefined) base.wallet_verification_challenge = input.walletVerificationChallenge;
   if (input.endpointVerificationNonce !== undefined) base.endpoint_verification_nonce = input.endpointVerificationNonce;
   return base;
@@ -366,8 +372,8 @@ function baseInputPayload(input: DynamicStoreServiceInput) {
       expectedAsset: input.expectedAsset,
       maxTimeoutMs: input.maxTimeoutMs,
       maxResponseSizeBytes: input.maxResponseSizeBytes,
-      walletVerificationStatus: input.walletVerificationStatus,
-      endpointVerificationStatus: input.endpointVerificationStatus,
+      walletVerificationStatus: input.walletVerificationStatus ?? (input.sourceType === "external_seller" ? "unverified" : undefined),
+      endpointVerificationStatus: input.endpointVerificationStatus ?? (input.sourceType === "external_seller" ? "unverified" : undefined),
       walletVerificationChallenge: input.walletVerificationChallenge,
       endpointVerificationNonce: input.endpointVerificationNonce,
     },
@@ -458,6 +464,13 @@ export async function getDynamicStoreServiceRowBySlug(
   slug: string,
   { publicOnly = true }: { publicOnly?: boolean } = {},
 ) {
+  for (const row of mockStoreServicesById.values()) {
+    if (row.slug === slug) {
+      if (publicOnly && !publicDynamicStatuses.includes(row.status)) continue;
+      return row;
+    }
+  }
+
   const client = getServiceSupabase();
   if (!client) return null;
 
@@ -497,6 +510,10 @@ export async function getDynamicStoreServiceBySlug(slug: string) {
 }
 
 export async function getDynamicStoreServiceRowById(id: string) {
+  if (mockStoreServicesById.has(id)) {
+    return mockStoreServicesById.get(id) ?? null;
+  }
+
   const client = getServiceSupabase();
   if (!client) return null;
 
@@ -532,6 +549,19 @@ export async function getStoreServiceBySlug(slug: string) {
 
 export async function createDynamicStoreService(input: DynamicStoreServiceInput) {
   assertNoStaticSlug(input.slug);
+  if (input.sourceType === "external_seller") {
+    input.walletVerificationStatus = "unverified";
+    input.endpointVerificationStatus = "unverified";
+  }
+  if (mockStoreServicesById.size > 0 && process.env.NODE_ENV === "test") {
+    const id = `test-id-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const payload = inputToPayload(input) as unknown as StoreServiceRow;
+    payload.id = id;
+    payload.created_at = new Date().toISOString();
+    payload.updated_at = new Date().toISOString();
+    mockStoreServicesById.set(id, payload);
+    return rowToSellerService(payload);
+  }
   const client = getServiceSupabase({ required: true });
   if (!client) throw new Error("Supabase service role env is required for seller services.");
   let { data, error } = await client
@@ -562,6 +592,12 @@ export async function updateDynamicStoreService(
   input: DynamicStoreServiceInput,
 ) {
   assertNoStaticSlug(input.slug);
+  if (mockStoreServicesById.has(id)) {
+    const existing = mockStoreServicesById.get(id)!;
+    const payload = inputToPayload(input) as any;
+    Object.assign(existing, payload);
+    return rowToSellerService(existing);
+  }
   const client = getServiceSupabase({ required: true });
   if (!client) throw new Error("Supabase service role env is required for seller services.");
   let { data, error } = await client
@@ -592,3 +628,64 @@ export async function updateDynamicStoreService(
 export function categoriesForServices(services: readonly ApiService[]) {
   return Array.from(new Set(services.map((service) => service.category))).sort();
 }
+
+export async function updateVerificationStatus(
+  id: string,
+  updates: {
+    walletVerificationStatus?: string;
+    endpointVerificationStatus?: string;
+    walletVerificationChallenge?: string | null;
+    endpointVerificationNonce?: string | null;
+    status?: StoreServiceStatus;
+  },
+): Promise<void> {
+  if (mockStoreServicesById.has(id)) {
+    const row = mockStoreServicesById.get(id)!;
+    if (updates.walletVerificationStatus !== undefined) row.wallet_verification_status = updates.walletVerificationStatus as any;
+    if (updates.endpointVerificationStatus !== undefined) row.endpoint_verification_status = updates.endpointVerificationStatus as any;
+    if (updates.walletVerificationChallenge !== undefined) row.wallet_verification_challenge = updates.walletVerificationChallenge;
+    if (updates.endpointVerificationNonce !== undefined) row.endpoint_verification_nonce = updates.endpointVerificationNonce;
+    if (updates.status !== undefined) row.status = updates.status;
+    if (row.raw) {
+      if (updates.walletVerificationStatus !== undefined) (row.raw as any).walletVerificationStatus = updates.walletVerificationStatus;
+      if (updates.endpointVerificationStatus !== undefined) (row.raw as any).endpointVerificationStatus = updates.endpointVerificationStatus;
+      if (updates.walletVerificationChallenge !== undefined) (row.raw as any).walletVerificationChallenge = updates.walletVerificationChallenge;
+      if (updates.endpointVerificationNonce !== undefined) (row.raw as any).endpointVerificationNonce = updates.endpointVerificationNonce;
+    }
+    return;
+  }
+
+  const client = getServiceSupabase({ required: true });
+  if (!client) throw new Error("Supabase service role env is required for seller services.");
+
+  const payload: Record<string, unknown> = {};
+  if (updates.walletVerificationStatus !== undefined) payload.wallet_verification_status = updates.walletVerificationStatus;
+  if (updates.endpointVerificationStatus !== undefined) payload.endpoint_verification_status = updates.endpointVerificationStatus;
+  if (updates.walletVerificationChallenge !== undefined) payload.wallet_verification_challenge = updates.walletVerificationChallenge;
+  if (updates.endpointVerificationNonce !== undefined) payload.endpoint_verification_nonce = updates.endpointVerificationNonce;
+  if (updates.status !== undefined) payload.status = updates.status;
+
+  const existing = await getDynamicStoreServiceRowById(id);
+  if (existing && existing.raw) {
+    const newRaw = { ...existing.raw };
+    if (updates.walletVerificationStatus !== undefined) newRaw.walletVerificationStatus = updates.walletVerificationStatus;
+    if (updates.endpointVerificationStatus !== undefined) newRaw.endpointVerificationStatus = updates.endpointVerificationStatus;
+    if (updates.walletVerificationChallenge !== undefined) newRaw.walletVerificationChallenge = updates.walletVerificationChallenge;
+    if (updates.endpointVerificationNonce !== undefined) newRaw.endpointVerificationNonce = updates.endpointVerificationNonce;
+    payload.raw = newRaw;
+  }
+
+  let { error } = await client.from("store_services").update(payload).eq("id", id);
+  if (error && isMissingColumnError(error)) {
+    const fallbackPayload: Record<string, unknown> = {};
+    if (payload.raw !== undefined) fallbackPayload.raw = payload.raw;
+    if (updates.status !== undefined) fallbackPayload.status = updates.status;
+    const res = await client.from("store_services").update(fallbackPayload).eq("id", id);
+    error = res.error;
+  }
+
+  if (error) {
+    throw new Error(safeErrorMessage(error));
+  }
+}
+

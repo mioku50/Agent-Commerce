@@ -7,12 +7,13 @@ import { GatewayClient } from "@circle-fin/x402-batching/client";
 import {
   fetchWithSsrfProtection,
   SSRFProtectionError,
+  verifyDnsSsrf,
   type SsrfFetchOptions,
 } from "./ssrf.ts";
 import {
   validateExternal402Challenge,
   ExternalPaymentValidationError,
-  withSsrfProtectedFetch,
+  hashChallenge,
 } from "./external-fulfillment.ts";
 import type { ApiService } from "../services/registry.ts";
 
@@ -84,9 +85,13 @@ export async function executeExternalSellerProxy({
     );
   }
 
+  let pinnedIps: string[] = [];
   const ssrfOptions: SsrfFetchOptions = {
     maxResponseSizeBytes: service.maxResponseSizeBytes ?? 1_048_576, // 1MB
     maxTimeoutMs: service.maxTimeoutMs ?? 15_000, // 15s
+    onDnsResolved: (ips) => {
+      pinnedIps = ips;
+    },
   };
 
   // Only forward safe, sanitized headers
@@ -181,6 +186,53 @@ export async function executeExternalSellerProxy({
     throw err;
   }
 
+  const initialChallengeHash = hashChallenge(paymentRequiredHeader!);
+
+  let preflightResponse2: Response;
+  try {
+    preflightResponse2 = await fetchWithSsrfProtection(
+      service.fulfillmentUrl,
+      {
+        method,
+        headers: safeHeaders,
+        ...(serializedBody !== undefined ? { body: serializedBody } : {}),
+      },
+      {
+        ...ssrfOptions,
+        pinnedResolvedIps: pinnedIps,
+      },
+    );
+  } catch (err) {
+    if (err instanceof SSRFProtectionError) {
+      throw new ExternalProxyError(
+        `External seller endpoint rejected due to security rules: ${err.message}`,
+        502,
+      );
+    }
+    throw new ExternalProxyError(
+      `Failed to connect to external seller endpoint on challenge re-validation: ${err instanceof Error ? err.message : String(err)}`,
+      502,
+    );
+  }
+
+  if (preflightResponse2.status !== 402) {
+    throw new ExternalProxyError(
+      `External seller endpoint returned status ${preflightResponse2.status} instead of 402 during challenge re-validation.`,
+      502,
+    );
+  }
+
+  const paymentRequiredHeader2 =
+    preflightResponse2.headers.get("PAYMENT-REQUIRED") ||
+    preflightResponse2.headers.get("payment-required");
+
+  if (!paymentRequiredHeader2 || hashChallenge(paymentRequiredHeader2) !== initialChallengeHash) {
+    throw new ExternalProxyError(
+      "Payment-Required challenge changed between attempts — aborting",
+      422,
+    );
+  }
+
   const resolvedPrivateKey = getPlatformBuyerPrivateKey(payerPrivateKey);
   if (!resolvedPrivateKey) {
     throw new ExternalProxyError(
@@ -195,15 +247,19 @@ export async function executeExternalSellerProxy({
   });
 
   try {
-    const payResult = await withSsrfProtectedFetch(
-      () =>
-        gateway.pay(service.fulfillmentUrl!, {
-          method,
-          body: method === "POST" ? body : undefined,
-          headers: safeHeaders,
-        }),
-      ssrfOptions,
-    );
+    const targetUrlObj = new URL(service.fulfillmentUrl);
+    await verifyDnsSsrf(targetUrlObj.hostname, {
+      allowLocalhost:
+        ssrfOptions.allowLocalhostForTesting ??
+        (process.env.ALLOW_LOCAL_SSRF === "true" || process.env.NODE_ENV === "test"),
+      pinnedResolvedIps: pinnedIps,
+    });
+
+    const payResult = await gateway.pay(service.fulfillmentUrl, {
+      method,
+      body: method === "POST" ? body : undefined,
+      headers: safeHeaders,
+    });
 
     return {
       status: 200,

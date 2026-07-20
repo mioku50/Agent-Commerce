@@ -10,6 +10,7 @@ import {
   parseSellerServiceRequest,
   type ValidationContext,
 } from "@/app/api/seller/services/validation";
+import { requireSellerAuth } from "@/lib/seller/session";
 
 type RouteContext = {
   params: Promise<{
@@ -48,8 +49,11 @@ export async function GET(_request: Request, { params }: RouteContext) {
 }
 
 export async function PATCH(request: Request, { params }: RouteContext) {
+  const authReject = requireSellerAuth(request);
+  if (authReject) return authReject;
+
   const { id } = await params;
-  const parsed = await parseSellerServiceRequest(request);
+  const parsed = await parseSellerServiceRequest(request, { isUpdate: true });
 
   if ("error" in parsed) {
     logValidationError("update", parsed.context, parsed.error);

@@ -10,6 +10,7 @@ import {
   parseSellerServiceRequest,
   type ValidationContext,
 } from "@/app/api/seller/services/validation";
+import { requireSellerAuth } from "@/lib/seller/session";
 
 function logValidationError(
   action: string,
@@ -40,7 +41,10 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const parsed = await parseSellerServiceRequest(request);
+  const authReject = requireSellerAuth(request);
+  if (authReject) return authReject;
+
+  const parsed = await parseSellerServiceRequest(request, { isCreation: true });
   if ("error" in parsed) {
     logValidationError("create", parsed.context, parsed.error);
     return NextResponse.json({ error: parsed.error }, { status: parsed.status });

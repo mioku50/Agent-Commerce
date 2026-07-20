@@ -39,6 +39,8 @@ export type SsrfFetchOptions = {
   allowLocalhostForTesting?: boolean;
   allowedHeaders?: string[];
   label?: string;
+  pinnedResolvedIps?: string[];
+  onDnsResolved?: (ips: string[]) => void;
 };
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -179,15 +181,21 @@ export function validateUrlSsrf(
  */
 export async function verifyDnsSsrf(
   hostname: string,
-  options: { allowLocalhost?: boolean } = {},
-): Promise<void> {
+  options: { allowLocalhost?: boolean; pinnedResolvedIps?: string[] } = {},
+): Promise<string[]> {
   const allowLocal =
     options.allowLocalhost ??
     (process.env.ALLOW_LOCAL_SSRF === "true" || process.env.NODE_ENV === "test");
 
   // If hostname is already an IP, we already checked it in validateUrlSsrf
   if (/^[\d.]+$/.test(hostname) || hostname.includes(":")) {
-    return;
+    const cleanIp = hostname.toLowerCase().trim();
+    if (options.pinnedResolvedIps && options.pinnedResolvedIps.length > 0) {
+      if (!options.pinnedResolvedIps.includes(cleanIp)) {
+        throw new SSRFProtectionError("SSRF protection: DNS rebinding detected");
+      }
+    }
+    return [cleanIp];
   }
 
   try {
@@ -196,13 +204,24 @@ export async function verifyDnsSsrf(
       throw new SSRFProtectionError(`SSRF protection: DNS resolution returned no records for "${hostname}"`);
     }
 
+    const resolvedIps: string[] = [];
     for (const record of records) {
       if (isRestrictedIpAddress(record.address, allowLocal)) {
         throw new SSRFProtectionError(
           `SSRF protection: hostname "${hostname}" resolved to restricted IP address "${record.address}" (${record.family === 6 ? "IPv6" : "IPv4"})`,
         );
       }
+      resolvedIps.push(record.address.toLowerCase().trim());
     }
+
+    if (options.pinnedResolvedIps && options.pinnedResolvedIps.length > 0) {
+      const hasMatch = resolvedIps.some((ip) => options.pinnedResolvedIps!.includes(ip));
+      if (!hasMatch) {
+        throw new SSRFProtectionError("SSRF protection: DNS rebinding detected");
+      }
+    }
+
+    return resolvedIps;
   } catch (error) {
     if (error instanceof SSRFProtectionError) {
       throw error;
@@ -267,8 +286,18 @@ export async function fetchWithSsrfProtection(
   // Step 1: Validate URL protocol, hostname rules, and literal IP restrictions
   const validatedUrl = validateUrlSsrf(inputUrl, { allowLocalhost: allowLocal });
 
+  if (process.env.NODE_ENV !== "test" && !options.allowLocalhostForTesting && validatedUrl.protocol !== "https:") {
+    throw new SSRFProtectionError("SSRF protection: HTTPS required in production");
+  }
+
   // Step 2: Verify DNS resolution against private / restricted IPs
-  await verifyDnsSsrf(validatedUrl.hostname, { allowLocalhost: allowLocal });
+  const resolvedIps = await verifyDnsSsrf(validatedUrl.hostname, {
+    allowLocalhost: allowLocal,
+    pinnedResolvedIps: options.pinnedResolvedIps,
+  });
+  if (options.onDnsResolved) {
+    options.onDnsResolved(resolvedIps);
+  }
 
   // Step 3: Filter headers to safe allowlist
   const safeHeaders = filterSafeHeaders(init.headers, options.allowedHeaders);

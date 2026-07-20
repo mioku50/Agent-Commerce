@@ -16,12 +16,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createHash } from "node:crypto";
 import { parseUnits } from "viem";
-import {
-  fetchWithSsrfProtection,
-  SSRFProtectionError,
-  type SsrfFetchOptions,
-} from "./ssrf.ts";
 import type { ApiService } from "../services/registry.ts";
 
 const ARC_TESTNET_NETWORK = "eip155:5042002";
@@ -204,20 +200,6 @@ export function validateExternal402Challenge({
   return summary;
 }
 
-/**
- * Executes a function while temporarily intercepting globalThis.fetch with fetchWithSsrfProtection.
- * Guarantees that third-party SDK calls (like GatewayClient.pay) obey SSRF, redirect, and size limits.
- */
-export async function withSsrfProtectedFetch<T>(
-  fn: () => Promise<T>,
-  options?: SsrfFetchOptions,
-): Promise<T> {
-  const originalFetch = globalThis.fetch;
-  try {
-    globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit) =>
-      fetchWithSsrfProtection(input, init, options);
-    return await fn();
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+export function hashChallenge(header: string): string {
+  return createHash("sha256").update(header).digest("hex");
 }

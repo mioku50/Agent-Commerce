@@ -27,18 +27,38 @@ async function invokeSellerService(
     return NextResponse.json({ error: "Service not found" }, { status: 404 });
   }
 
-  if (row.status !== "live" && row.status !== "verifying") {
-    return NextResponse.json(
-      { error: "This seller-created service is not live or under verification." },
-      { status: 403 },
-    );
-  }
-
-  if (row.source_type !== "seller_mock" && row.source_type !== "external_seller") {
-    return NextResponse.json(
-      { error: "External fulfillment is not enabled in this MVP." },
-      { status: 501 },
-    );
+  if (row.source_type === "external_seller") {
+    if (process.env.EXTERNAL_SELLER_FULFILLMENT_ENABLED !== "true") {
+      return NextResponse.json(
+        { error: "external_seller_fulfillment_disabled" },
+        { status: 503 },
+      );
+    }
+    if (row.status !== "live") {
+      return NextResponse.json({ error: "service_not_live" }, { status: 403 });
+    }
+    const walletVerified =
+      row.wallet_verification_status === "verified" ||
+      (row.raw?.walletVerificationStatus as string) === "verified";
+    const endpointVerified =
+      row.endpoint_verification_status === "verified" ||
+      (row.raw?.endpointVerificationStatus as string) === "verified";
+    if (!walletVerified || !endpointVerified) {
+      return NextResponse.json({ error: "service_not_verified" }, { status: 403 });
+    }
+  } else {
+    if (row.status !== "live" && row.status !== "verifying") {
+      return NextResponse.json(
+        { error: "This seller-created service is not live or under verification." },
+        { status: 403 },
+      );
+    }
+    if (row.source_type !== "seller_mock") {
+      return NextResponse.json(
+        { error: "External fulfillment is not enabled in this MVP." },
+        { status: 501 },
+      );
+    }
   }
 
   if (row.method !== method) {
