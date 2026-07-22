@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { decodeFunctionData } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
+
 import { buildFundingIntent, ERC20_ABI } from "../lib/byoa/funding.ts";
 import { ARC_TESTNET_USDC_ADDRESS } from "../lib/wallet/arc.ts";
 
@@ -28,7 +30,33 @@ assert.equal(intentArc.recipientFixed.toLowerCase(), agentWallet.toLowerCase(), 
 assert.equal(intentArc.amountUsdc, "5.500000");
 assert.equal(intentArc.amountAtomic, "5500000");
 assert.equal(intentArc.contractTarget, ARC_TESTNET_USDC_ADDRESS);
+
+
 assert(intentArc.callData.startsWith("0xa9059cbb"), "callData must start with ERC20 transfer selector 0xa9059cbb.");
+
+const decoded = decodeFunctionData({
+  abi: ERC20_ABI,
+  data: intentArc.callData,
+});
+assert.equal(decoded.functionName, "transfer");
+assert.equal((decoded.args as [string, bigint])[0].toLowerCase(), agentWallet.toLowerCase());
+assert.equal((decoded.args as [string, bigint])[1], 5500000n);
+
+// Verify 0.01 USDC (10000 atomic units) calldata encoding for Phase 29.2 proof criteria
+const intent001 = buildFundingIntent({
+  agentId: "agt_11111111111111111111",
+  agentWallet,
+  method: "arc_transfer",
+  amountUsdc: "0.01",
+});
+const decoded001 = decodeFunctionData({
+  abi: ERC20_ABI,
+  data: intent001.callData,
+});
+assert.equal(decoded001.functionName, "transfer");
+assert.equal((decoded001.args as [string, bigint])[0].toLowerCase(), agentWallet.toLowerCase());
+assert.equal((decoded001.args as [string, bigint])[1], 10000n);
+
 
 // Verify NO simulation strings exist
 const jsonStr = JSON.stringify(intentArc).toLowerCase();

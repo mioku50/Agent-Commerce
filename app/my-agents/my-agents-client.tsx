@@ -451,18 +451,21 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
   }
 
   async function executeFundingTransaction() {
-    if (!selected || !fundingIntent || !wallet.address) return;
+    if (!selected || !fundingIntent || !fundingIntent.supported || !wallet.address) return;
     setBusy(true);
     setError(null);
     try {
-      const txHash = await wallet.sendWorkflowPayment({
-        treasuryAddress: fundingIntent.contractTarget,
-        amountUsdc: Number(fundingIntent.amountUsdc),
+      // Execute ERC-20 transfer(agentWallet, atomicAmount) call to Arc USDC contract with value: 0x0
+      const txHash = await wallet.sendTransaction({
+        to: fundingIntent.contractTarget as `0x${string}`,
+        data: fundingIntent.callData,
+        value: "0x0",
       });
 
       if (!txHash || typeof txHash !== "string" || !txHash.startsWith("0x")) {
         throw new Error("Transaction failed or rejected by wallet.");
       }
+
 
 
       // Refetch balance

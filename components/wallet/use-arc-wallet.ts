@@ -383,6 +383,38 @@ export function useArcWallet() {
     }
   }, [address]);
 
+  const sendTransaction = useCallback(async (params: {
+    to: Address;
+    data?: Hex;
+    value?: Hex;
+  }) => {
+    const provider = getProvider();
+    if (!provider || !address) throw new Error("Connect a wallet before sending transaction.");
+    const currentChain = parseChainId(
+      await provider.request<string>({ method: "eth_chainId" }),
+    );
+    if (currentChain !== ARC_TESTNET_CHAIN_ID) {
+      throw new Error("Switch to Arc Testnet before sending transaction.");
+    }
+    try {
+      const transactionHash = await provider.request<Hex>({
+        method: "eth_sendTransaction",
+        params: [{
+          from: address,
+          to: getAddress(params.to),
+          value: params.value ?? "0x0",
+          data: params.data ?? "0x",
+        }],
+      });
+      setError(null);
+      return transactionHash;
+    } catch (caught) {
+      const message = getErrorMessage(caught);
+      setError(message);
+      throw caught;
+    }
+  }, [address]);
+
   return {
     address,
     chainId,
@@ -402,6 +434,8 @@ export function useArcWallet() {
     signMessage,
     signTypedData,
     sendWorkflowPayment,
+    sendTransaction,
     setError,
   };
 }
+
