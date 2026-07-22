@@ -32,6 +32,22 @@ export async function signAndSendByoaX402Payment(input: {
     throw new Error("Connect the registered external agent wallet before signing.");
   }
 
+  let parsedUrl: URL;
+  try {
+    const base = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+    parsedUrl = new URL(input.resourceUrl, base);
+    if (typeof window !== "undefined" && parsedUrl.origin !== window.location.origin) {
+      throw new Error("resourceUrl must be a same-origin route.");
+    }
+  } catch (err) {
+    throw new Error(err instanceof Error && err.message.includes("same-origin") ? err.message : "resourceUrl is invalid.");
+  }
+
+  if (!/^\/api\/byoa\/v1\/quotes\/[0-9a-f-]{36}\/execute$/i.test(parsedUrl.pathname)) {
+    throw new Error("resourceUrl must be an allowlisted BYOA execute route.");
+  }
+
+
   const requirements = {
     scheme: "exact",
     network: "eip155:5042002",

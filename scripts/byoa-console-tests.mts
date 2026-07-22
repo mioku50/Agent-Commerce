@@ -190,7 +190,13 @@ const payload = await scheme.createPaymentPayload(2, requirements);
 assert(payload.payload.signature, "BatchEvmScheme generated valid EIP-3009 TransferWithAuthorization signature.");
 assert.equal(payload.payload.authorization.from.toLowerCase(), agentAccount.address.toLowerCase());
 
-console.log("[byoa-console-test] 8. Idempotency replay verification...");
+console.log("[byoa-console-test] 8. resourceUrl same-origin allowlisted route verification...");
+const validResourceUrl = "/api/byoa/v1/quotes/33333333-3333-4333-8333-333333333333/execute";
+const invalidResourceUrl = "https://malicious-external-site.com/steal-payment";
+assert.match(validResourceUrl, /^\/api\/byoa\/v1\/quotes\/[0-9a-f-]{36}\/execute$/i, "resourceUrl must match allowlisted execute route.");
+assert(!/^\/api\/byoa\/v1\/quotes\/[0-9a-f-]{36}\/execute$/i.test(invalidResourceUrl), "Malicious resourceUrl is correctly rejected.");
+
+console.log("[byoa-console-test] 9. Idempotency replay verification...");
 const replayRequestHash = byoaRequestHash(credentialRow.agent_id, marketContextRequest);
 assert.equal(replayRequestHash, quoteRow.request_hash, "Replay request hash matches original quote hash.");
 

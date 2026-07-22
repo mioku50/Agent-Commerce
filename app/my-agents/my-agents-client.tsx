@@ -233,14 +233,9 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
     setPolicyDailyCalls(String(detail.policy.maxDailyCalls));
   }, [detail]);
 
-  // Critical requirement: Session invalidation when connected wallet != verified owner wallet
-  useEffect(() => {
-    if (!ownerWallet) return;
-    if (!wallet.address || wallet.address.toLowerCase() !== ownerWallet.toLowerCase() || !wallet.isArcTestnet) {
-      void endOwnerSession();
-      setError("Connected wallet differs from verified owner wallet or is not on Arc Testnet. Management session invalidated.");
-    }
-  }, [wallet.address, wallet.isArcTestnet, ownerWallet, endOwnerSession]);
+  // Note: Owner management session is authenticated via HttpOnly cookie.
+  // Connected wallet can be switched to external agent wallet without dropping owner session.
+
 
   async function act(action: () => Promise<void>) {
     setBusy(true);
@@ -580,9 +575,16 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
             The owner wallet manages policy and credentials. It never signs or pays for workflows unless registered separately as the external agent wallet.
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            {wallet.address ? <Badge variant="outline">Connected: {shortenHash(wallet.address, 7)}</Badge> : <Badge variant="outline">No wallet connected</Badge>}
+            {wallet.address ? <Badge variant="outline">Connected Wallet: {shortenHash(wallet.address, 7)}</Badge> : <Badge variant="outline">No wallet connected</Badge>}
             {wallet.isArcTestnet ? <Badge variant="secondary">Arc Testnet (5042002)</Badge> : <Badge variant="destructive">Wrong network (Switch to Arc)</Badge>}
-            {ownerWallet ? <Badge className="bg-emerald-600">Verified Owner: {shortenHash(ownerWallet, 7)}</Badge> : <Badge variant="outline">Session unverified</Badge>}
+            {ownerWallet ? <Badge className="bg-emerald-600">Verified Owner Session: {shortenHash(ownerWallet, 7)}</Badge> : <Badge variant="outline">Session unverified</Badge>}
+
+            {wallet.address && ownerWallet && wallet.address.toLowerCase() === ownerWallet.toLowerCase() ? (
+              <Badge className="bg-blue-600">Connected as Owner Wallet</Badge>
+            ) : wallet.address && selected?.agentWallet && wallet.address.toLowerCase() === selected.agentWallet.toLowerCase() ? (
+              <Badge className="bg-purple-600">Connected as External Agent Wallet (Payment Signer)</Badge>
+            ) : null}
+
 
             {!wallet.address ? (
               <Button onClick={() => void wallet.connect()} disabled={busy}>Connect Wallet</Button>
