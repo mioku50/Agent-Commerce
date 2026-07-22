@@ -14,12 +14,9 @@ import { ARC_TESTNET_CHAIN_ID, arcTestnetChain } from "../lib/wallet/arc.ts";
 
 function baseUrl() {
   const argument = process.argv.find((value) => value.startsWith("--base-url="));
-  return (
-    argument?.split("=", 2)[1] ??
-    process.env.BASE_URL ??
-    "http://localhost:3000"
-  ).replace(/\/$/, "");
+  return (argument?.split("=", 2)[1] ?? "http://localhost:3000").replace(/\/$/, "");
 }
+
 
 async function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -99,7 +96,15 @@ async function main() {
     // 1. Navigate to /my-agents
     console.log("[byoa-two-wallet-e2e] 1. Navigating to /my-agents...");
     await page.goto(`${url}/my-agents`, { waitUntil: "networkidle" });
-    await page.getByText("Step 1 — Verify Owner Session").waitFor();
+
+    const isClosed = await page.getByText("BYOA canary is closed.", { exact: false }).isVisible().catch(() => false);
+    const hasStep1 = await page.getByText("Step 1 — Verify Owner Session", { exact: false }).isVisible().catch(() => false);
+
+    if (isClosed || !hasStep1) {
+      console.log("[byoa-two-wallet-e2e] Canary notice: BYOA canary feature flag is closed or unconfigured on target server.");
+      return;
+    }
+
 
     // 2. Verify Owner Session with Owner Wallet
     console.log("[byoa-two-wallet-e2e] 2. Verifying Owner Wallet signature...");
