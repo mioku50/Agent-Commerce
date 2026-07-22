@@ -8,7 +8,7 @@ import {
   type Address,
   type Hex,
 } from "viem";
-import { ARC_TESTNET_CHAIN_ID, ARC_TESTNET_USDC_ADDRESS, arcTestnetChain } from "../wallet/arc.ts";
+import { ARC_TESTNET_USDC_ADDRESS, arcTestnetChain } from "../wallet/arc.ts";
 
 export type FundingMethod = "arc_transfer" | "cctp_bridge" | "gateway_deposit";
 
@@ -16,6 +16,8 @@ export type FundingIntent = {
   agentId: string;
   agentWallet: string;
   method: FundingMethod;
+  supported: boolean;
+  unavailableReason?: string;
   amountUsdc: string;
   amountAtomic: string;
   sourceChain: string;
@@ -27,7 +29,28 @@ export type FundingIntent = {
   previewSummary: string;
 };
 
-const ERC20_TRANSFER_ABI = [
+export const ERC20_ABI = [
+  {
+    name: "balanceOf",
+    type: "function",
+    stateMutability: "view",
+    inputs: [{ name: "account", type: "address" }],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    name: "decimals",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint8" }],
+  },
+  {
+    name: "symbol",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "string" }],
+  },
   {
     name: "transfer",
     type: "function",
@@ -37,6 +60,26 @@ const ERC20_TRANSFER_ABI = [
       { name: "value", type: "uint256" },
     ],
     outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "approve",
+    type: "function",
+    stateMutability: "nonpayable",
+    inputs: [
+      { name: "spender", type: "address" },
+      { name: "value", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+  },
+  {
+    name: "allowance",
+    type: "function",
+    stateMutability: "view",
+    inputs: [
+      { name: "owner", type: "address" },
+      { name: "spender", type: "address" },
+    ],
+    outputs: [{ name: "", type: "uint256" }],
   },
 ] as const;
 
@@ -58,7 +101,7 @@ export function buildFundingIntent(input: {
 
   if (input.method === "arc_transfer") {
     const callData = encodeFunctionData({
-      abi: ERC20_TRANSFER_ABI,
+      abi: ERC20_ABI,
       functionName: "transfer",
       args: [agentWalletFixed, BigInt(atomicAmount)],
     });
@@ -67,6 +110,7 @@ export function buildFundingIntent(input: {
       agentId: input.agentId,
       agentWallet: agentWalletFixed,
       method: "arc_transfer",
+      supported: true,
       amountUsdc: formattedUsdc,
       amountAtomic: atomicAmount,
       sourceChain: "Arc Testnet (5042002)",
@@ -80,52 +124,40 @@ export function buildFundingIntent(input: {
   }
 
   if (input.method === "cctp_bridge") {
-    // CCTP TokenMessenger depositForBurn call simulation for Arc (Domain 26)
-    const cctpTarget = "0x9f3B8679c73C2Fef8b59B4f3444d4d156fb70AA5" as Address;
-    const callData = encodeFunctionData({
-      abi: ERC20_TRANSFER_ABI, // simulated bridge transfer
-      functionName: "transfer",
-      args: [agentWalletFixed, BigInt(atomicAmount)],
-    });
-
     return {
       agentId: input.agentId,
       agentWallet: agentWalletFixed,
       method: "cctp_bridge",
+      supported: false,
+      unavailableReason: "Unavailable in current environment. CCTP crosschain domain binding requires mainnet or custom bridge relayer.",
       amountUsdc: formattedUsdc,
       amountAtomic: atomicAmount,
-      sourceChain: "Sepolia / External Chain",
+      sourceChain: "External Chain",
       destinationChain: "Arc Testnet (Domain 26)",
       recipientFixed: agentWalletFixed,
-      contractTarget: cctpTarget,
-      callData,
-      estimatedFeeUsdc: "0.000500",
-      previewSummary: `CCTP Bridge: Burn & mint ${formattedUsdc} USDC to ${agentWalletFixed.slice(0, 6)}...${agentWalletFixed.slice(-4)} on Arc Testnet.`,
+      contractTarget: "",
+      callData: "0x",
+      estimatedFeeUsdc: "0.000000",
+      previewSummary: "CCTP Bridge is unavailable in current testnet environment.",
     };
   }
 
   if (input.method === "gateway_deposit") {
-    // Gateway deposit target simulation
-    const gatewayTarget = "0x0077777d7EBA4688BDeF3E311b846F25870A19B9" as Address;
-    const callData = encodeFunctionData({
-      abi: ERC20_TRANSFER_ABI,
-      functionName: "transfer",
-      args: [agentWalletFixed, BigInt(atomicAmount)],
-    });
-
     return {
       agentId: input.agentId,
       agentWallet: agentWalletFixed,
       method: "gateway_deposit",
+      supported: false,
+      unavailableReason: "Unavailable in current environment. Gateway Nanopayments deposit pool is not active on this testnet node.",
       amountUsdc: formattedUsdc,
       amountAtomic: atomicAmount,
       sourceChain: "Arc Testnet (5042002)",
       destinationChain: "Gateway Nanopayments Pool",
       recipientFixed: agentWalletFixed,
-      contractTarget: gatewayTarget,
-      callData,
-      estimatedFeeUsdc: "0.000200",
-      previewSummary: `Gateway Deposit: Fund ${formattedUsdc} USDC into Gateway unified balance for Agent Wallet.`,
+      contractTarget: "",
+      callData: "0x",
+      estimatedFeeUsdc: "0.000000",
+      previewSummary: "Gateway Deposit is unavailable in current testnet environment.",
     };
   }
 
@@ -136,15 +168,12 @@ export async function getAgentWalletUsdcBalance(walletAddress: string): Promise<
   const rpcUrl = process.env.ARC_TESTNET_RPC_URL?.trim() || arcTestnetChain.rpcUrls.default.http[0];
   const publicClient = createPublicClient({ chain: arcTestnetChain, transport: http(rpcUrl) });
 
-  try {
-    const rawBalance = await publicClient.readContract({
-      address: ARC_TESTNET_USDC_ADDRESS as Address,
-      abi: ERC20_TRANSFER_ABI,
-      functionName: "balanceOf" as any,
-      args: [getAddress(walletAddress)],
-    });
-    return formatUnits(rawBalance as bigint, 6);
-  } catch {
-    return "0.000000";
-  }
+  const rawBalance = await publicClient.readContract({
+    address: ARC_TESTNET_USDC_ADDRESS as Address,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [getAddress(walletAddress)],
+  });
+
+  return formatUnits(rawBalance as bigint, 6);
 }

@@ -96,7 +96,8 @@ async function main() {
     console.log("[byoa-funding-e2e] 4. Opening Fund Agent Wallet Modal...");
     await page.getByRole("button", { name: "Fund Agent Wallet" }).click();
     await page.getByText("Fixed Recipient (Agent Wallet):").waitFor();
-    await page.getByText(agentAccount.address).waitFor();
+    await page.getByText(agentAccount.address).first().waitFor();
+
 
     console.log("[byoa-funding-e2e] 5. Previewing Funding Intent...");
     await page.locator("#funding-amount").fill("2.5");

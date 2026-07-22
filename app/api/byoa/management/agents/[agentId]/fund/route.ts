@@ -32,10 +32,17 @@ export async function POST(request: NextRequest, { params }: Context) {
       amountUsdc,
     });
 
-    const currentAgentBalance = await getAgentWalletUsdcBalance(detail.agent.agentWallet);
+    let currentAgentBalance = "0.000000";
+    try {
+      currentAgentBalance = await getAgentWalletUsdcBalance(detail.agent.agentWallet);
+    } catch (err) {
+      console.warn("[byoa-funding] Could not fetch live agent balance:", err);
+    }
 
-
-    return NextResponse.json({ intent, currentAgentBalance }, { headers: { "Cache-Control": "no-store" } });
+    return NextResponse.json(
+      { intent, supported: intent.supported, currentAgentBalance },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     return byoaErrorResponse(error);
   }

@@ -455,16 +455,15 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
     setBusy(true);
     setError(null);
     try {
-      // Execute transaction with connected wallet
       const txHash = await wallet.sendWorkflowPayment({
         treasuryAddress: fundingIntent.contractTarget,
         amountUsdc: Number(fundingIntent.amountUsdc),
-      }).catch(() => {
-
-
-        // Fallback hex transaction hash for simulated test run if wallet is in test mock mode
-        return "0x" + Array.from(crypto.getRandomValues(new Uint8Array(32))).map(b => b.toString(16).padStart(2, "0")).join("");
       });
+
+      if (!txHash || typeof txHash !== "string" || !txHash.startsWith("0x")) {
+        throw new Error("Transaction failed or rejected by wallet.");
+      }
+
 
       // Refetch balance
       const res = await jsonFetch(`/api/byoa/management/agents/${selected.id}/fund`, {
@@ -934,35 +933,45 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
 
                     {/* Pre-Signature Route Preview */}
                     {fundingIntent ? (
-                      <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 grid gap-3">
-                        <span className="font-semibold text-sm text-emerald-600">Pre-Signature Route Preview</span>
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                          <div>
-                            <span className="text-muted-foreground block">Source Chain</span>
-                            <span className="font-medium">{fundingIntent.sourceChain}</span>
+                      fundingIntent.supported ? (
+                        <div className="rounded-md border border-emerald-500/30 bg-emerald-500/5 p-4 grid gap-3">
+                          <span className="font-semibold text-sm text-emerald-600">Pre-Signature Route Preview</span>
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                            <div>
+                              <span className="text-muted-foreground block">Source Chain</span>
+                              <span className="font-medium">{fundingIntent.sourceChain}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block">Destination</span>
+                              <span className="font-medium">{fundingIntent.destinationChain}</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block">Amount</span>
+                              <span className="font-semibold text-emerald-600">{fundingIntent.amountUsdc} USDC</span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block">Est. Fee</span>
+                              <span className="font-medium">{fundingIntent.estimatedFeeUsdc} USDC</span>
+                            </div>
                           </div>
-                          <div>
-                            <span className="text-muted-foreground block">Destination</span>
-                            <span className="font-medium">{fundingIntent.destinationChain}</span>
+                          <div className="text-xs text-muted-foreground border-t pt-2">
+                            <strong>Target Contract:</strong> <code className="font-mono">{fundingIntent.contractTarget}</code>
                           </div>
-                          <div>
-                            <span className="text-muted-foreground block">Amount</span>
-                            <span className="font-semibold text-emerald-600">{fundingIntent.amountUsdc} USDC</span>
-                          </div>
-                          <div>
-                            <span className="text-muted-foreground block">Est. Fee</span>
-                            <span className="font-medium">{fundingIntent.estimatedFeeUsdc} USDC</span>
-                          </div>
-                        </div>
-                        <div className="text-xs text-muted-foreground border-t pt-2">
-                          <strong>Target Contract:</strong> <code className="font-mono">{fundingIntent.contractTarget}</code>
-                        </div>
 
-                        <Button className="bg-emerald-600 hover:bg-emerald-700 mt-2" onClick={() => void executeFundingTransaction()} disabled={busy}>
-                          Confirm & Execute Transfer
-                        </Button>
-                      </div>
+                          <Button className="bg-emerald-600 hover:bg-emerald-700 mt-2" onClick={() => void executeFundingTransaction()} disabled={busy}>
+                            Confirm & Execute Transfer
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="rounded-md border border-amber-500/50 bg-amber-500/10 p-4 grid gap-2 text-xs">
+                          <span className="font-semibold text-amber-600 flex items-center gap-1.5">
+                            <ShieldAlert className="size-4" /> Unavailable in current environment
+                          </span>
+                          <p className="text-muted-foreground">{fundingIntent.unavailableReason}</p>
+                        </div>
+                      )
                     ) : null}
+
 
                     {/* Post-Transaction Result Badge */}
                     {fundingResult ? (
