@@ -524,6 +524,10 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
         await new Promise((r) => setTimeout(r, 2000));
       }
 
+      if (!finalResultData) {
+        throw new Error("Timed out waiting for BYOA workflow completion.");
+      }
+
       // Capture empirical baseline metrics if performing replay
       const baselineJobId = testResult?.job?.id;
       const baselinePaymentId = testResult?.aggregateWorkflowPayment?.id;
@@ -548,11 +552,19 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
         const updatedRemainingUsdc = freshDetail?.policy?.remainingDailyUsdc ?? "0";
         const updatedDailyCalls = freshDetail?.policy?.dailyCallCount ?? 0;
 
+        const receiptsValid =
+          baselineReceiptIds.length > 0 &&
+          JSON.stringify(replayReceiptIds) === JSON.stringify(baselineReceiptIds);
+
+        const proofsValid =
+          baselineProofHashes.length > 0 &&
+          JSON.stringify(replayProofHashes) === JSON.stringify(baselineProofHashes);
+
         setReplayProof({
           sameJobId: Boolean(executeResult.idempotent && replayJobId && replayJobId === baselineJobId),
           noDuplicatePayment: Boolean(executeResult.idempotent && replayPaymentId && replayPaymentId === baselinePaymentId),
-          noNewReceipts: JSON.stringify(replayReceiptIds) === JSON.stringify(baselineReceiptIds),
-          noNewProofs: JSON.stringify(replayProofHashes) === JSON.stringify(baselineProofHashes),
+          noNewReceipts: receiptsValid,
+          noNewProofs: proofsValid,
           allowancePreserved: updatedDailySpent === baselineDailySpent && updatedRemainingUsdc === baselineRemainingUsdc,
           callCountPreserved: updatedDailyCalls === baselineDailyCalls,
           jobId: baselineJobId ?? "",
@@ -562,6 +574,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
           dailySpentUsdc: baselineDailySpent,
         });
       }
+
 
     } catch (caught) {
       setRunnerState("error");
