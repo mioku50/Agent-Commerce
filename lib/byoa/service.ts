@@ -442,6 +442,23 @@ export async function activateAgentWallet(ownerWallet: Address, agentId: string)
   return managementAgent(data as ByoaAgentRow);
 }
 
+export async function updateAgentStatus(ownerWallet: Address, agentId: string, status: "active" | "suspended" | "revoked") {
+  const agent = await getOwnerAgent(ownerWallet, agentId);
+  if (!["active", "suspended", "revoked"].includes(status)) {
+    throw new ByoaError("Invalid agent status.", "invalid_status");
+  }
+  const { data, error } = await getByoaClient()
+    .from("byoa_agents")
+    .update({ status })
+    .eq("id", agent.id)
+    .ilike("owner_wallet", ownerWallet)
+    .select("*")
+    .single();
+  if (error) throw new ByoaError("Unable to update agent status.", "database_unavailable", 503);
+  return managementAgent(data as ByoaAgentRow);
+}
+
+
 const allowedWorkflowValues = ["sentiment_tone", "builder_update", "market_context", "custom_task"] as const;
 const allowedServiceTypeValues = ["internal_deterministic", "live_provider", "seller_created", "external_seller"] as const;
 

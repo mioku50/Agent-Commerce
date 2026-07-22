@@ -361,6 +361,28 @@ export function useArcWallet() {
     }
   }, [address]);
 
+  const signTypedData = useCallback(async (params: {
+    domain: Record<string, unknown>;
+    types: Record<string, unknown>;
+    primaryType: string;
+    message: Record<string, unknown>;
+  }) => {
+    const provider = getProvider();
+    if (!provider || !address) throw new Error("Connect a wallet before signing.");
+    try {
+      const signature = await provider.request<Hex>({
+        method: "eth_signTypedData_v4",
+        params: [address, JSON.stringify(params)],
+      });
+      setError(null);
+      return signature;
+    } catch (caught) {
+      const message = getErrorMessage(caught);
+      setError(message);
+      throw caught;
+    }
+  }, [address]);
+
   return {
     address,
     chainId,
@@ -378,6 +400,7 @@ export function useArcWallet() {
     loadBalances,
     refresh,
     signMessage,
+    signTypedData,
     sendWorkflowPayment,
     setError,
   };

@@ -34,6 +34,7 @@
     "seller:integration-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/external-seller-integration-tests.mts",
     "seller:security-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/security-exploit-tests.mts",
     "byoa:test": "node --experimental-transform-types --no-warnings scripts/byoa-tests.mts",
+    "byoa:console-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-console-tests.mts",
     "byoa:db-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-db-tests.mts",
     "byoa:settlement-db-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-settlement-recovery-db-test.mts",
     "byoa:canary": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-canary.mts",
