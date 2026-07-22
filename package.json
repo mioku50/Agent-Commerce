@@ -36,6 +36,7 @@
     "byoa:test": "node --experimental-transform-types --no-warnings scripts/byoa-tests.mts",
     "byoa:console-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-console-tests.mts",
     "byoa:two-wallet-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-two-wallet-e2e.mts",
+    "byoa:two-wallet-canary": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-two-wallet-canary.mts",
     "byoa:db-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-db-tests.mts",
     "byoa:settlement-db-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-settlement-recovery-db-test.mts",
     "byoa:canary": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-canary.mts",

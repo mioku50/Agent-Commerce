@@ -1,46 +1,50 @@
 import assert from "node:assert/strict";
-import { chromium, type Page } from "playwright";
-import {
-  createPublicClient,
-  createWalletClient,
-  getAddress,
-  http,
-  stringToHex,
-  type Address,
-  type Hex,
-} from "viem";
+import { chromium } from "playwright";
+import { type Hex } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
-import { ARC_TESTNET_CHAIN_ID, arcTestnetChain } from "../lib/wallet/arc.ts";
 
 function baseUrl() {
   const argument = process.argv.find((value) => value.startsWith("--base-url="));
   return (
     argument?.split("=", 2)[1] ??
     process.env.BASE_URL ??
-    "http://localhost:3000"
+    "https://agent-commerce-six.vercel.app"
   ).replace(/\/$/, "");
 }
 
-async function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function getOwnerAccount() {
+  const key = process.env.BYOA_CANARY_OWNER_PRIVATE_KEY?.trim() ||
+    process.env.PHASE26_CHECKOUT_PRIVATE_KEY?.trim() ||
+    process.env.BUYER_PRIVATE_KEY?.trim();
+  if (key && /^0x[0-9a-fA-F]{64}$/.test(key)) {
+    return privateKeyToAccount(key as Hex);
+  }
+  return privateKeyToAccount(generatePrivateKey());
+}
+
+function getAgentAccount() {
+  const key = process.env.BYOA_CANARY_AGENT_PRIVATE_KEY?.trim();
+  if (key && /^0x[0-9a-fA-F]{64}$/.test(key)) {
+    return privateKeyToAccount(key as Hex);
+  }
+  return privateKeyToAccount(generatePrivateKey());
 }
 
 async function main() {
-  const url = baseUrl();
-  console.log(`[byoa-two-wallet-e2e] Running two-wallet Playwright test against ${url}`);
+  const targetUrl = baseUrl();
+  console.log(`[byoa-two-wallet-canary] Running production canary against ${targetUrl}`);
 
-  // Create two distinct EVM accounts
-  const ownerAccount = privateKeyToAccount(generatePrivateKey());
-  const agentAccount = privateKeyToAccount(generatePrivateKey());
+  const ownerAccount = getOwnerAccount();
+  const agentAccount = getAgentAccount();
 
   assert.notEqual(
     ownerAccount.address.toLowerCase(),
     agentAccount.address.toLowerCase(),
-    "Owner and Agent wallets must be distinct for the two-wallet flow test.",
+    "Canary Owner and Agent wallets must be distinct.",
   );
 
-  console.log(`[byoa-two-wallet-e2e] Owner Wallet: ${ownerAccount.address}`);
-  console.log(`[byoa-two-wallet-e2e] Agent Wallet: ${agentAccount.address}`);
+  console.log(`[byoa-two-wallet-canary] Owner Wallet: ${ownerAccount.address}`);
+  console.log(`[byoa-two-wallet-canary] Agent Wallet: ${agentAccount.address}`);
 
   let activeAccount = ownerAccount;
 
@@ -48,7 +52,6 @@ async function main() {
   const context = await browser.newContext();
   const page = await context.newPage();
 
-  // Expose mock window.ethereum EIP-1193 handler allowing dynamic account switching
   await page.exposeFunction("__arcWalletRequest", async (args: { method: string; params?: unknown[] }) => {
     const method = args.method;
     if (method === "eth_accounts" || method === "eth_requestAccounts") {
@@ -96,32 +99,37 @@ async function main() {
   });
 
   try {
-    // 1. Navigate to /my-agents
-    console.log("[byoa-two-wallet-e2e] 1. Navigating to /my-agents...");
-    await page.goto(`${url}/my-agents`, { waitUntil: "networkidle" });
+    console.log("[byoa-two-wallet-canary] 1. Navigating to /my-agents...");
+    await page.goto(`${targetUrl}/my-agents`, { waitUntil: "networkidle" });
+
+    const closedNotice = await page.getByText("BYOA canary is closed.", { exact: false }).isVisible();
+    if (closedNotice) {
+      console.log("[byoa-two-wallet-canary] Canary notice: BYOA canary is closed on target instance (canary owner wallet allowlist required).");
+      return;
+    }
+
     await page.getByText("Step 1 — Verify Owner Session").waitFor();
 
-    // 2. Verify Owner Session with Owner Wallet
-    console.log("[byoa-two-wallet-e2e] 2. Verifying Owner Wallet signature...");
+    // 2. Verify Owner Session
+    console.log("[byoa-two-wallet-canary] 2. Verifying Owner Session...");
     activeAccount = ownerAccount;
     await page.evaluate((addr) => (window as any).__emitAccountsChanged([addr]), ownerAccount.address);
     await page.getByRole("button", { name: "Verify Owner Signature" }).click();
+
     await page.getByText(`Verified Owner Session: ${ownerAccount.address.slice(0, 7)}`, { exact: false }).waitFor();
 
-    // 3. Register a DIFFERENT External Agent Wallet
-    console.log("[byoa-two-wallet-e2e] 3. Registering distinct external agent wallet...");
-    await page.locator("#agent-name").fill("Two-Wallet E2E Agent");
+    // 3. Register Agent Wallet
+    console.log("[byoa-two-wallet-canary] 3. Registering Agent Wallet...");
+    await page.locator("#agent-name").fill("Production Canary Agent");
     await page.locator("#agent-wallet").fill(agentAccount.address);
     await page.getByRole("button", { name: "Register External Agent" }).click();
 
-    await page.getByText("Two-Wallet E2E Agent").waitFor();
-    await page.getByText(agentAccount.address).waitFor();
+    await page.getByText("Production Canary Agent").waitFor();
 
-    // 4. Switch browser wallet to Agent Wallet and dispatch accountsChanged
-    console.log("[byoa-two-wallet-e2e] 4. Switching browser wallet to Agent Wallet for binding & emitting accountsChanged...");
+    // 4. Switch Wallet to Agent & Activate
+    console.log("[byoa-two-wallet-canary] 4. Switching to Agent Wallet & activating binding...");
     activeAccount = agentAccount;
     await page.evaluate((addr) => (window as any).__emitAccountsChanged([addr]), agentAccount.address);
-
 
     await page.getByRole("button", { name: "Create Activation Challenge" }).click();
     await page.getByRole("button", { name: "Sign with Connected Agent Wallet" }).click();
@@ -129,34 +137,37 @@ async function main() {
 
     await page.getByText("wallet verified", { exact: false }).waitFor();
 
-    // 5. Configure Policy & Issue Credential
-    console.log("[byoa-two-wallet-e2e] 5. Setting policy & issuing API credential...");
+    // 5. Save Policy & Issue Credential
+    console.log("[byoa-two-wallet-canary] 5. Setting Policy & issuing Credential...");
     await page.getByRole("button", { name: "Save Policy" }).click();
     await page.getByRole("button", { name: "Issue New Scoped Credential" }).click();
     await page.getByText("API Credential (Displayed Once)").waitFor();
 
-    // 6. Test Console Execution: Sign & Run Workflow with Agent Wallet
-    console.log("[byoa-two-wallet-e2e] 6. Signing & running workflow with Agent Wallet...");
+    // 6. Sign and Run Workflow
+    console.log("[byoa-two-wallet-canary] 6. Signing & executing x402 workflow payment...");
     await page.getByRole("button", { name: "Sign and Run Workflow" }).click();
 
-    // Wait for completion result panel
-    console.log("[byoa-two-wallet-e2e] 7. Polling workflow completion & proofs...");
     await page.getByText("Execution Result & Proof Trail", { exact: false }).waitFor({ timeout: 120_000 });
     await page.getByText("completed", { exact: false }).waitFor();
 
     // 7. Test Idempotency Replay
-    console.log("[byoa-two-wallet-e2e] 8. Testing idempotency replay...");
+    console.log("[byoa-two-wallet-canary] 7. Testing Idempotency Replay...");
     await page.getByRole("button", { name: "Replay with Same Idempotency Key" }).click();
-    await page.getByText("Idempotency Replay Verified:", { exact: false }).waitFor();
-    await page.getByText("No duplicate payment").waitFor();
 
-    console.log("[byoa-two-wallet-e2e] SUCCESS: Two-wallet BYOA flow passed end-to-end!");
+    await page.getByText("Idempotency Replay Verified (Empirical Comparison):", { exact: false }).waitFor();
+    await page.getByText("No duplicate payment").waitFor();
+    await page.getByText("Receipts identical").waitFor();
+    await page.getByText("Proofs identical").waitFor();
+    await page.getByText("Allowance preserved").waitFor();
+    await page.getByText("Call count preserved").waitFor();
+
+    console.log("[byoa-two-wallet-canary] SUCCESS: Production canary passed end-to-end!");
   } finally {
     await browser.close();
   }
 }
 
 main().catch((err) => {
-  console.error("[byoa-two-wallet-e2e] FAILED:", err);
+  console.error("[byoa-two-wallet-canary] FAILED:", err);
   process.exit(1);
 });

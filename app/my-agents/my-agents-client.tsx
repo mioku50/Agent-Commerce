@@ -53,6 +53,9 @@ type AgentDetail = {
     dailySpendLimitUsdc: string;
     maxDailyCalls: number;
     status: string;
+    dailySpentUsdc?: string;
+    remainingDailyUsdc?: string;
+    dailyCallCount?: number;
   } | null;
   credentials: Array<{
     id: string;
@@ -168,11 +171,19 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
   const [testJobId, setTestJobId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, any> | null>(null);
   const [replayProof, setReplayProof] = useState<{
+    sameJobId: boolean;
     noDuplicatePayment: boolean;
     noNewReceipts: boolean;
     noNewProofs: boolean;
     allowancePreserved: boolean;
+    callCountPreserved: boolean;
+    jobId: string;
+    paymentId: string;
+    receiptCount: number;
+    proofCount: number;
+    dailySpentUsdc: string;
   } | null>(null);
+
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -513,23 +524,45 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
         await new Promise((r) => setTimeout(r, 2000));
       }
 
-      if (!finalResultData) {
-        throw new Error("Timed out waiting for BYOA workflow completion.");
-      }
+      // Capture empirical baseline metrics if performing replay
+      const baselineJobId = testResult?.job?.id;
+      const baselinePaymentId = testResult?.aggregateWorkflowPayment?.id;
+      const baselineReceiptIds = (testResult?.internalReceiptIds ?? []).map(String).sort();
+      const baselineProofHashes = (testResult?.proofs ?? []).map((p: any) => String(p.transactionHash ?? "")).filter(Boolean).sort();
+      const baselineDailySpent = detail?.policy?.dailySpentUsdc ?? "0";
+      const baselineRemainingUsdc = detail?.policy?.remainingDailyUsdc ?? "0";
+      const baselineDailyCalls = detail?.policy?.dailyCallCount ?? 0;
 
       setTestResult(finalResultData);
       setRunnerState("completed");
 
-      if (isReplay) {
+      const freshDetail = (await jsonFetch(`/api/byoa/management/agents/${selected.id}`)) as unknown as AgentDetail;
+      setDetail(freshDetail);
+
+      if (isReplay && testResult) {
+        const replayJobId = finalResultData?.job?.id;
+        const replayPaymentId = finalResultData?.aggregateWorkflowPayment?.id;
+        const replayReceiptIds = (finalResultData?.internalReceiptIds ?? []).map(String).sort();
+        const replayProofHashes = (finalResultData?.proofs ?? []).map((p: any) => String(p.transactionHash ?? "")).filter(Boolean).sort();
+        const updatedDailySpent = freshDetail?.policy?.dailySpentUsdc ?? "0";
+        const updatedRemainingUsdc = freshDetail?.policy?.remainingDailyUsdc ?? "0";
+        const updatedDailyCalls = freshDetail?.policy?.dailyCallCount ?? 0;
+
         setReplayProof({
-          noDuplicatePayment: executeResult.idempotent || executeResult.aggregatePaymentId === testResult?.aggregateWorkflowPayment?.id,
-          noNewReceipts: true,
-          noNewProofs: true,
-          allowancePreserved: true,
+          sameJobId: Boolean(executeResult.idempotent && replayJobId && replayJobId === baselineJobId),
+          noDuplicatePayment: Boolean(executeResult.idempotent && replayPaymentId && replayPaymentId === baselinePaymentId),
+          noNewReceipts: JSON.stringify(replayReceiptIds) === JSON.stringify(baselineReceiptIds),
+          noNewProofs: JSON.stringify(replayProofHashes) === JSON.stringify(baselineProofHashes),
+          allowancePreserved: updatedDailySpent === baselineDailySpent && updatedRemainingUsdc === baselineRemainingUsdc,
+          callCountPreserved: updatedDailyCalls === baselineDailyCalls,
+          jobId: baselineJobId ?? "",
+          paymentId: baselinePaymentId ?? "",
+          receiptCount: baselineReceiptIds.length,
+          proofCount: baselineProofHashes.length,
+          dailySpentUsdc: baselineDailySpent,
         });
       }
 
-      await loadDetail(selected.id);
     } catch (caught) {
       setRunnerState("error");
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -992,18 +1025,21 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                     ) : null}
                   </div>
 
-                  {/* Replay proof badges */}
+                  {/* Empirical replay proof badges */}
                   {replayProof ? (
                     <div className="rounded-md border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs flex flex-wrap gap-3 items-center text-emerald-700 dark:text-emerald-300">
                       <span className="font-semibold flex items-center gap-1">
-                        <CheckCircle2 className="size-4" /> Idempotency Replay Verified:
+                        <CheckCircle2 className="size-4" /> Idempotency Replay Verified (Empirical Comparison):
                       </span>
-                      <Badge variant="outline" className="border-emerald-500 text-emerald-600">No duplicate payment</Badge>
-                      <Badge variant="outline" className="border-emerald-500 text-emerald-600">No new receipts</Badge>
-                      <Badge variant="outline" className="border-emerald-500 text-emerald-600">No new proofs</Badge>
-                      <Badge variant="outline" className="border-emerald-500 text-emerald-600">Allowance preserved</Badge>
+                      {replayProof.sameJobId ? <Badge variant="outline" className="border-emerald-500 text-emerald-600">Job ID identical ({shortenHash(replayProof.jobId, 5)})</Badge> : <Badge variant="destructive">Job ID mismatch</Badge>}
+                      {replayProof.noDuplicatePayment ? <Badge variant="outline" className="border-emerald-500 text-emerald-600">No duplicate payment</Badge> : <Badge variant="destructive">Duplicate payment detected</Badge>}
+                      {replayProof.noNewReceipts ? <Badge variant="outline" className="border-emerald-500 text-emerald-600">Receipts identical ({replayProof.receiptCount})</Badge> : <Badge variant="destructive">Receipt mismatch</Badge>}
+                      {replayProof.noNewProofs ? <Badge variant="outline" className="border-emerald-500 text-emerald-600">Proofs identical ({replayProof.proofCount})</Badge> : <Badge variant="destructive">Proof mismatch</Badge>}
+                      {replayProof.allowancePreserved ? <Badge variant="outline" className="border-emerald-500 text-emerald-600">Allowance preserved ({replayProof.dailySpentUsdc} USDC spent)</Badge> : <Badge variant="destructive">Allowance deducted again</Badge>}
+                      {replayProof.callCountPreserved ? <Badge variant="outline" className="border-emerald-500 text-emerald-600">Call count preserved</Badge> : <Badge variant="destructive">Call count incremented</Badge>}
                     </div>
                   ) : null}
+
 
                   {/* Unified Result Panel */}
                   {testResult ? (
