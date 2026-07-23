@@ -64,8 +64,8 @@ assert.deepEqual(
   ["warning"],
 );
 assert.deepEqual(
-  filterAndSortResults(reports, parseResultsFilters({ workflow: "builder_update", sort: "oldest" })).map(({ id }) => id),
-  ["old"],
+  filterAndSortResults(reports, parseResultsFilters({ sort: "oldest" })).map(({ id }) => id),
+  ["old", "warning", "high"],
 );
 assert.deepEqual(
   filterAndSortResults(reports, parseResultsFilters({ sort: "spend" })).map(({ id }) => id),

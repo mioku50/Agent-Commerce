@@ -2,7 +2,7 @@ import type { HostedWorkflowType } from "./workflow-templates.ts";
 import { parseWorkflowQueryValue } from "./workflow-links.ts";
 
 export type ResultsStatusFilter = "all" | "completed" | "warnings";
-export type ResultsSort = "newest" | "oldest" | "spend";
+export type ResultsSort = "newest" | "oldest";
 
 export type ResultsFilterableReport = {
   id: string;
@@ -40,7 +40,7 @@ export function parseResultsFilters(input: {
         : "all"
     ) as ResultsStatusFilter,
     sort: (
-      sortValue === "oldest" || sortValue === "spend"
+      sortValue === "oldest"
         ? sortValue
         : "newest"
     ) as ResultsSort,
@@ -60,10 +60,6 @@ export function filterAndSortResults<T extends ResultsFilterableReport>(
       return !query || `${report.inputPreview}\n${report.summary}`.toLocaleLowerCase().includes(query);
     })
     .sort((left, right) => {
-      if (filters.sort === "spend") {
-        return Number(right.spentUsdc) - Number(left.spentUsdc) ||
-          Date.parse(right.generatedAt) - Date.parse(left.generatedAt);
-      }
       const delta = Date.parse(right.generatedAt) - Date.parse(left.generatedAt);
       return filters.sort === "oldest" ? -delta : delta;
     });
