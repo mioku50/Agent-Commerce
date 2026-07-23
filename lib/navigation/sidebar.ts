@@ -18,7 +18,7 @@ export const publicSidebarNavigation = [
     items: [
       { href: "/", label: "Home", icon: "dashboard" },
       { href: "/agent-runner", label: "New Report", icon: "agent" },
-      { href: "/results", label: "My Reports", icon: "results" },
+      { href: "/results", label: "Reports", icon: "results" },
     ],
   },
 ] as const satisfies ReadonlyArray<{

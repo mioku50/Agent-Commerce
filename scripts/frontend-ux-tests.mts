@@ -121,7 +121,7 @@ assert.deepEqual(
   [
     { label: "Home", href: "/" },
     { label: "New Report", href: "/agent-runner" },
-    { label: "My Reports", href: "/results" },
+    { label: "Reports", href: "/results" },
   ],
 );
 assert.deepEqual(sidebarNavigation, publicSidebarNavigation);

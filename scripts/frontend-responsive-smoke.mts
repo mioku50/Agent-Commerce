@@ -73,8 +73,8 @@ try {
   await page.setViewportSize({ width: 911, height: 512 });
   await page.goto(`${baseUrl()}/`, { waitUntil: "load" });
   const desktopSidebar = page.locator('[data-testid="desktop-sidebar"]');
-  await desktopSidebar.getByRole("link", { name: "My Reports", exact: true }).scrollIntoViewIfNeeded();
-  await desktopSidebar.getByRole("link", { name: "My Reports", exact: true }).waitFor();
+  await desktopSidebar.getByRole("link", { name: "Reports", exact: true }).scrollIntoViewIfNeeded();
+  await desktopSidebar.getByRole("link", { name: "Reports", exact: true }).waitFor();
 
   await page.goto(`${baseUrl()}/console`, { waitUntil: "load" });
   await desktopSidebar.getByRole("link", { name: "Services / Seller", exact: true }).scrollIntoViewIfNeeded();
@@ -85,7 +85,7 @@ try {
   await page.getByRole("button", { name: "Open navigation" }).click();
   const mobileSidebar = page.locator('[data-testid="mobile-sidebar"]');
   assert.equal(await mobileSidebar.getAttribute("aria-hidden"), "false");
-  await mobileSidebar.getByRole("link", { name: "My Reports", exact: true }).click();
+  await mobileSidebar.getByRole("link", { name: "Reports", exact: true }).click();
   await page.waitForURL(`${baseUrl()}/results`);
   assert.equal(await mobileSidebar.getAttribute("aria-hidden"), "true");
 

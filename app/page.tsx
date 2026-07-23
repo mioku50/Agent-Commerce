@@ -14,17 +14,30 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { listHostedFinalReports } from "@/lib/agent/hosted-jobs";
+import {
+  countHostedFinalReports,
+  listHostedFinalReports,
+} from "@/lib/agent/hosted-jobs";
 import { hostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
 import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
+import { sanitizePublicReportText } from "@/lib/agent/public-report-copy";
+
+function formatDate(value: string) {
+  return new Intl.DateTimeFormat("en", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
 
 export default async function Home() {
   await connection();
 
-  const [reportsResult] = await Promise.allSettled([
+  const [reportsResult, countResult] = await Promise.allSettled([
     listHostedFinalReports(12),
+    countHostedFinalReports(),
   ]);
   const reports = reportsResult.status === "fulfilled" ? reportsResult.value : [];
+  const totalReportsCount = countResult.status === "fulfilled" ? countResult.value : reports.length;
 
   return (
     <main className="min-h-screen bg-background">
@@ -56,7 +69,7 @@ export default async function Home() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             {[
-              ["Reports generated", reports.length.toString(), "Completed workflows"],
+              ["Reports generated", totalReportsCount.toString(), "Completed workflows"],
               [
                 "Recent Reports",
                 reports.length ? reports[0].workflowLabel : "None yet",
@@ -122,7 +135,7 @@ export default async function Home() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <FileText className="size-5" />
-              Recent Results
+              Recent Reports
             </CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3">
@@ -133,16 +146,20 @@ export default async function Home() {
                   href={report.href}
                   className="grid min-w-0 gap-3 rounded-md border bg-background/60 p-4 transition-colors hover:border-primary/40 hover:bg-primary/5"
                 >
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
                     <Badge variant="secondary">{report.workflowLabel}</Badge>
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {report.spentUsdc} USDC
-                    </span>
+                    <Badge variant={report.completedWithWarnings ? "outline" : "default"}>
+                      {report.completedWithWarnings ? "Completed with warnings" : "Completed"}
+                    </Badge>
                   </div>
-                  <p className="line-clamp-2 text-sm font-medium">{report.summary}</p>
-                  <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-                    <span>{report.receiptCount} receipts</span>
-                    <span>{report.proofCount} Arc proofs</span>
+                  <p className="line-clamp-2 text-sm font-medium">
+                    {sanitizePublicReportText(report.summary)}
+                  </p>
+                  <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground pt-1">
+                    <span>{formatDate(report.generatedAt)}</span>
+                    <span className="font-semibold text-primary flex items-center gap-1">
+                      View Report &rarr;
+                    </span>
                   </div>
                 </Link>
               ))
@@ -153,7 +170,7 @@ export default async function Home() {
             )}
             <Button asChild variant="outline">
               <Link href="/results">
-                View all results
+                View all reports
                 <ArrowRight />
               </Link>
             </Button>
