@@ -26,6 +26,7 @@ import {
   MOBILE_SIDEBAR_SCROLL_CLASS,
   sidebarNavigation,
 } from "../lib/navigation/sidebar.ts";
+import { humanizeError } from "../lib/errors/humanize-error.ts";
 
 assert.equal(hostedWorkflowHref("sentiment_tone"), "/agent-runner?workflow=sentiment");
 assert.equal(hostedWorkflowHref("builder_update"), "/agent-runner?workflow=builder_update");
@@ -120,4 +121,96 @@ assert(sidebarNavigation.flatMap(({ items }) => items).some(({ label }) => label
 assert(DESKTOP_SIDEBAR_SCROLL_CLASS.includes("overflow-y-auto"));
 assert(MOBILE_SIDEBAR_SCROLL_CLASS.includes("overflow-y-auto"));
 
-console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, and scrollable sidebar model");
+assert.deepEqual(humanizeError("wallet_already_registered"), {
+  title: "Wallet already connected",
+  message: "This wallet is already assigned to an agent. Open the existing agent or use another wallet.",
+  actionLabel: "Open Agent",
+  actionHref: "/console/agents",
+  technicalCode: "wallet_already_registered",
+});
+
+assert.deepEqual(humanizeError("policy_denied: workflow_not_allowed"), {
+  title: "Workflow disabled",
+  message: "This workflow is not enabled for the selected agent.",
+  actionLabel: "Open Spending Policy",
+  actionHref: "/console/agents",
+  technicalCode: "policy_denied:workflow_not_allowed",
+});
+
+assert.deepEqual(humanizeError("policy_denied: service_type_not_allowed Live Data"), {
+  title: "Required service unavailable",
+  message: "This workflow requires Live Data, but Live Data is disabled in the agent policy.",
+  actionLabel: "Enable Live Data",
+  actionHref: "/console/agents",
+  technicalCode: "policy_denied:service_type_not_allowed",
+});
+
+assert.deepEqual(humanizeError("policy_denied: max_run_exceeded"), {
+  title: "Price exceeds agent limit",
+  message: "This report costs more than the agent's maximum amount per run.",
+  actionLabel: "Update Limit",
+  actionHref: "/console/agents",
+  technicalCode: "policy_denied:max_run_exceeded",
+});
+
+assert.deepEqual(humanizeError("policy_denied: daily_spend_exceeded"), {
+  title: "Daily spending limit reached",
+  message: "The agent has reached its daily USDC limit. Increase the limit or try again tomorrow.",
+  actionLabel: "Update Limit",
+  actionHref: "/console/agents",
+  technicalCode: "policy_denied:daily_spend_exceeded",
+});
+
+assert.deepEqual(humanizeError("policy_denied: daily_calls_exceeded"), {
+  title: "Daily run limit reached",
+  message: "The agent has used all allowed calls for today.",
+  actionLabel: "Update Limit",
+  actionHref: "/console/agents",
+  technicalCode: "policy_denied:daily_calls_exceeded",
+});
+
+assert.deepEqual(humanizeError("policy_denied"), {
+  title: "Action denied by agent policy",
+  message: "The selected action violates the agent's active spending policy.",
+  actionLabel: "Open Spending Policy",
+  actionHref: "/console/agents",
+  technicalCode: "policy_denied",
+});
+
+assert.deepEqual(humanizeError("connected wallet mismatch"), {
+  title: "Switch wallet to continue",
+  message: "The connected wallet is not the registered agent payment wallet.",
+  actionLabel: "Switch Wallet",
+  technicalCode: "wallet_mismatch",
+});
+
+assert.deepEqual(humanizeError("wrong network: requires Arc Testnet"), {
+  title: "Switch to Arc Testnet",
+  message: "This action requires Arc Testnet.",
+  actionLabel: "Switch Network",
+  technicalCode: "wrong_network",
+});
+
+assert.deepEqual(humanizeError("quote expired"), {
+  title: "Price expired",
+  message: "Refresh the price before continuing. No payment has been made.",
+  actionLabel: "Refresh Price",
+  technicalCode: "quote_expired",
+});
+
+assert.deepEqual(humanizeError("credential missing or revoked"), {
+  title: "Active credential required",
+  message: "Create a new API credential before running this external agent.",
+  actionLabel: "Create Credential",
+  actionHref: "/console/agents",
+  technicalCode: "credential_missing",
+});
+
+assert.deepEqual(humanizeError("unexpected backend crash (err_500)"), {
+  title: "Something went wrong",
+  message: "unexpected backend crash",
+  actionLabel: "Try Again",
+  technicalCode: "generic_error",
+});
+
+console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, and humanized error mapper");
