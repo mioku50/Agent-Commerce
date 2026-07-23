@@ -81,7 +81,7 @@ assert.equal(
 assert.equal(hostedRequesterDisplayLine(null), "No requester identity supplied.");
 assert.equal(
   HOSTED_REQUESTER_PAYMENT_COPY,
-  "After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment. Internal x402 API purchases still use the project-owned hosted payer.",
+  "After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment.",
 );
 
 const futureProvider = {

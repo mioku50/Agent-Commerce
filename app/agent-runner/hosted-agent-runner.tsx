@@ -267,7 +267,7 @@ export function HostedAgentRunner({
                 className="min-h-36 max-w-full rounded-md border bg-background px-3 py-2 text-sm"
               />
               <p id="hosted-input-description" className="text-xs text-muted-foreground">
-                {inputText.length}/5000 · Required. Obvious credentials and private keys are rejected. Only a redacted preview and SHA-256 are published.
+                {inputText.length}/5000 · Required. Credentials and private keys are rejected. Sensitive details are automatically redacted.
               </p>
               <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
                 External LLM processing: after paid API calls succeed, the validated input text and those API responses may be sent to FreeModel for optional synthesis. If FreeModel is unavailable, the deterministic report is preserved.

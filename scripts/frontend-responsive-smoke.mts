@@ -38,11 +38,11 @@ try {
   await page.getByText("Enter at least 20 characters to preview the workflow.", { exact: true }).waitFor();
   await page.getByText("Requester & workflow payer", { exact: false }).first().waitFor();
   await page.getByText("Sponsored workflows will not charge your wallet.", { exact: false }).first().waitFor();
-  await page.getByText("Internal x402 API purchases still use the project-owned hosted payer.", { exact: false }).first().waitFor();
+  await page.getByText("After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment.", { exact: false }).first().waitFor();
   await page.getByText("External LLM processing:", { exact: false }).waitFor();
   await page.getByLabel("Workflow", { exact: true }).focus();
   await page.keyboard.press("Tab");
-  assert.equal(await page.evaluate(() => document.activeElement?.id), "hosted-task");
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "hosted-input");
 
   await page.goto(`${baseUrl()}/workflows`, { waitUntil: "load" });
   await page.locator('a[href="/agent-runner?workflow=custom"]').waitFor();

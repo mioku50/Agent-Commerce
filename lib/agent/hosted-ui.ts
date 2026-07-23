@@ -4,7 +4,7 @@ export const HOSTED_REQUESTER_IDENTITY_LABEL = "Requester & workflow payer";
 export const HOSTED_REQUESTER_NOT_CHARGED_COPY =
   "Sponsored workflows will not charge your wallet.";
 export const HOSTED_REQUESTER_PAYMENT_COPY =
-  "After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment. Internal x402 API purchases still use the project-owned hosted payer.";
+  "After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment.";
 
 export function hostedRequesterDisplayLine(address: string | null) {
   return address ? `Requested by ${address}` : "No requester identity supplied.";
