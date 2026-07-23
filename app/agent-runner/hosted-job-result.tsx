@@ -19,6 +19,7 @@ import {
   HOSTED_REQUESTER_PAYMENT_COPY,
   hostedRequesterDisplayLine,
 } from "@/lib/agent/hosted-ui";
+import { sanitizePublicReportText } from "@/lib/agent/public-report-copy";
 import { shortenHash } from "@/lib/utils";
 import type { HostedJobView } from "./types";
 
@@ -184,11 +185,11 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                 <>
                   <div>
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Summary</p>
-                    <p className="mt-2 leading-7">{report.summary}</p>
+                    <p className="mt-2 leading-7">{sanitizePublicReportText(report.summary)}</p>
                   </div>
                   <div className="rounded-md bg-secondary/30 p-3">
                     <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Input preview</p>
-                    <p className="mt-2 text-sm">{reportInput.preview}</p>
+                    <p className="mt-2 text-sm">{sanitizePublicReportText(reportInput.preview)}</p>
                   </div>
                   {report.synthesis ? (
                     <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm">
@@ -227,7 +228,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                     <ul className="mt-2 grid gap-2 text-sm">
                       {report.keyFindings.map((finding, index) => (
                         <li key={`${index}-${finding}`} className="rounded-md bg-secondary/30 p-3">
-                          {finding}
+                          {sanitizePublicReportText(finding)}
                         </li>
                       ))}
                     </ul>
