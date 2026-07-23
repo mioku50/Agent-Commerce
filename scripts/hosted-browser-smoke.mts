@@ -158,12 +158,12 @@ async function prepareQuote(
   symbol: "BTC/USD" | "ETH/USD" | "SOL/USD",
 ) {
   await page.goto(`${baseUrl()}/agent-runner?workflow=market_context&symbol=${encodeURIComponent(symbol)}`, { waitUntil: "networkidle" });
-  await page.getByText("Requester & workflow payer", { exact: false }).first().waitFor();
+  await page.getByText("Payment wallet", { exact: false }).first().waitFor();
   await page.locator("#hosted-input").fill(inputText);
   const quoteResponsePromise = page.waitForResponse((response) =>
     response.request().method() === "POST" && new URL(response.url()).pathname === "/api/hosted-agent/quotes",
   );
-  await page.getByRole("button", { name: "Preview exact workflow price" }).click();
+  await page.getByRole("button", { name: "See Final Price" }).click();
   const response = await quoteResponsePromise;
   const json = (await response.json()) as QuoteResponse;
   assert(response.ok() && json.quote, `Workflow quote failed: ${json.error ?? `HTTP ${response.status()}`}`);

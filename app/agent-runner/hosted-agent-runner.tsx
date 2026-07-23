@@ -35,18 +35,14 @@ import type {
   RecentHostedJob,
 } from "./types";
 
-function workflowLabel(type: HostedWorkflowType) {
-  return getHostedWorkflowTemplate(type)?.label ?? type;
-}
-
 export function HostedAgentRunner({
   diagnostic,
-  initialHistory,
+  initialHistory: _initialHistory,
   initialWorkflowType,
   initialMarketSymbol,
 }: {
   diagnostic: HostedRunnerDiagnostic;
-  initialHistory: RecentHostedJob[];
+  initialHistory?: RecentHostedJob[];
   initialWorkflowType: HostedWorkflowType;
   initialMarketSymbol: PythMarketSymbol;
 }) {
@@ -64,9 +60,6 @@ export function HostedAgentRunner({
   const [previewing, setPreviewing] = useState(false);
   const [launching, setLaunching] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [history, setHistory] = useState(initialHistory);
-  const [historyFilter, setHistoryFilter] = useState<HostedWorkflowType | "all">("all");
-  const [historyLoading, setHistoryLoading] = useState(false);
   const idempotencyKey = useRef<string | null>(null);
   const paymentTransactionHash = useRef<string | null>(null);
   const sponsoredSignature = useRef<string | null>(null);
@@ -87,26 +80,6 @@ export function HostedAgentRunner({
     setWorkflowType(workflow.value);
     setTask(workflow.task);
     invalidatePlan();
-  }
-
-  async function filterHistory(value: HostedWorkflowType | "all") {
-    setHistoryFilter(value);
-    setHistoryLoading(true);
-    try {
-      const params = new URLSearchParams({ limit: "8", workflowType: value });
-      const response = await fetch(`/api/hosted-agent/jobs?${params}`, {
-        cache: "no-store",
-      });
-      const data = (await response.json()) as { jobs?: RecentHostedJob[]; error?: string };
-      if (!response.ok || !data.jobs) {
-        throw new Error(data.error ?? "Unable to filter hosted history.");
-      }
-      setHistory(data.jobs);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      setHistoryLoading(false);
-    }
   }
 
   function requestBody() {
@@ -270,7 +243,8 @@ export function HostedAgentRunner({
                 {inputText.length}/5000 · Required. Credentials and private keys are rejected. Sensitive details are automatically redacted.
               </p>
               <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
-                External LLM processing: after paid API calls succeed, the validated input text and those API responses may be sent to FreeModel for optional synthesis. If FreeModel is unavailable, the deterministic report is preserved.
+                <p className="font-semibold">AI processing</p>
+                <p className="mt-1">Your input may be processed by an external AI provider to prepare the report. Do not submit private keys, passwords, API keys, or other secrets.</p>
               </div>
             </div>
             {workflowType === "market_context" ? (
@@ -290,7 +264,7 @@ export function HostedAgentRunner({
                   <option value="SOL/USD">SOL/USD</option>
                 </select>
                 <p className="text-xs text-muted-foreground">
-                  The server maps this allowlisted symbol to its fixed Pyth feed ID. Browser-supplied feed IDs and upstream URLs are never accepted.
+                  Choose the market asset to include in your report.
                 </p>
               </div>
             ) : null}
@@ -347,8 +321,13 @@ export function HostedAgentRunner({
               disabled={previewing || launching || !diagnostic.configured || !diagnostic.checkout.configured || !wallet.address || inputText.trim().length < 20}
             >
               {previewing ? <LoaderCircle className="animate-spin" /> : <Calculator />}
-              {previewing ? "Locking exact quote…" : quote ? "Refresh workflow quote" : "Preview exact workflow price"}
+              {previewing ? "Preparing Price…" : quote ? "Refresh Price" : "See Final Price"}
             </Button>
+            <div className="pt-1">
+              <Link href="/results" className="text-xs text-muted-foreground hover:text-foreground">
+                View previous reports →
+              </Link>
+            </div>
           </CardContent>
         </Card>
 
@@ -421,6 +400,7 @@ export function HostedAgentRunner({
                       Technical details
                     </summary>
                     <div className="mt-3 grid gap-2 text-muted-foreground">
+                      <p className="mb-2 font-medium text-amber-300/80">These details are intended for developers and auditors.</p>
                       <div>
                         <span className="font-medium text-foreground">Project Payer:</span>{" "}
                         <code className="break-all">{diagnostic.payerAddress ?? "Unavailable"}</code>
@@ -480,46 +460,6 @@ export function HostedAgentRunner({
                     </div>
                   </details>
                 </>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-lg">
-            <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <CardTitle>Recent hosted workflows</CardTitle>
-                <select
-                  aria-label="Filter hosted results by workflow"
-                  value={historyFilter}
-                  onChange={(event) => void filterHistory(event.target.value as HostedWorkflowType | "all")}
-                  disabled={historyLoading}
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                >
-                  <option value="all">All workflows</option>
-                  {hostedWorkflowTemplates.map((workflow) => (
-                    <option key={workflow.value} value={workflow.value}>{workflow.label}</option>
-                  ))}
-                </select>
-              </div>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {historyLoading ? (
-                <p className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <LoaderCircle className="size-4 animate-spin" />Filtering history…
-                </p>
-              ) : history.length ? (
-                history.map((job) => (
-                  <Link key={job.id} href={job.href} className="rounded-md border p-3 transition-colors hover:bg-secondary/30">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="font-medium">{workflowLabel(job.workflowType)}</p>
-                      <Badge variant={job.status === "failed" ? "destructive" : "secondary"}>{job.status}</Badge>
-                    </div>
-                    <p className="mt-1 line-clamp-1 text-sm text-muted-foreground">{job.inputPreview || job.task}</p>
-                    <p className="mt-2 text-xs text-muted-foreground">{job.spentUsdc} USDC · {job.receiptCount} receipts · {job.proofCount} Arc proofs</p>
-                  </Link>
-                ))
-              ) : (
-                <p className="text-sm text-muted-foreground">No hosted workflow history for this filter.</p>
               )}
             </CardContent>
           </Card>

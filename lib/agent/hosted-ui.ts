@@ -1,13 +1,13 @@
 export const HOSTED_UI_MIN_INPUT_LENGTH = 20;
 
-export const HOSTED_REQUESTER_IDENTITY_LABEL = "Requester & workflow payer";
+export const HOSTED_REQUESTER_IDENTITY_LABEL = "Payment wallet";
 export const HOSTED_REQUESTER_NOT_CHARGED_COPY =
   "Sponsored workflows will not charge your wallet.";
 export const HOSTED_REQUESTER_PAYMENT_COPY =
-  "After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment.";
+  "Sponsored reports are free. After the free quota, this wallet confirms the displayed total price.";
 
 export function hostedRequesterDisplayLine(address: string | null) {
-  return address ? `Requested by ${address}` : "No requester identity supplied.";
+  return address ? `Payment wallet ${address}` : "No payment wallet supplied.";
 }
 
 export function hostedInputPreviewHelper(inputText: string) {

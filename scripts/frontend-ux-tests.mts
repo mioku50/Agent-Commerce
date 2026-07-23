@@ -74,16 +74,16 @@ assert.deepEqual(
 
 assert.equal(hostedInputPreviewHelper("short"), "Enter at least 20 characters to preview the workflow.");
 assert.equal(hostedInputPreviewHelper("This input is definitely long enough."), null);
-assert.equal(HOSTED_REQUESTER_IDENTITY_LABEL, "Requester & workflow payer");
+assert.equal(HOSTED_REQUESTER_IDENTITY_LABEL, "Payment wallet");
 assert.equal(HOSTED_REQUESTER_NOT_CHARGED_COPY, "Sponsored workflows will not charge your wallet.");
 assert.equal(
   hostedRequesterDisplayLine("0x1234567890abcdef1234567890abcdef12345678"),
-  "Requested by 0x1234567890abcdef1234567890abcdef12345678",
+  "Payment wallet 0x1234567890abcdef1234567890abcdef12345678",
 );
-assert.equal(hostedRequesterDisplayLine(null), "No requester identity supplied.");
+assert.equal(hostedRequesterDisplayLine(null), "No payment wallet supplied.");
 assert.equal(
   HOSTED_REQUESTER_PAYMENT_COPY,
-  "After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment.",
+  "Sponsored reports are free. After the free quota, this wallet confirms the displayed total price.",
 );
 
 const futureProvider = {

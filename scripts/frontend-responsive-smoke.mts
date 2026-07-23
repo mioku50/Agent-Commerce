@@ -36,10 +36,10 @@ try {
   await page.goto(`${baseUrl()}/agent-runner?workflow=invalid&symbol=DOGE%2FUSD`, { waitUntil: "load" });
   assert.equal(await page.locator("#workflow-type").inputValue(), "sentiment_tone");
   await page.getByText("Enter at least 20 characters to preview the workflow.", { exact: true }).waitFor();
-  await page.getByText("Requester & workflow payer", { exact: false }).first().waitFor();
+  await page.getByText("Payment wallet", { exact: false }).first().waitFor();
   await page.getByText("Sponsored workflows will not charge your wallet.", { exact: false }).first().waitFor();
-  await page.getByText("After the sponsored quota, this wallet confirms one Arc Testnet USDC workflow payment.", { exact: false }).first().waitFor();
-  await page.getByText("External LLM processing:", { exact: false }).waitFor();
+  await page.getByText("Sponsored reports are free. After the free quota, this wallet confirms the displayed total price.", { exact: false }).first().waitFor();
+  await page.getByText("AI processing", { exact: false }).waitFor();
   await page.getByLabel("Workflow", { exact: true }).focus();
   await page.keyboard.press("Tab");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "hosted-input");
