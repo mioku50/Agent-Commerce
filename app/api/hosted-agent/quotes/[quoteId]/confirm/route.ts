@@ -13,6 +13,7 @@ import {
 } from "@/lib/agent/hosted-workflows";
 import {
   confirmHostedWorkflowQuote,
+  getHostedWorkflowQuote,
   HostedCheckoutPolicyError,
 } from "@/lib/commerce/workflow-checkout";
 
@@ -28,7 +29,21 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   }
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const workflowRequest = validateHostedWorkflowRequest(body);
+    const storedQuote = await getHostedWorkflowQuote(quoteId);
+    if (!storedQuote) {
+      return NextResponse.json(
+        { error: "Hosted workflow quote was not found.", reason: "quote_not_found" },
+        { status: 404 },
+      );
+    }
+    const serverEnforcedBody = {
+      workflowType: storedQuote.workflow_type,
+      inputText: body.inputText,
+      marketSymbol: body.marketSymbol ?? storedQuote.planner_snapshot?.marketSymbol,
+      task: storedQuote.task,
+      budgetUsdc: storedQuote.budget_usdc,
+    };
+    const workflowRequest = validateHostedWorkflowRequest(serverEnforcedBody);
     const idempotencyKey = validateIdempotencyKey(
       request.headers.get("idempotency-key"),
     );

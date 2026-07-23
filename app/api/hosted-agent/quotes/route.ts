@@ -28,12 +28,24 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const template = isHostedWorkflowType(body.workflowType)
-      ? getHostedWorkflowTemplate(body.workflowType)
-      : undefined;
+    if (!isHostedWorkflowType(body.workflowType)) {
+      return NextResponse.json(
+        { error: "Unsupported workflow.", reason: "workflow_not_supported" },
+        { status: 400 },
+      );
+    }
+    const template = getHostedWorkflowTemplate(body.workflowType);
+    if (!template) {
+      return NextResponse.json(
+        { error: "Workflow configuration is unavailable.", reason: "workflow_template_missing" },
+        { status: 503 },
+      );
+    }
     const serverEnforcedBody = {
-      ...body,
-      task: template?.task ?? body.task,
+      workflowType: body.workflowType,
+      inputText: body.inputText,
+      marketSymbol: body.marketSymbol,
+      task: template.task,
       budgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
     };
     const workflowRequest = validateHostedWorkflowRequest(serverEnforcedBody);
