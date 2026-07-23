@@ -50,11 +50,11 @@ try {
   await provider.getByText("Live Provider · Pyth Network", { exact: true }).waitFor();
   await provider.getByText("USDC pays Arc Agent Commerce", { exact: false }).waitFor();
 
-  await page.goto(`${baseUrl()}/results?workflow=market_context&status=warnings&sort=spend&q=ETH`, { waitUntil: "load" });
+  await page.goto(`${baseUrl()}/results?workflow=market_context&status=warnings&sort=oldest&q=ETH`, { waitUntil: "load" });
   assert.equal(await page.getByLabel("Search reports").inputValue(), "ETH");
   assert.equal(await page.getByLabel("Workflow").inputValue(), "market_context");
   assert.equal(await page.getByLabel("Completion status").inputValue(), "warnings");
-  assert.equal(await page.getByLabel("Sort").inputValue(), "spend");
+  assert.equal(await page.getByLabel("Sort").inputValue(), "oldest");
   await page.locator('[data-testid="results-count"]').waitFor();
 
   for (const viewport of [

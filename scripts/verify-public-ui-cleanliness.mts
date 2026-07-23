@@ -6,17 +6,21 @@
 import assert from "node:assert/strict";
 import { chromium, type Page } from "playwright";
 
-const FORBIDDEN_JARGON = [
-  "Phase 28",
-  "Canary only",
-  "project-owned payer",
-  "treasury",
-  "SHA-256",
-  "idempotency",
-  "provider cost",
-  "platform fee",
-  "policy_denied",
-  "wallet_already_registered",
+const FORBIDDEN_PATTERNS = [
+  /\bPhase\s+\d+(?:\.\d+)?\b/i,
+  /\bFreeModel\b/i,
+  /\breceipts?\b/i,
+  /\bArc proofs?\b/i,
+  /\bproject-owned payer\b/i,
+  /\bhosted payer\b/i,
+  /\bworkflow payer\b/i,
+  /\bprovider cost\b/i,
+  /\bplatform fee\b/i,
+  /\btreasury\b/i,
+  /\bSHA-256\b/i,
+  /\bidempotency\b/i,
+  /\bpolicy_denied\b/i,
+  /\bwallet_already_registered\b/i,
 ];
 
 const PUBLIC_PATHS = ["/", "/agent-runner", "/results"];
@@ -45,17 +49,33 @@ async function verifyPageCleanliness(page: Page, path: string) {
     };
   });
 
-  for (const jargon of FORBIDDEN_JARGON) {
-    const regex = new RegExp(jargon, "i");
+  for (const pattern of FORBIDDEN_PATTERNS) {
     assert(
-      !regex.test(visibleText),
-      `Forbidden technical jargon "${jargon}" found in visible text of ${path}`
+      !pattern.test(visibleText),
+      `Forbidden technical jargon matching ${pattern} found in visible text of ${path}`
     );
     assert(
-      !regex.test(innerHtmlWithoutDetails),
-      `Forbidden technical jargon "${jargon}" found in HTML body (outside <details>) of ${path}`
+      !pattern.test(innerHtmlWithoutDetails),
+      `Forbidden technical jargon matching ${pattern} found in HTML body (outside <details>) of ${path}`
     );
   }
+}
+
+async function verifyNavigationLinks(page: Page, path: string) {
+  await page.goto(`${baseUrl()}${path}`, { waitUntil: "load" });
+
+  const navLabels = await page.evaluate(() => {
+    const sidebar = document.querySelector('[data-testid="desktop-sidebar"]');
+    if (!sidebar) return [];
+    const links = Array.from(sidebar.querySelectorAll('a[href^="/"]'));
+    return links.map((a) => a.textContent?.trim()).filter((text): text is string => Boolean(text));
+  });
+
+  assert.deepEqual(
+    navLabels,
+    ["Home", "New Report", "Reports"],
+    `Navigation links on ${path} do not match expected ["Home", "New Report", "Reports"]. Found: ${JSON.stringify(navLabels)}`
+  );
 }
 
 async function verifyLayoutConstraints(page: Page, path: string, viewportName: string) {
@@ -79,8 +99,9 @@ async function main() {
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 
     for (const path of PUBLIC_PATHS) {
+      await verifyNavigationLinks(page, path);
       await verifyPageCleanliness(page, path);
-      console.log(`  ✓ ${path} verified clean of forbidden jargon`);
+      console.log(`  ✓ ${path} verified clean of forbidden jargon and has correct navigation links`);
     }
 
     for (const viewport of VIEWPORTS) {
