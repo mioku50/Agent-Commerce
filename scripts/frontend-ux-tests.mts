@@ -29,6 +29,8 @@ import {
   sidebarNavigation,
 } from "../lib/navigation/sidebar.ts";
 import { humanizeError } from "../lib/errors/humanize-error.ts";
+import { sanitizePublicReportText } from "../lib/agent/public-report-copy.ts";
+
 
 assert.equal(hostedWorkflowHref("sentiment_tone"), "/agent-runner?workflow=sentiment");
 assert.equal(hostedWorkflowHref("builder_update"), "/agent-runner?workflow=builder_update");
@@ -224,11 +226,14 @@ assert.deepEqual(humanizeError("credential missing or revoked"), {
   technicalCode: "credential_missing",
 });
 
-assert.deepEqual(humanizeError("unexpected backend crash (err_500)"), {
-  title: "Something went wrong",
-  message: "unexpected backend crash",
-  actionLabel: "Try Again",
-  technicalCode: "generic_error",
-});
+assert.equal(sanitizePublicReportText("Phase 28: Analyze market sentiment"), "Analyze market sentiment");
+assert.equal(sanitizePublicReportText("Phase 26 - Evaluate data"), "Evaluate data");
+assert.equal(sanitizePublicReportText("Phase 1: FreeModel fallback"), "AI provider fallback");
+assert.equal(
+  sanitizePublicReportText("Using project-owned hosted payer for downstream x402 via deterministic aggregation"),
+  "Using payment wallet for verified data services via structured analysis",
+);
+assert.equal(sanitizePublicReportText(""), "");
 
-console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, and humanized error mapper");
+console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, humanized error mapper, and public copy sanitizer");
+

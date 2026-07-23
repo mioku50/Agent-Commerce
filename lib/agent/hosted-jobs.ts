@@ -711,3 +711,15 @@ export async function listHostedFinalReports(
     } satisfies HostedFinalReportSummary];
   });
 }
+
+export async function countHostedFinalReports(): Promise<number> {
+  const { count, error } = await getHostedClient()
+    .from("hosted_agent_jobs")
+    .select("*", { count: "exact", head: true })
+    .eq("status", "completed")
+    .is("byoa_agent_id", null)
+    .not("structured_result", "is", null);
+  if (error) throw new Error("Unable to count hosted Final Reports.");
+  return count ?? 0;
+}
+
