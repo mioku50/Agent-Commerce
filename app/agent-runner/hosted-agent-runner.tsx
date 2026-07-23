@@ -295,13 +295,23 @@ export function HostedAgentRunner({
                         <Button asChild size="sm" variant="outline">
                           <Link href={humanized.actionHref}>{humanized.actionLabel}</Link>
                         </Button>
-                      ) : humanized.actionLabel === "Switch Wallet" ? (
+                      ) : humanized.action === "switch_network" || humanized.actionLabel === "Switch Network" ? (
                         <Button size="sm" variant="outline" onClick={() => void wallet.switchToArc()}>
-                          Switch Wallet
+                          {humanized.actionLabel}
                         </Button>
-                      ) : humanized.actionLabel === "Refresh Price" ? (
+                      ) : humanized.action === "switch_wallet" || humanized.actionLabel === "How to Switch Wallet" || humanized.actionLabel === "Switch Wallet" ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            alert("Open your wallet extension (MetaMask/Rabby) and select the registered account.");
+                          }}
+                        >
+                          {humanized.actionLabel}
+                        </Button>
+                      ) : humanized.action === "refresh_price" || humanized.actionLabel === "Refresh Price" ? (
                         <Button size="sm" variant="outline" onClick={() => void preview()}>
-                          Refresh Price
+                          {humanized.actionLabel}
                         </Button>
                       ) : (
                         <Button size="sm" variant="outline" onClick={() => setError(null)}>
@@ -309,6 +319,12 @@ export function HostedAgentRunner({
                         </Button>
                       )}
                     </div>
+                  ) : null}
+                  {humanized.technicalCode ? (
+                    <details className="mt-2 text-xs">
+                      <summary className="cursor-pointer text-muted-foreground">Technical details</summary>
+                      <code>{humanized.technicalCode}</code>
+                    </details>
                   ) : null}
                 </div>
               </div>

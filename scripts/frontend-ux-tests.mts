@@ -144,6 +144,7 @@ assert(MOBILE_SIDEBAR_SCROLL_CLASS.includes("overflow-y-auto"));
 assert.deepEqual(humanizeError("wallet_already_registered"), {
   title: "Wallet already connected",
   message: "This wallet is already assigned to an agent. Open the existing agent or use another wallet.",
+  action: "open_agent",
   actionLabel: "Open Agent",
   actionHref: "/console/agents",
   technicalCode: "wallet_already_registered",
@@ -152,6 +153,7 @@ assert.deepEqual(humanizeError("wallet_already_registered"), {
 assert.deepEqual(humanizeError("policy_denied: workflow_not_allowed"), {
   title: "Workflow disabled",
   message: "This workflow is not enabled for the selected agent.",
+  action: "open_policy",
   actionLabel: "Open Spending Policy",
   actionHref: "/console/agents",
   technicalCode: "policy_denied:workflow_not_allowed",
@@ -160,6 +162,7 @@ assert.deepEqual(humanizeError("policy_denied: workflow_not_allowed"), {
 assert.deepEqual(humanizeError("policy_denied: service_type_not_allowed Live Data"), {
   title: "Required service unavailable",
   message: "This workflow requires Live Data, but Live Data is disabled in the agent policy.",
+  action: "open_policy",
   actionLabel: "Enable Live Data",
   actionHref: "/console/agents",
   technicalCode: "policy_denied:service_type_not_allowed",
@@ -168,6 +171,7 @@ assert.deepEqual(humanizeError("policy_denied: service_type_not_allowed Live Dat
 assert.deepEqual(humanizeError("policy_denied: max_run_exceeded"), {
   title: "Price exceeds agent limit",
   message: "This report costs more than the agent's maximum amount per run.",
+  action: "open_policy",
   actionLabel: "Update Limit",
   actionHref: "/console/agents",
   technicalCode: "policy_denied:max_run_exceeded",
@@ -176,6 +180,7 @@ assert.deepEqual(humanizeError("policy_denied: max_run_exceeded"), {
 assert.deepEqual(humanizeError("policy_denied: daily_spend_exceeded"), {
   title: "Daily spending limit reached",
   message: "The agent has reached its daily USDC limit. Increase the limit or try again tomorrow.",
+  action: "open_policy",
   actionLabel: "Update Limit",
   actionHref: "/console/agents",
   technicalCode: "policy_denied:daily_spend_exceeded",
@@ -184,6 +189,7 @@ assert.deepEqual(humanizeError("policy_denied: daily_spend_exceeded"), {
 assert.deepEqual(humanizeError("policy_denied: daily_calls_exceeded"), {
   title: "Daily run limit reached",
   message: "The agent has used all allowed calls for today.",
+  action: "open_policy",
   actionLabel: "Update Limit",
   actionHref: "/console/agents",
   technicalCode: "policy_denied:daily_calls_exceeded",
@@ -192,6 +198,7 @@ assert.deepEqual(humanizeError("policy_denied: daily_calls_exceeded"), {
 assert.deepEqual(humanizeError("policy_denied"), {
   title: "Action denied by agent policy",
   message: "The selected action violates the agent's active spending policy.",
+  action: "open_policy",
   actionLabel: "Open Spending Policy",
   actionHref: "/console/agents",
   technicalCode: "policy_denied",
@@ -199,14 +206,16 @@ assert.deepEqual(humanizeError("policy_denied"), {
 
 assert.deepEqual(humanizeError("connected wallet mismatch"), {
   title: "Switch wallet to continue",
-  message: "The connected wallet is not the registered agent payment wallet.",
-  actionLabel: "Switch Wallet",
+  message: "The connected wallet is not the registered agent payment wallet. Open your wallet extension and select the registered account.",
+  action: "switch_wallet",
+  actionLabel: "How to Switch Wallet",
   technicalCode: "wallet_mismatch",
 });
 
 assert.deepEqual(humanizeError("wrong network: requires Arc Testnet"), {
   title: "Switch to Arc Testnet",
   message: "This action requires Arc Testnet.",
+  action: "switch_network",
   actionLabel: "Switch Network",
   technicalCode: "wrong_network",
 });
@@ -214,6 +223,7 @@ assert.deepEqual(humanizeError("wrong network: requires Arc Testnet"), {
 assert.deepEqual(humanizeError("quote expired"), {
   title: "Price expired",
   message: "Refresh the price before continuing. No payment has been made.",
+  action: "refresh_price",
   actionLabel: "Refresh Price",
   technicalCode: "quote_expired",
 });
@@ -221,9 +231,42 @@ assert.deepEqual(humanizeError("quote expired"), {
 assert.deepEqual(humanizeError("credential missing or revoked"), {
   title: "Active credential required",
   message: "Create a new API credential before running this external agent.",
+  action: "open_agent",
   actionLabel: "Create Credential",
   actionHref: "/console/agents",
   technicalCode: "credential_missing",
+});
+
+assert.deepEqual(humanizeError({ reason: "wrong_network" }), {
+  title: "Switch to Arc Testnet",
+  message: "This action requires Arc Testnet.",
+  action: "switch_network",
+  actionLabel: "Switch Network",
+  technicalCode: "wrong_network",
+});
+
+assert.deepEqual(humanizeError({ code: "unsupported_chain" }), {
+  title: "Switch to Arc Testnet",
+  message: "This action requires Arc Testnet.",
+  action: "switch_network",
+  actionLabel: "Switch Network",
+  technicalCode: "wrong_network",
+});
+
+assert.deepEqual(humanizeError({ reason: "wallet_mismatch" }), {
+  title: "Switch wallet to continue",
+  message: "The connected wallet is not the registered agent payment wallet. Open your wallet extension and select the registered account.",
+  action: "switch_wallet",
+  actionLabel: "How to Switch Wallet",
+  technicalCode: "wallet_mismatch",
+});
+
+assert.deepEqual(humanizeError("Network request failed"), {
+  title: "Something went wrong",
+  message: "Network request failed",
+  action: "retry",
+  actionLabel: "Try Again",
+  technicalCode: "generic_error",
 });
 
 assert.equal(sanitizePublicReportText("Phase 28: Analyze market sentiment"), "Analyze market sentiment");
