@@ -7,98 +7,66 @@ import Link from "next/link";
 import { connection } from "next/server";
 import {
   ArrowRight,
-  BadgeCheck,
   Bot,
-  CheckCircle2,
   FileText,
   LayoutTemplate,
-  ReceiptText,
-  ShieldCheck,
-  Store,
-  Wrench,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { listHostedFinalReports } from "@/lib/agent/hosted-jobs";
-import { listAgentProfiles } from "@/lib/agent/passport-persistence";
 import { hostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
 import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
-import { fetchRecentReceipts } from "@/lib/commerce/receipts";
 
 export default async function Home() {
   await connection();
 
-  const [reportsResult, receiptsResult, profilesResult] = await Promise.allSettled([
+  const [reportsResult] = await Promise.allSettled([
     listHostedFinalReports(12),
-    fetchRecentReceipts({ limit: 100 }),
-    listAgentProfiles(30),
   ]);
   const reports = reportsResult.status === "fulfilled" ? reportsResult.value : [];
-  const receipts = receiptsResult.status === "fulfilled" ? receiptsResult.value : [];
-  const profiles = profilesResult.status === "fulfilled" ? profilesResult.value : [];
-  const verifiedProofs = receipts.filter(
-    (receipt) => receipt.onchainProof?.status === "verified",
-  ).length;
-  const spent = reports.reduce(
-    (sum, report) => sum + Number(report.spentUsdc || 0),
-    0,
-  );
 
   return (
     <main className="min-h-screen bg-background">
       <section className="border-b bg-secondary/20">
         <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-12 sm:px-6 xl:grid-cols-[1.12fr_0.88fr] xl:items-center">
           <div className="min-w-0">
-            <Badge className="mb-4">Workflow-first agent commerce</Badge>
+            <Badge className="mb-4">Verified agent workflows · Arc Testnet</Badge>
             <h1 className="max-w-4xl text-4xl font-bold leading-[1.05] tracking-normal text-foreground sm:text-6xl">
-              Real input in. Verified agent work out.
+              Create a verified agent report
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">
-              Submit real input → the hosted agent selects and purchases paid APIs
-              through x402 → a Final Report is generated → receipts are created →
-              proofs are verified in the app-owned registry on Arc. Market
-              Context uses a paid Arc Agent Commerce service backed by live
-              Pyth Network data.
+              Choose a workflow, provide your input, confirm the total price, and receive a shareable report.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
               <Button asChild size="lg">
                 <Link href="/agent-runner">
                   <Bot />
-                  Run Workflow
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="secondary">
-                <Link href="/workflows">
-                  <LayoutTemplate />
-                  Browse templates
+                  Create Report
                 </Link>
               </Button>
               <Button asChild size="lg" variant="outline">
                 <Link href="/results">
                   <FileText />
-                  View Final Reports
+                  View Reports
                 </Link>
               </Button>
             </div>
-            <p className="mt-4 text-xs text-muted-foreground">
-              Arc Testnet · sponsored quota, then one connected-wallet workflow
-              payment · project-owned payer handles downstream x402 · maximum
-              0.005 USDC · local CLI remains an advanced operator flow.
-            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
             {[
-              ["Final Reports", reports.length.toString(), "hosted workflows"],
-              ["Paid calls", receipts.length.toString(), "commerce receipts"],
-              ["Arc proofs", verifiedProofs.toString(), "verified on Arc"],
-              ["Tracked spend", spent.toFixed(4), "USDC in reports"],
+              ["Reports generated", reports.length.toString(), "Completed workflows"],
+              [
+                "Recent Reports",
+                reports.length ? reports[0].workflowLabel : "None yet",
+                "Latest report",
+              ],
             ].map(([label, value, detail]) => (
               <Card className="command-card rounded-lg" key={label}>
                 <CardContent className="p-5">
                   <p className="text-sm text-muted-foreground">{label}</p>
-                  <p className="mt-3 font-mono text-3xl font-semibold tabular-usdc text-foreground">
+                  <p className="mt-3 font-semibold text-2xl sm:text-3xl tabular-usdc text-foreground truncate">
                     {value}
                   </p>
                   <p className="mt-1 text-xs text-muted-foreground">{detail}</p>
@@ -195,24 +163,13 @@ export default async function Home() {
 
       <section className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6">
         <Card className="rounded-lg">
-          <CardContent className="grid gap-4 p-5 md:grid-cols-[1fr_auto] md:items-center">
-            <div>
-              <p className="flex items-center gap-2 font-semibold">
-                <CheckCircle2 className="size-5 text-primary" />
-                Proof trail included
-              </p>
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Every successful paid call contributes to Results, Activity,
-                Commerce Receipts, Agent Passports, seller analytics, and Arc Proofs.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button asChild variant="outline"><Link href="/proofs"><ShieldCheck />Arc Proofs</Link></Button>
-              <Button asChild variant="outline"><Link href="/receipts"><ReceiptText />Receipts</Link></Button>
-              <Button asChild variant="outline"><Link href="/agents"><BadgeCheck />Passports ({profiles.length})</Link></Button>
-              <Button asChild variant="outline"><Link href="/developer-tools"><Wrench />Developer Tools</Link></Button>
-              <Button asChild variant="outline"><Link href="/seller"><Store />Seller</Link></Button>
-            </div>
+          <CardContent className="p-5">
+            <p className="text-sm font-medium text-muted-foreground">
+              Reports include Arc verification.{" "}
+              <Link href="/console/audit" className="text-primary hover:underline font-semibold">
+                View technical details &rarr;
+              </Link>
+            </p>
           </CardContent>
         </Card>
       </section>
