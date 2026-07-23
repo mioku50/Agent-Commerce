@@ -10,9 +10,7 @@ import {
   CheckCircle2,
   CircleAlert,
   FileText,
-  ReceiptText,
   Search,
-  ShieldCheck,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -149,7 +147,6 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
                 {filtersActive ? ` · ${allReports.length} total` : ""}
               </p>
               <div className="flex flex-wrap items-center gap-3">
-                <p className="text-xs text-muted-foreground">Idempotency replays resolve to the original report and do not create a second payment card.</p>
                 {filtersActive ? <Button asChild size="sm" variant="ghost"><Link href="/results">Clear filters</Link></Button> : null}
               </div>
             </div>
@@ -199,10 +196,7 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
                   ))}
                 </div>
                 <div className="flex flex-wrap gap-3 border-t pt-4 text-xs text-muted-foreground">
-                  <span>{report.spentUsdc} USDC</span>
-                  <span className="flex items-center gap-1"><ReceiptText className="size-3" />{report.receiptCount} receipts</span>
-                  <span className="flex items-center gap-1"><ShieldCheck className="size-3" />{report.proofCount} Arc proofs</span>
-                  <span>{formatDate(report.generatedAt)}</span>
+                  <span>Generated {formatDate(report.generatedAt)}</span>
                 </div>
                 <Button asChild>
                   <Link href={report.href}>

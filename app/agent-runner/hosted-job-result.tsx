@@ -22,13 +22,12 @@ import {
 import { shortenHash } from "@/lib/utils";
 import type { HostedJobView } from "./types";
 
-const STAGES = [
-  ["queued", "queued"],
-  ["planning", "planning"],
-  ["purchasing", "purchasing"],
-  ["generating_receipt", "generating receipt"],
-  ["publishing_onchain_proof", "publishing onchain proof"],
-  ["completed", "completed"],
+const CONSUMER_STAGES = [
+  { id: "preparing", label: "Preparing report", matches: ["queued", "planning"] },
+  { id: "collecting", label: "Collecting data", matches: ["purchasing"] },
+  { id: "analyzing", label: "Analyzing results", matches: ["generating_receipt"] },
+  { id: "verifying", label: "Verifying result", matches: ["publishing_onchain_proof"] },
+  { id: "completed", label: "Completed", matches: ["completed"] },
 ] as const;
 
 function prettyJson(value: unknown) {
@@ -82,8 +81,15 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
     };
   }, [view.job.id, view.job.status, view.proofs]);
 
-  const currentIndex = STAGES.findIndex(([stage]) => stage === view.job.progressStage);
+  const activeStage = view.job.progressStage;
+  const currentIndex = CONSUMER_STAGES.findIndex((stage) =>
+    (stage.matches as readonly string[]).includes(activeStage),
+  );
   const active = view.job.status === "queued" || view.job.status === "running";
+  const isVerifiedOnArc =
+    view.job.status === "completed" ||
+    view.proofs.some((proof) => proof.status === "verified");
+
   const report = view.job.structuredResult;
   const reportInput = report?.input ?? {
     preview: view.job.inputPreview,
@@ -95,58 +101,405 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
       <section className="border-b bg-secondary/20">
         <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
           <div className="flex flex-wrap items-start justify-between gap-5">
-            <div><Badge className="mb-3">Shareable hosted result</Badge><h1 className="text-3xl font-bold sm:text-4xl">{view.job.plannerSnapshot.workflowLabel ?? "Hosted agent workflow"}</h1><p className="mt-3 max-w-3xl text-muted-foreground">{view.job.task}</p></div>
-            <div className="flex gap-2"><Badge variant={view.job.status === "failed" ? "destructive" : view.job.status === "completed" ? "default" : "secondary"}>{view.job.status}</Badge><Button asChild variant="outline"><Link href="/agent-runner"><RotateCcw />New workflow</Link></Button></div>
+            <div>
+              <Badge className="mb-3">Shareable hosted result</Badge>
+              <h1 className="text-3xl font-bold sm:text-4xl">
+                {view.job.plannerSnapshot.workflowLabel ?? "Hosted agent workflow"}
+              </h1>
+              <p className="mt-3 max-w-3xl text-muted-foreground">{view.job.task}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={view.job.status === "failed" ? "destructive" : view.job.status === "completed" ? "default" : "secondary"}>
+                {view.job.status === "completed" ? "Completed" : view.job.status}
+              </Badge>
+              {isVerifiedOnArc ? (
+                <Badge variant="outline" className="gap-1 border-primary/30 text-primary">
+                  <BadgeCheck className="size-3.5" />
+                  Verified on Arc
+                </Badge>
+              ) : null}
+              <Button asChild variant="outline">
+                <Link href="/agent-runner">
+                  <RotateCcw className="size-4" />
+                  New workflow
+                </Link>
+              </Button>
+            </div>
           </div>
         </div>
       </section>
 
       <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[0.72fr_1.28fr]">
         <div className="grid content-start gap-6">
-          <Card className="rounded-lg"><CardHeader><CardTitle>Live progress</CardTitle></CardHeader><CardContent className="grid gap-3">
-            {STAGES.map(([stage, label], index) => {
-              const done = view.job.status === "completed" || (currentIndex >= 0 && index < currentIndex);
-              const current = stage === view.job.progressStage;
-              return <div key={stage} className="flex items-center gap-3 text-sm">{done ? <Check className="size-5 text-primary" /> : current && active ? <LoaderCircle className="size-5 animate-spin text-primary" /> : <Circle className="size-5 text-muted-foreground/40" />}<span className={done || current ? "font-medium" : "text-muted-foreground"}>{label}</span></div>;
-            })}
-            {view.job.status === "failed" ? <p className="text-sm text-destructive">failed · {view.job.error}</p> : null}
-            {pollError ? <p className="text-sm text-destructive">{pollError}</p> : null}
-            <div className="mt-2 min-w-0 rounded-md bg-secondary/30 p-3 text-xs"><p className="break-all font-mono">{view.job.id}</p><p className="mt-2 text-muted-foreground">Budget {view.job.budgetUsdc} USDC · spent {view.job.spentUsdc} USDC</p>{view.job.progressMessage ? <p className="mt-2">{view.job.progressMessage}</p> : null}</div>
-            <div className="min-w-0 rounded-md border p-3 text-xs"><p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL}</p><p className={view.job.requesterWallet ? "mt-1 break-all font-mono" : "mt-1 text-muted-foreground"}>{hostedRequesterDisplayLine(view.job.requesterWallet)}</p>{view.userPayment?.paymentMode === "paid" ? <p className="mt-2 font-semibold">This wallet paid the single user-facing workflow price.</p> : <p className="mt-2 font-semibold">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p>}<p className="mt-1 text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p><p className="mt-2 break-all text-muted-foreground">Internal x402 payer: <span className="font-mono">{view.payerWallet ?? "Pending"}</span></p></div>
-          </CardContent></Card>
-
-          {view.userPayment ? <Card className="rounded-lg"><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="flex items-center gap-2"><CreditCard className="size-5 text-primary" />Workflow checkout</CardTitle><Badge variant={view.userPayment.status === "credit_issued" ? "secondary" : "default"}>{view.userPayment.status}</Badge></div></CardHeader><CardContent className="grid gap-4 text-sm"><div className="grid gap-3 sm:grid-cols-2"><div><p className="text-xs text-muted-foreground">User payment</p><p className="font-mono font-medium">{view.userPayment.grossAmountUsdc} USDC</p></div><div><p className="text-xs text-muted-foreground">Provider cost</p><p className="font-mono font-medium">{view.userPayment.providerCostUsdc} USDC</p></div><div><p className="text-xs text-muted-foreground">Quoted platform fee</p><p className="font-mono font-medium">{view.userPayment.platformFeeUsdc} USDC</p></div><div><p className="text-xs text-muted-foreground">Net revenue</p><p className="font-mono font-medium">{view.userPayment.netRevenueUsdc} USDC</p></div></div>{Number(view.userPayment.creditAmountUsdc) > 0 ? <div className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3"><p className="font-medium">Credit issued · {view.userPayment.creditAmountUsdc} USDC</p><p className="mt-1 text-xs text-muted-foreground">{view.userPayment.failureReason ?? "The paid workflow could not complete."}</p></div> : null}{view.userPayment.transactionHash ? <div className="min-w-0"><p className="break-all font-mono text-xs">{view.userPayment.transactionHash}</p>{view.userPayment.transactionUrl ? <Button asChild size="sm" variant="outline" className="mt-2"><a href={view.userPayment.transactionUrl} target="_blank" rel="noreferrer">User payment on Arc <ExternalLink /></a></Button> : null}</div> : <p className="text-xs text-muted-foreground">Sponsored checkout · no user USDC transaction.</p>}<Button asChild variant="outline"><Link href={view.links.workflowReceipt}><ReceiptText />Workflow Receipt</Link></Button></CardContent></Card> : null}
-
-          <Card className="rounded-lg"><CardHeader><CardTitle>Plan snapshot</CardTitle></CardHeader><CardContent className="grid gap-3 text-sm">
-            {view.job.plannerSnapshot.marketSymbol ? <Badge variant="outline" className="w-fit">Selected asset · {view.job.plannerSnapshot.marketSymbol}</Badge> : null}
-            {view.job.plannerSnapshot.selectedServices?.map((service) => <div key={service.slug} className="min-w-0 rounded-md border p-3"><div className="flex flex-wrap justify-between gap-3"><p className="font-medium">{service.name}</p><span className="font-mono">{service.priceUsdc.toFixed(4)} USDC</span></div>{service.presentation ? <div className="mt-2"><ServicePresentation metadata={service.presentation} /></div> : null}<p className="mt-2 text-xs text-muted-foreground">{service.reasoning}</p></div>)}
-            <p className="text-xs text-muted-foreground">Estimated {view.job.plannerSnapshot.estimatedSpendUsdc ?? "—"} USDC · server allowlist · max 3 paid calls.</p>
-          </CardContent></Card>
+          <Card className="rounded-lg">
+            <CardHeader>
+              <CardTitle>Live progress</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              {CONSUMER_STAGES.map((stageItem, index) => {
+                const done =
+                  view.job.status === "completed" ||
+                  (currentIndex >= 0 && index < currentIndex);
+                const current = (stageItem.matches as readonly string[]).includes(activeStage);
+                return (
+                  <div key={stageItem.id} className="flex items-center gap-3 text-sm">
+                    {done ? (
+                      <Check className="size-5 text-primary" />
+                    ) : current && active ? (
+                      <LoaderCircle className="size-5 animate-spin text-primary" />
+                    ) : (
+                      <Circle className="size-5 text-muted-foreground/40" />
+                    )}
+                    <span className={done || current ? "font-medium" : "text-muted-foreground"}>
+                      {stageItem.label}
+                    </span>
+                  </div>
+                );
+              })}
+              {view.job.status === "failed" ? (
+                <p className="text-sm text-destructive">Failed · {view.job.error}</p>
+              ) : null}
+              {pollError ? <p className="text-sm text-destructive">{pollError}</p> : null}
+              {view.job.progressMessage ? (
+                <p className="mt-2 text-xs text-muted-foreground">{view.job.progressMessage}</p>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid content-start gap-6">
-          <Card className="rounded-lg"><CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle>Final Report</CardTitle>{report ? <Badge variant={report.completedWithWarnings ? "secondary" : "default"}>{report.completedWithWarnings ? "completed with warnings" : "complete"}</Badge> : null}</div></CardHeader><CardContent className="grid gap-5">
-            {report ? <>
-              <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Summary</p><p className="mt-2 leading-7">{report.summary}</p></div>
-              <div className="rounded-md bg-secondary/30 p-3"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Safe input preview</p><p className="mt-2 text-sm">{reportInput.preview}</p><p className="mt-2 break-all font-mono text-[11px] text-muted-foreground">SHA-256 {reportInput.sha256}</p></div>
-              {report.synthesis ? <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm"><div className="flex flex-wrap items-center gap-2"><Badge variant={report.synthesis.status === "ai_generated" ? "default" : "secondary"}>{report.synthesis.status === "ai_generated" ? "AI-generated synthesis" : "Deterministic fallback"}</Badge>{report.synthesis.provider ? <Badge variant="outline">Provider · {report.synthesis.provider}</Badge> : null}{report.synthesis.model ? <Badge variant="outline">Model · {report.synthesis.model}</Badge> : null}</div>{report.synthesis.status === "ai_generated" ? <><p className="mt-3 text-xs text-muted-foreground">FreeModel generated the summary and findings after deterministic paid execution completed. It did not select services, approve spend, perform x402 settlement, or register proofs.</p><div className="mt-3"><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Paid API responses used</p><div className="mt-2 flex flex-wrap gap-2">{report.synthesis.usedPaidApiResponses.map((service) => <Badge key={service.serviceSlug} variant="secondary">{service.serviceName}{service.amountUsdc ? ` · ${service.amountUsdc} USDC` : ""}</Badge>)}</div></div></> : <p className="mt-3 text-xs text-muted-foreground">{fallbackReasonLabel(report.synthesis.fallbackReason)}. Successful paid API results, receipts, and Arc proofs were preserved.</p>}</div> : null}
-              <div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key findings</p><ul className="mt-2 grid gap-2 text-sm">{report.keyFindings.map((finding, index) => <li key={`${index}-${finding}`} className="rounded-md bg-secondary/30 p-3">{finding}</li>)}</ul></div>
-              <div className="grid gap-3 sm:grid-cols-2"><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Selected services</p><div className="mt-2 flex flex-wrap gap-2">{report.selectedServices.map((service) => <Badge key={service.slug}>{service.name}</Badge>)}</div></div><div><p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Skipped services</p><div className="mt-2 flex flex-wrap gap-2">{report.skippedServices.length ? report.skippedServices.map((service) => <Badge key={service.slug} variant="outline">{service.name}</Badge>) : <span className="text-sm text-muted-foreground">None in the allowlisted plan.</span>}</div></div></div>
-              <div className="rounded-md border p-3 text-sm"><p className="font-medium">{report.aggregationLabel}</p><p className="mt-1 text-xs text-muted-foreground">Actual paid API responses remain available below regardless of whether optional external synthesis succeeds.</p></div>
-              <div className="flex flex-wrap gap-2">{report.links.agentRun ? <Button asChild variant="outline"><Link href={report.links.agentRun}>Agent Run</Link></Button> : null}<Button asChild variant="outline"><Link href={report.links.receipts}>Commerce Receipts</Link></Button>{report.links.passport ? <Button asChild variant="outline"><Link href={report.links.passport}>Agent Passport</Link></Button> : null}</div>
-            </> : <div className="flex items-center gap-3 text-sm text-muted-foreground"><LoaderCircle className="size-4 animate-spin" />The Final Report appears after paid execution and durable persistence complete.</div>}
-          </CardContent></Card>
+          <Card className="rounded-lg">
+            <CardHeader>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <CardTitle>Final Report</CardTitle>
+                {report ? (
+                  <Badge variant={report.completedWithWarnings ? "secondary" : "default"}>
+                    {report.completedWithWarnings ? "Completed with warnings" : "Completed"}
+                  </Badge>
+                ) : null}
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              {report ? (
+                <>
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Summary</p>
+                    <p className="mt-2 leading-7">{report.summary}</p>
+                  </div>
+                  <div className="rounded-md bg-secondary/30 p-3">
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Input preview</p>
+                    <p className="mt-2 text-sm">{reportInput.preview}</p>
+                  </div>
+                  {report.synthesis ? (
+                    <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={report.synthesis.status === "ai_generated" ? "default" : "secondary"}>
+                          {report.synthesis.status === "ai_generated" ? "AI-generated synthesis" : "Deterministic fallback"}
+                        </Badge>
+                        {report.synthesis.provider ? <Badge variant="outline">Provider · {report.synthesis.provider}</Badge> : null}
+                        {report.synthesis.model ? <Badge variant="outline">Model · {report.synthesis.model}</Badge> : null}
+                      </div>
+                      {report.synthesis.status === "ai_generated" ? (
+                        <>
+                          <p className="mt-3 text-xs text-muted-foreground">
+                            Summary and findings synthesized after execution completed.
+                          </p>
+                          <div className="mt-3">
+                            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Paid API responses used</p>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              {report.synthesis.usedPaidApiResponses.map((service) => (
+                                <Badge key={service.serviceSlug} variant="secondary">
+                                  {service.serviceName}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <p className="mt-3 text-xs text-muted-foreground">
+                          {fallbackReasonLabel(report.synthesis.fallbackReason)}. Successful paid API results, receipts, and Arc proofs were preserved.
+                        </p>
+                      )}
+                    </div>
+                  ) : null}
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Key findings</p>
+                    <ul className="mt-2 grid gap-2 text-sm">
+                      {report.keyFindings.map((finding, index) => (
+                        <li key={`${index}-${finding}`} className="rounded-md bg-secondary/30 p-3">
+                          {finding}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Selected services</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {report.selectedServices.map((service) => (
+                          <Badge key={service.slug}>{service.name}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Skipped services</p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {report.skippedServices.length ? (
+                          report.skippedServices.map((service) => (
+                            <Badge key={service.slug} variant="outline">{service.name}</Badge>
+                          ))
+                        ) : (
+                          <span className="text-sm text-muted-foreground">None in the allowlisted plan.</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 pt-2">
+                    {report.links.agentRun ? (
+                      <Button asChild variant="outline">
+                        <Link href={report.links.agentRun}>Agent Run</Link>
+                      </Button>
+                    ) : null}
+                    <Button asChild variant="outline">
+                      <Link href={report.links.receipts}>Commerce Receipts</Link>
+                    </Button>
+                    {report.links.passport ? (
+                      <Button asChild variant="outline">
+                        <Link href={report.links.passport}>Agent Passport</Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                  <LoaderCircle className="size-4 animate-spin" />
+                  The Final Report appears after execution completes.
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
-          <Card className="rounded-lg"><CardHeader><CardTitle>Services purchased</CardTitle></CardHeader><CardContent className="grid gap-4">
-            {view.services.filter((service) => service.status === "paid" || service.status === "failed").map((service) => <div key={service.serviceSlug} className="min-w-0 rounded-md border p-4"><div className="flex min-w-0 flex-wrap items-start justify-between gap-3"><div className="min-w-0"><p className="font-medium">{service.serviceName}</p><div className="mt-2"><ServicePresentation metadata={service.presentation} /></div></div><Badge variant={service.status === "paid" ? "default" : "destructive"}>{service.status === "paid" ? `${service.priceUsdc} USDC` : "failed"}</Badge></div><p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p>{service.presentation.providerType === "live_provider" ? <div className="mt-3"><ProviderResponseDetails value={service.response} /></div> : service.response ? <pre className="mt-3 max-h-52 max-w-full overflow-auto rounded-md bg-secondary/40 p-3 text-xs">{prettyJson(service.response)}</pre> : null}{service.error ? <p className="mt-2 break-words text-sm text-destructive">{service.error}</p> : null}{service.receiptId ? <Button asChild size="sm" variant="outline" className="mt-3"><Link href={`/receipts/${service.receiptId}`}><ReceiptText />Receipt</Link></Button> : null}</div>)}
-            {!view.services.some((service) => service.status === "paid" || service.status === "failed") ? <p className="text-sm text-muted-foreground">Purchases have not started yet.</p> : null}
-          </CardContent></Card>
-
-          <Card className="rounded-lg"><CardHeader><CardTitle>Verified on Arc</CardTitle></CardHeader><CardContent className="grid gap-3">
-            {view.proofs.map((proof) => <div key={proof.receiptId} className="rounded-md border p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-2">{proof.status === "verified" ? <BadgeCheck className="size-5 text-primary" /> : proof.status === "pending" ? <LoaderCircle className="size-5 animate-spin text-primary" /> : <Circle className="size-5 text-destructive" />}<p className="font-medium">{proof.status === "verified" ? "Verified on Arc" : proof.status === "failed" ? "Proof failed" : "Onchain proof pending"}</p></div><Badge variant="outline">receipt {shortenHash(proof.receiptId, 6)}</Badge></div>{proof.transactionHash ? <p className="mt-3 break-all font-mono text-xs">{proof.transactionHash}</p> : null}<div className="mt-3 flex flex-wrap gap-2">{proof.transactionUrl ? <Button asChild size="sm"><a href={proof.transactionUrl} target="_blank" rel="noreferrer">Proof transaction <ExternalLink /></a></Button> : null}{proof.contractUrl ? <Button asChild size="sm" variant="outline"><a href={proof.contractUrl} target="_blank" rel="noreferrer">Registry contract <ExternalLink /></a></Button> : null}</div></div>)}
-            {!view.proofs.length ? <p className="text-sm text-muted-foreground">Proof metadata appears after settlement creates a receipt.</p> : null}
-          </CardContent></Card>
+          <Card className="rounded-lg">
+            <CardHeader>
+              <CardTitle>Services purchased</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-4">
+              {view.services
+                .filter((service) => service.status === "paid" || service.status === "failed")
+                .map((service) => (
+                  <div key={service.serviceSlug} className="min-w-0 rounded-md border p-4">
+                    <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="font-medium">{service.serviceName}</p>
+                        <div className="mt-2">
+                          <ServicePresentation metadata={service.presentation} />
+                        </div>
+                      </div>
+                      <Badge variant={service.status === "paid" ? "default" : "destructive"}>
+                        {service.status === "paid" ? `${service.priceUsdc} USDC` : "failed"}
+                      </Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">{service.reasoning}</p>
+                    {service.presentation.providerType === "live_provider" ? (
+                      <div className="mt-3">
+                        <ProviderResponseDetails value={service.response} />
+                      </div>
+                    ) : service.response ? (
+                      <pre className="mt-3 max-h-52 max-w-full overflow-auto rounded-md bg-secondary/40 p-3 text-xs">
+                        {prettyJson(service.response)}
+                      </pre>
+                    ) : null}
+                    {service.error ? (
+                      <p className="mt-2 break-words text-sm text-destructive">{service.error}</p>
+                    ) : null}
+                    {service.receiptId ? (
+                      <Button asChild size="sm" variant="outline" className="mt-3">
+                        <Link href={`/receipts/${service.receiptId}`}>
+                          <ReceiptText className="size-4" />
+                          Receipt
+                        </Link>
+                      </Button>
+                    ) : null}
+                  </div>
+                ))}
+              {!view.services.some((service) => service.status === "paid" || service.status === "failed") ? (
+                <p className="text-sm text-muted-foreground">Purchases have not started yet.</p>
+              ) : null}
+            </CardContent>
+          </Card>
         </div>
+      </section>
+
+      <section className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
+        <details className="mt-6 rounded-md border p-4">
+          <summary className="cursor-pointer font-semibold text-sm text-muted-foreground hover:text-foreground">
+            Payment & verification details
+          </summary>
+          <div className="mt-4 grid gap-6">
+            {view.userPayment ? (
+              <Card className="rounded-lg">
+                <CardHeader>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <CreditCard className="size-4 text-primary" />
+                      Workflow Checkout & Payment
+                    </CardTitle>
+                    <Badge variant={view.userPayment.status === "credit_issued" ? "secondary" : "default"}>
+                      {view.userPayment.status}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="grid gap-4 text-sm">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <p className="text-xs text-muted-foreground">User payment</p>
+                      <p className="font-mono font-medium">{view.userPayment.grossAmountUsdc} USDC</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Provider cost</p>
+                      <p className="font-mono font-medium">{view.userPayment.providerCostUsdc} USDC</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Quoted platform fee</p>
+                      <p className="font-mono font-medium">{view.userPayment.platformFeeUsdc} USDC</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Net revenue</p>
+                      <p className="font-mono font-medium">{view.userPayment.netRevenueUsdc} USDC</p>
+                    </div>
+                  </div>
+                  {Number(view.userPayment.creditAmountUsdc) > 0 ? (
+                    <div className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3">
+                      <p className="font-medium">Credit issued · {view.userPayment.creditAmountUsdc} USDC</p>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {view.userPayment.failureReason ?? "The paid workflow could not complete."}
+                      </p>
+                    </div>
+                  ) : null}
+                  {view.userPayment.transactionHash ? (
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground">User checkout transaction</p>
+                      <p className="break-all font-mono text-xs">{view.userPayment.transactionHash}</p>
+                      {view.userPayment.transactionUrl ? (
+                        <Button asChild size="sm" variant="outline" className="mt-2">
+                          <a href={view.userPayment.transactionUrl} target="_blank" rel="noreferrer">
+                            User payment on Arc <ExternalLink className="size-3" />
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Sponsored checkout · no user USDC transaction.</p>
+                  )}
+                  <Button asChild variant="outline" size="sm" className="w-fit">
+                    <Link href={view.links.workflowReceipt}>
+                      <ReceiptText className="size-4" />
+                      Workflow Receipt
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+            ) : null}
+
+            <Card className="rounded-lg">
+              <CardHeader>
+                <CardTitle className="text-base">Identity & Wallets</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 text-xs">
+                <div>
+                  <p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL}</p>
+                  <p className={view.job.requesterWallet ? "mt-1 break-all font-mono" : "mt-1 text-muted-foreground"}>
+                    {hostedRequesterDisplayLine(view.job.requesterWallet)}
+                  </p>
+                  {view.userPayment?.paymentMode === "paid" ? (
+                    <p className="mt-1 text-muted-foreground">Paid user-facing workflow price.</p>
+                  ) : (
+                    <p className="mt-1 text-muted-foreground">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p>
+                  )}
+                </div>
+                <div className="border-t pt-2">
+                  <p className="text-muted-foreground">
+                    Internal x402 payer wallet: <span className="font-mono">{view.payerWallet ?? "Pending"}</span>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-lg">
+              <CardHeader>
+                <CardTitle className="text-base">Arc Proof Details</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                {view.proofs.map((proof) => (
+                  <div key={proof.receiptId} className="rounded-md border p-3 text-xs">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {proof.status === "verified" ? (
+                          <BadgeCheck className="size-4 text-primary" />
+                        ) : proof.status === "pending" ? (
+                          <LoaderCircle className="size-4 animate-spin text-primary" />
+                        ) : (
+                          <Circle className="size-4 text-destructive" />
+                        )}
+                        <span className="font-medium">
+                          {proof.status === "verified" ? "Verified on Arc" : proof.status === "failed" ? "Proof failed" : "Onchain proof pending"}
+                        </span>
+                      </div>
+                      <Badge variant="outline">receipt {shortenHash(proof.receiptId, 6)}</Badge>
+                    </div>
+                    {proof.transactionHash ? <p className="mt-2 break-all font-mono">{proof.transactionHash}</p> : null}
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {proof.transactionUrl ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={proof.transactionUrl} target="_blank" rel="noreferrer">
+                            Proof transaction <ExternalLink className="size-3" />
+                          </a>
+                        </Button>
+                      ) : null}
+                      {proof.contractUrl ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={proof.contractUrl} target="_blank" rel="noreferrer">
+                            Registry contract <ExternalLink className="size-3" />
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+                {!view.proofs.length ? <p className="text-xs text-muted-foreground">Proof metadata appears after settlement creates a receipt.</p> : null}
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-lg">
+              <CardHeader>
+                <CardTitle className="text-base">Raw Execution & Planner Snapshot</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3 text-xs">
+                <div className="grid gap-1 font-mono">
+                  <p>Job ID: {view.job.id}</p>
+                  <p>Input SHA-256: {reportInput.sha256}</p>
+                  <p>Budget: {view.job.budgetUsdc} USDC | Spent: {view.job.spentUsdc} USDC</p>
+                  <p>Internal Progress Stage: {view.job.progressStage}</p>
+                </div>
+                {view.job.plannerSnapshot.marketSymbol ? (
+                  <Badge variant="outline" className="w-fit">Selected asset · {view.job.plannerSnapshot.marketSymbol}</Badge>
+                ) : null}
+                <div className="grid gap-2 border-t pt-2">
+                  <p className="font-medium text-muted-foreground">Planner Service Selections:</p>
+                  {view.job.plannerSnapshot.selectedServices?.map((service) => (
+                    <div key={service.slug} className="rounded-md border p-2">
+                      <div className="flex justify-between font-mono">
+                        <span>{service.name}</span>
+                        <span>{service.priceUsdc.toFixed(4)} USDC</span>
+                      </div>
+                      <p className="mt-1 text-muted-foreground">{service.reasoning}</p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </details>
       </section>
     </main>
   );
