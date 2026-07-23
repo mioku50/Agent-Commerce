@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { previewHostedWorkflow } from "@/lib/agent/hosted-jobs";
 import {
+  HOSTED_AGENT_MAX_BUDGET_USDC,
   getHostedRunnerConfig,
   hostedIdempotencyHash,
   hostedIdempotencyRequestHash,
@@ -11,8 +12,10 @@ import {
 } from "@/lib/agent/hosted-policy";
 import {
   hashHostedWorkflowInput,
+  isHostedWorkflowType,
   validateHostedWorkflowRequest,
 } from "@/lib/agent/hosted-workflows";
+import { getHostedWorkflowTemplate } from "@/lib/agent/workflow-templates";
 import {
   createHostedWorkflowQuote,
   HostedCheckoutPolicyError,
@@ -25,7 +28,15 @@ export const maxDuration = 60;
 export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
-    const workflowRequest = validateHostedWorkflowRequest(body);
+    const template = isHostedWorkflowType(body.workflowType)
+      ? getHostedWorkflowTemplate(body.workflowType)
+      : undefined;
+    const serverEnforcedBody = {
+      ...body,
+      task: template?.task ?? body.task,
+      budgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
+    };
+    const workflowRequest = validateHostedWorkflowRequest(serverEnforcedBody);
     const requesterWallet = optionalRequesterWallet(body.requesterWallet);
     if (!requesterWallet) {
       return NextResponse.json(

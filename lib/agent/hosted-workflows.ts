@@ -7,12 +7,14 @@ import { createHash } from "node:crypto";
 import type { BuyerAgentServiceResult } from "./execution.ts";
 import {
   HOSTED_AGENT_MAX_TASK_LENGTH,
+  HOSTED_AGENT_MAX_BUDGET_USDC,
   validateHostedBudget,
 } from "./hosted-policy.ts";
 import { planAgentPurchases } from "./planner.ts";
 import type { ApiService, ServiceMethod } from "../services/registry.ts";
 import {
   HOSTED_WORKFLOW_TYPES,
+  getHostedWorkflowTemplate,
   type HostedWorkflowType,
 } from "./workflow-templates.ts";
 import {
@@ -234,7 +236,17 @@ export function validateHostedWorkflowRequest(input: {
   }
 
   const workflowType = input.workflowType;
-  const task = normalizedText(input.task).replace(/\s+/g, " ");
+  const rawTask = normalizedText(input.task).replace(/\s+/g, " ");
+  const templateTask =
+    getHostedWorkflowTemplate(workflowType)?.task || defaultWorkflowTask(workflowType);
+
+  const isStandardWorkflow =
+    workflowType === "sentiment_tone" ||
+    workflowType === "builder_update" ||
+    workflowType === "market_context";
+
+  const task = isStandardWorkflow || !rawTask ? templateTask : rawTask;
+
   const inputText = normalizedText(input.inputText);
   if (task.length > HOSTED_AGENT_MAX_TASK_LENGTH) {
     throw new Error(`Task must contain at most ${HOSTED_AGENT_MAX_TASK_LENGTH} characters.`);
@@ -270,12 +282,19 @@ export function validateHostedWorkflowRequest(input: {
     marketSymbol = normalizePythSymbol(input.marketSymbol);
   }
 
+  const rawBudget =
+    input.budgetUsdc === undefined ||
+    input.budgetUsdc === null ||
+    input.budgetUsdc === ""
+      ? HOSTED_AGENT_MAX_BUDGET_USDC
+      : input.budgetUsdc;
+
   return {
     workflowType,
-    task: task || defaultWorkflowTask(workflowType),
+    task,
     inputText,
     marketSymbol,
-    budgetUsdc: validateHostedBudget(input.budgetUsdc),
+    budgetUsdc: validateHostedBudget(rawBudget),
   };
 }
 
