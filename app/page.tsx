@@ -114,11 +114,11 @@ export default async function Home() {
                     {template.description}
                   </p>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    {template.services.map((service) => service.name).join(" + ")}
+                    {template.benefitLabel}
                   </p>
                 </div>
                 <span className="font-mono text-xs text-muted-foreground md:text-right">
-                  est. {template.estimatedSpendUsdc.toFixed(4)} USDC
+                  From 0.002 USDC
                 </span>
               </Link>
             ))}

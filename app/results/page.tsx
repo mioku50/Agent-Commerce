@@ -41,6 +41,16 @@ function formatDate(value: string) {
   }).format(new Date(value));
 }
 
+function formatReportTitle(report: HostedFinalReportSummary) {
+  if (report.workflowType === "market_context") {
+    const symbolMatch = (report.inputPreview || report.summary).match(/\b(BTC|ETH|SOL|LINK|UNI|AVAX|MATIC|ARB|OP)\/USD\b/i);
+    if (symbolMatch) {
+      return `${symbolMatch[0].toUpperCase()} Market Context`;
+    }
+  }
+  return report.workflowLabel;
+}
+
 type ResultsPageProps = {
   searchParams: Promise<{
     q?: string | string[];
@@ -100,7 +110,7 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
                 <span className="font-medium">Search reports</span>
                 <span className="relative min-w-0">
                   <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                  <input name="q" defaultValue={filters.query} maxLength={160} placeholder="Input preview or summary" className="h-10 w-full min-w-0 rounded-md border bg-background pl-9 pr-3 text-sm" />
+                  <input name="q" defaultValue={filters.query} maxLength={160} placeholder="Search reports..." className="h-10 w-full min-w-0 rounded-md border bg-background pl-9 pr-3 text-sm" />
                 </span>
               </label>
               <label className="grid gap-2 text-sm">
@@ -167,9 +177,9 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
                     {report.completedWithWarnings ? "Completed with warnings" : "Completed"}
                   </Badge>
                 </div>
-                <CardTitle className="text-xl">{sanitizePublicReportText(report.summary)}</CardTitle>
-                <p className="line-clamp-2 text-sm text-muted-foreground">
-                  Input preview: {report.inputPreview}
+                <CardTitle className="text-xl">{formatReportTitle(report)}</CardTitle>
+                <p className="line-clamp-2 text-sm text-muted-foreground mt-1">
+                  {sanitizePublicReportText(report.summary)}
                 </p>
               </CardHeader>
               <CardContent className="grid gap-5">
@@ -181,7 +191,11 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
                     </p>
                   ))}
                 </div>
-                <div className="flex flex-wrap gap-3 border-t pt-4 text-xs text-muted-foreground">
+                <div className="flex flex-wrap items-center gap-2 border-t pt-4 text-xs text-muted-foreground">
+                  <span>
+                    {report.keyFindings.length} key finding{report.keyFindings.length === 1 ? "" : "s"}
+                  </span>
+                  <span>·</span>
                   <span>Generated {formatDate(report.generatedAt)}</span>
                 </div>
                 <Button asChild>

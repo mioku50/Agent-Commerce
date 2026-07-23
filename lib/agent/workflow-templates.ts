@@ -22,6 +22,7 @@ export type HostedWorkflowTemplate = {
   task: string;
   placeholder: string;
   estimatedSpendUsdc: number;
+  benefitLabel: string;
   services: Array<{
     slug: "text-analyzer" | "premium-quote" | "pyth-market-price";
     name: string;
@@ -104,6 +105,7 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
     task: "Analyze this text and produce a sentiment and tone workflow report.",
     placeholder: "Paste the real text whose sentiment and tone you want to inspect…",
     estimatedSpendUsdc: 0.0013,
+    benefitLabel: "Text analysis · Shareable report · Arc verification",
     services: commonServices,
     expectedResult: [
       "Sentiment and tone signals",
@@ -120,6 +122,7 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
     task: "Analyze this builder update and extract a concise structured progress report.",
     placeholder: "Paste a real shipping update, changelog, or project status note…",
     estimatedSpendUsdc: 0.0013,
+    benefitLabel: "Text analysis · Shareable report · Arc verification",
     services: commonServices,
     expectedResult: [
       "Delivery and risk signals",
@@ -136,6 +139,7 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
     task: "Analyze this submitted crypto market context using a live provider-backed price and produce an evidence-labeled brief.",
     placeholder: "Add the real market context or question you want analyzed for the selected asset…",
     estimatedSpendUsdc: 0.0013,
+    benefitLabel: "Live market snapshot · Shareable report · Arc verification",
     services: marketServices,
     expectedResult: [
       "Live Pyth Network price and confidence interval",
@@ -152,6 +156,7 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
     task: "Analyze my text and prepare a concise structured report with useful paid API context.",
     placeholder: "Paste the real source text for your custom allowlisted workflow…",
     estimatedSpendUsdc: 0.0013,
+    benefitLabel: "Text analysis · Shareable report · Arc verification",
     services: commonServices,
     expectedResult: [
       "A planner-selected structured report",

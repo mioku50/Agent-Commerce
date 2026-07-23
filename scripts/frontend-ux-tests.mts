@@ -30,6 +30,12 @@ import {
 } from "../lib/navigation/sidebar.ts";
 import { humanizeError } from "../lib/errors/humanize-error.ts";
 import { sanitizePublicReportText } from "../lib/agent/public-report-copy.ts";
+import { hostedWorkflowTemplates } from "../lib/agent/workflow-templates.ts";
+
+for (const template of hostedWorkflowTemplates) {
+  assert(typeof template.benefitLabel === "string" && template.benefitLabel.length > 0);
+  assert(template.benefitLabel.includes("Arc verification"));
+}
 
 
 assert.equal(hostedWorkflowHref("sentiment_tone"), "/agent-runner?workflow=sentiment");
