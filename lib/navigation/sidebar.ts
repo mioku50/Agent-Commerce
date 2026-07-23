@@ -2,6 +2,7 @@ export type SidebarIconName =
   | "activity"
   | "agent"
   | "my-agents"
+  | "console"
   | "dashboard"
   | "passport"
   | "proof"
@@ -11,38 +12,38 @@ export type SidebarIconName =
   | "templates"
   | "tools";
 
-export const sidebarNavigation = [
+export const publicSidebarNavigation = [
   {
-    label: "Workflows",
+    label: "Menu",
     items: [
-      { href: "/", label: "Dashboard", icon: "dashboard" },
-      { href: "/agent-runner", label: "Run Workflow", icon: "agent" },
-      { href: "/my-agents", label: "My Agents", icon: "my-agents" },
-      { href: "/workflows", label: "Workflow Templates", icon: "templates" },
-      { href: "/results", label: "Results", icon: "results" },
+      { href: "/", label: "Home", icon: "dashboard" },
+      { href: "/agent-runner", label: "New Report", icon: "agent" },
+      { href: "/results", label: "My Reports", icon: "results" },
     ],
-  },
-  {
-    label: "Verification",
-    items: [
-      { href: "/runs", label: "Activity", icon: "activity" },
-      { href: "/proofs", label: "Arc Proofs", icon: "proof" },
-      { href: "/agents", label: "Agent Passports", icon: "passport" },
-      { href: "/receipts", label: "Commerce Receipts", icon: "receipt" },
-    ],
-  },
-  {
-    label: "Advanced",
-    items: [{ href: "/developer-tools", label: "Developer Tools", icon: "tools" }],
-  },
-  {
-    label: "Operator",
-    items: [{ href: "/seller", label: "Seller", icon: "seller" }],
   },
 ] as const satisfies ReadonlyArray<{
   label: string;
   items: ReadonlyArray<{ href: string; label: string; icon: SidebarIconName }>;
 }>;
 
+export const consoleSidebarNavigation = [
+  {
+    label: "Developer Console",
+    items: [
+      { href: "/console", label: "Console Home", icon: "console" },
+      { href: "/console/agents", label: "Agents", icon: "my-agents" },
+      { href: "/console/seller", label: "Services / Seller", icon: "seller" },
+      { href: "/console/developer-tools", label: "Developer Tools", icon: "tools" },
+      { href: "/console/audit", label: "Audit & Verification", icon: "proof" },
+    ],
+  },
+] as const satisfies ReadonlyArray<{
+  label: string;
+  items: ReadonlyArray<{ href: string; label: string; icon: SidebarIconName }>;
+}>;
+
+export const sidebarNavigation = publicSidebarNavigation;
+
 export const DESKTOP_SIDEBAR_SCROLL_CLASS = "overflow-y-auto overscroll-contain";
 export const MOBILE_SIDEBAR_SCROLL_CLASS = "overflow-y-auto overscroll-contain";
+

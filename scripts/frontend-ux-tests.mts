@@ -24,6 +24,8 @@ import {
 import {
   DESKTOP_SIDEBAR_SCROLL_CLASS,
   MOBILE_SIDEBAR_SCROLL_CLASS,
+  publicSidebarNavigation,
+  consoleSidebarNavigation,
   sidebarNavigation,
 } from "../lib/navigation/sidebar.ts";
 import { humanizeError } from "../lib/errors/humanize-error.ts";
@@ -111,13 +113,29 @@ assert.deepEqual(
   },
 );
 
-assert.deepEqual(sidebarNavigation.map(({ label }) => label), [
-  "Workflows",
-  "Verification",
-  "Advanced",
-  "Operator",
-]);
-assert(sidebarNavigation.flatMap(({ items }) => items).some(({ label }) => label === "Seller"));
+assert.deepEqual(publicSidebarNavigation.map(({ label }) => label), ["Menu"]);
+assert.deepEqual(
+  publicSidebarNavigation[0].items.map(({ label, href }) => ({ label, href })),
+  [
+    { label: "Home", href: "/" },
+    { label: "New Report", href: "/agent-runner" },
+    { label: "My Reports", href: "/results" },
+  ],
+);
+assert.deepEqual(sidebarNavigation, publicSidebarNavigation);
+
+assert.deepEqual(consoleSidebarNavigation.map(({ label }) => label), ["Developer Console"]);
+assert.deepEqual(
+  consoleSidebarNavigation[0].items.map(({ label, href }) => ({ label, href })),
+  [
+    { label: "Console Home", href: "/console" },
+    { label: "Agents", href: "/console/agents" },
+    { label: "Services / Seller", href: "/console/seller" },
+    { label: "Developer Tools", href: "/console/developer-tools" },
+    { label: "Audit & Verification", href: "/console/audit" },
+  ],
+);
+
 assert(DESKTOP_SIDEBAR_SCROLL_CLASS.includes("overflow-y-auto"));
 assert(MOBILE_SIDEBAR_SCROLL_CLASS.includes("overflow-y-auto"));
 

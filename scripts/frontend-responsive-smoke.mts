@@ -7,7 +7,7 @@ function baseUrl() {
 }
 
 async function noHorizontalOverflow(page: import("playwright").Page, path: string) {
-  await page.goto(`${baseUrl()}${path}`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}${path}`, { waitUntil: "load" });
   const overflow = await page.evaluate(() => ({
     client: document.documentElement.clientWidth,
     scroll: document.documentElement.scrollWidth,
@@ -19,38 +19,38 @@ const browser = await chromium.launch({ headless: true });
 try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
 
-  await page.goto(`${baseUrl()}/`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}/`, { waitUntil: "load" });
   await page.locator('a[href="/agent-runner?workflow=sentiment"]').first().waitFor();
   await page.locator('a[href="/agent-runner?workflow=builder_update"]').first().waitFor();
   await page.locator('a[href="/agent-runner?workflow=market_context&symbol=BTC%2FUSD"]').first().waitFor();
 
-  await page.goto(`${baseUrl()}/agent-runner?workflow=builder_update`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}/agent-runner?workflow=builder_update`, { waitUntil: "load" });
   assert.equal(await page.locator("#workflow-type").inputValue(), "builder_update");
   await page.locator("#workflow-type").selectOption("market_context");
   await page.locator("#market-symbol").waitFor();
   await page.locator("#workflow-type").selectOption("sentiment_tone");
   assert.equal(await page.locator("#market-symbol").count(), 0);
-  await page.goto(`${baseUrl()}/agent-runner?workflow=market_context&symbol=ETH%2FUSD`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}/agent-runner?workflow=market_context&symbol=ETH%2FUSD`, { waitUntil: "load" });
   assert.equal(await page.locator("#workflow-type").inputValue(), "market_context");
   assert.equal(await page.locator("#market-symbol").inputValue(), "ETH/USD");
-  await page.goto(`${baseUrl()}/agent-runner?workflow=invalid&symbol=DOGE%2FUSD`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}/agent-runner?workflow=invalid&symbol=DOGE%2FUSD`, { waitUntil: "load" });
   assert.equal(await page.locator("#workflow-type").inputValue(), "sentiment_tone");
   await page.getByText("Enter at least 20 characters to preview the workflow.", { exact: true }).waitFor();
-  await page.getByText("Requester identity", { exact: false }).first().waitFor();
-  await page.getByText("Your wallet will not be charged.", { exact: false }).first().waitFor();
-  await page.getByText("This wallet does not pay for hosted workflows.", { exact: false }).first().waitFor();
+  await page.getByText("Requester & workflow payer", { exact: false }).first().waitFor();
+  await page.getByText("Sponsored workflows will not charge your wallet.", { exact: false }).first().waitFor();
+  await page.getByText("Internal x402 API purchases still use the project-owned hosted payer.", { exact: false }).first().waitFor();
   await page.getByText("External LLM processing:", { exact: false }).waitFor();
   await page.getByLabel("Workflow", { exact: true }).focus();
   await page.keyboard.press("Tab");
   assert.equal(await page.evaluate(() => document.activeElement?.id), "hosted-task");
 
-  await page.goto(`${baseUrl()}/workflows`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}/workflows`, { waitUntil: "load" });
   await page.locator('a[href="/agent-runner?workflow=custom"]').waitFor();
   const provider = page.locator('[data-provider-type="live_provider"]').first();
   await provider.getByText("Live Provider · Pyth Network", { exact: true }).waitFor();
   await provider.getByText("USDC pays Arc Agent Commerce", { exact: false }).waitFor();
 
-  await page.goto(`${baseUrl()}/results?workflow=market_context&status=warnings&sort=spend&q=ETH`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}/results?workflow=market_context&status=warnings&sort=spend&q=ETH`, { waitUntil: "load" });
   assert.equal(await page.getByLabel("Search reports").inputValue(), "ETH");
   assert.equal(await page.getByLabel("Workflow").inputValue(), "market_context");
   assert.equal(await page.getByLabel("Completion status").inputValue(), "warnings");
@@ -65,30 +65,31 @@ try {
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
-    for (const path of ["/", "/agent-runner", "/workflows", "/results", "/proofs"]) {
+    for (const path of ["/", "/agent-runner", "/workflows", "/results", "/proofs", "/console"]) {
       await noHorizontalOverflow(page, path);
     }
   }
 
   await page.setViewportSize({ width: 911, height: 512 });
-  await page.goto(`${baseUrl()}/`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}/`, { waitUntil: "load" });
   const desktopSidebar = page.locator('[data-testid="desktop-sidebar"]');
-  await desktopSidebar.evaluate((element) => {
-    element.scrollTop = element.scrollHeight;
-  });
-  await desktopSidebar.getByRole("link", { name: "Seller", exact: true }).scrollIntoViewIfNeeded();
-  await desktopSidebar.getByRole("link", { name: "Seller", exact: true }).waitFor();
+  await desktopSidebar.getByRole("link", { name: "My Reports", exact: true }).scrollIntoViewIfNeeded();
+  await desktopSidebar.getByRole("link", { name: "My Reports", exact: true }).waitFor();
+
+  await page.goto(`${baseUrl()}/console`, { waitUntil: "load" });
+  await desktopSidebar.getByRole("link", { name: "Services / Seller", exact: true }).scrollIntoViewIfNeeded();
+  await desktopSidebar.getByRole("link", { name: "Services / Seller", exact: true }).waitFor();
 
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(`${baseUrl()}/`, { waitUntil: "networkidle" });
+  await page.goto(`${baseUrl()}/`, { waitUntil: "load" });
   await page.getByRole("button", { name: "Open navigation" }).click();
   const mobileSidebar = page.locator('[data-testid="mobile-sidebar"]');
   assert.equal(await mobileSidebar.getAttribute("aria-hidden"), "false");
-  await mobileSidebar.getByRole("link", { name: "Results", exact: true }).click();
+  await mobileSidebar.getByRole("link", { name: "My Reports", exact: true }).click();
   await page.waitForURL(`${baseUrl()}/results`);
   assert.equal(await mobileSidebar.getAttribute("aria-hidden"), "true");
 
-  console.log("[frontend-responsive-smoke] passed: deep links, query-backed Results controls, helper/requester/provider copy, keyboard labels, desktop/125%/150%/tablet/mobile overflow, scrollable Seller link, and mobile close-on-navigation");
+  console.log("[frontend-responsive-smoke] passed: deep links, query-backed Results controls, helper/requester/provider copy, keyboard labels, desktop/125%/150%/tablet/mobile overflow, scrollable console links, and mobile close-on-navigation");
 } finally {
   await browser.close();
 }

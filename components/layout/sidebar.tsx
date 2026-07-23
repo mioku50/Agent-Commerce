@@ -13,6 +13,7 @@ import {
   ReceiptText,
   ShieldCheck,
   Store,
+  Terminal,
   Wrench,
   UserRoundCog,
   type LucideIcon,
@@ -21,7 +22,8 @@ import { cn } from "@/lib/utils";
 import {
   DESKTOP_SIDEBAR_SCROLL_CLASS,
   MOBILE_SIDEBAR_SCROLL_CLASS,
-  sidebarNavigation,
+  publicSidebarNavigation,
+  consoleSidebarNavigation,
   type SidebarIconName,
 } from "@/lib/navigation/sidebar";
 
@@ -36,6 +38,7 @@ const iconByName: Record<SidebarIconName, LucideIcon> = {
   activity: Activity,
   agent: Bot,
   "my-agents": UserRoundCog,
+  console: Terminal,
   dashboard: House,
   passport: BadgeCheck,
   proof: ShieldCheck,
@@ -46,17 +49,22 @@ const iconByName: Record<SidebarIconName, LucideIcon> = {
   tools: Wrench,
 };
 
-const navSections: Array<{ label: string; items: NavItem[] }> =
-  sidebarNavigation.map((section) => ({
+function getNavSections(pathname: string): Array<{ label: string; items: NavItem[] }> {
+  const navigation = pathname.startsWith("/console")
+    ? consoleSidebarNavigation
+    : publicSidebarNavigation;
+  return navigation.map((section) => ({
     label: section.label,
     items: section.items.map((item) => ({
       ...item,
       icon: iconByName[item.icon],
     })),
   }));
+}
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
+  if (href === "/console") return pathname === "/console";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -89,6 +97,10 @@ function SidebarLink({ item, collapsed }: { item: NavItem; collapsed?: boolean }
 }
 
 export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
+  const pathname = usePathname();
+  const navSections = getNavSections(pathname);
+  const isConsole = pathname.startsWith("/console");
+
   return (
     <aside
       data-testid="desktop-sidebar"
@@ -138,10 +150,12 @@ export function Sidebar({ collapsed = false }: { collapsed?: boolean }) {
               "flex items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/10 px-3 py-2 text-xs text-emerald-300",
               collapsed && "justify-center px-2",
             )}
-            title={collapsed ? "Arc Testnet" : undefined}
+            title={collapsed ? (isConsole ? "Developer Mode" : "Arc Testnet") : undefined}
           >
             <span className="size-2 rounded-full bg-emerald-300 shadow-[0_0_14px_rgb(0_208_132/0.6)]" />
-            <span className={cn("font-semibold", collapsed && "sr-only")}>Arc Testnet</span>
+            <span className={cn("font-semibold", collapsed && "sr-only")}>
+              {isConsole ? "Developer Mode" : "Arc Testnet"}
+            </span>
           </div>
         </div>
       </div>
@@ -156,6 +170,10 @@ export function MobileSidebar({
   open: boolean;
   onClose: () => void;
 }) {
+  const pathname = usePathname();
+  const navSections = getNavSections(pathname);
+  const isConsole = pathname.startsWith("/console");
+
   return (
     <div
       data-testid="mobile-sidebar"
@@ -185,8 +203,12 @@ export function MobileSidebar({
             AC
           </span>
           <div>
-            <p className="text-sm font-semibold">Arc Agent Commerce</p>
-            <p className="text-xs text-muted-foreground">Hosted workflow reports</p>
+            <p className="text-sm font-semibold">
+              {isConsole ? "Arc Developer Console" : "Arc Agent Commerce"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {isConsole ? "Developer & Operator tools" : "Hosted workflow reports"}
+            </p>
           </div>
         </div>
         <div className="grid gap-5">
@@ -207,3 +229,4 @@ export function MobileSidebar({
     </div>
   );
 }
+
