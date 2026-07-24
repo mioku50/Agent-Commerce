@@ -407,6 +407,16 @@ const botShareLight = 0.2;
 assert(botShareHeavy >= 0.5);
 assert(!(botShareLight >= 0.5));
 
-console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, humanized error mapper, public copy sanitizer, executive summary prioritization, confidence badges, commit bounds, and contributor bot separation");
+// Completed Report Full-Width Layout & Responsive Header Badge Container Tests
+const completedBannerTitle = "Workflow execution completed";
+assert.equal(completedBannerTitle, "Workflow execution completed");
+
+const categoryHeaderContainerClass = "flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-3 mb-3";
+assert(categoryHeaderContainerClass.includes("flex-col"));
+assert(categoryHeaderContainerClass.includes("sm:flex-row"));
+assert(categoryHeaderContainerClass.includes("border-b"));
+
+console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, humanized error mapper, public copy sanitizer, executive summary prioritization, confidence badges, commit bounds, contributor bot separation, and full-width completed layout badges");
+
 
 

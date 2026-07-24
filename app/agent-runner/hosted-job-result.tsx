@@ -326,6 +326,12 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
     report?.summary ??
     "Repository analysis is unavailable.";
 
+  const isCompleted = view.job.status === "completed";
+  const durationMs = isCompleted && view.job.completedAt && (view.job.startedAt || view.job.createdAt)
+    ? Date.parse(view.job.completedAt) - Date.parse(view.job.startedAt || view.job.createdAt)
+    : null;
+  const durationSec = durationMs && durationMs > 0 ? Math.max(1, Math.round(durationMs / 1000)) : null;
+
   return (
     <main className="min-h-screen bg-background">
       <section className="border-b bg-secondary/20">
@@ -372,64 +378,129 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[0.72fr_1.28fr]">
-        <div className="grid content-start gap-6">
-          <Card className="rounded-lg">
-            <CardHeader>
-              <CardTitle>Live progress</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3">
-              {consumerStages.map((stageItem, index) => {
-                let done = view.job.status === "completed";
-                let current = false;
+      <section
+        className={
+          isCompleted
+            ? "mx-auto w-full max-w-5xl px-4 py-8 sm:px-6 grid gap-6"
+            : "mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[0.72fr_1.28fr]"
+        }
+      >
+        {isCompleted ? (
+          <div className="rounded-lg border p-4 bg-card flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-7 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-500">
+                  <Check className="size-4" />
+                </div>
+                <div>
+                  <span className="font-semibold text-sm text-foreground">Workflow execution completed</span>
+                  {durationSec ? (
+                    <span className="ml-2 text-xs text-muted-foreground font-mono">
+                      ({durationSec}s)
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex items-center gap-3 text-xs">
+                {view.userPayment?.transactionUrl ? (
+                  <a
+                    href={view.userPayment.transactionUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-medium text-primary hover:underline flex items-center gap-1"
+                  >
+                    Payment details <ExternalLink className="size-3" />
+                  </a>
+                ) : view.links.workflowReceipt ? (
+                  <Link
+                    href={view.links.workflowReceipt}
+                    className="font-medium text-primary hover:underline flex items-center gap-1"
+                  >
+                    Payment details <ExternalLink className="size-3" />
+                  </Link>
+                ) : (
+                  <a
+                    href="#technical-details"
+                    className="font-medium text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    Payment & technical details
+                  </a>
+                )}
+              </div>
+            </div>
+            <details className="text-xs text-muted-foreground border-t pt-2 mt-1">
+              <summary className="cursor-pointer font-medium hover:text-foreground select-none">
+                Execution steps ({consumerStages.length}/{consumerStages.length} completed)
+              </summary>
+              <div className="mt-2 grid gap-1.5 font-mono text-[11px] sm:grid-cols-2">
+                {consumerStages.map((stageItem) => (
+                  <div key={stageItem.id} className="flex items-center gap-2 text-emerald-500">
+                    <Check className="size-3.5 shrink-0" />
+                    <span>{stageItem.label}</span>
+                  </div>
+                ))}
+              </div>
+            </details>
+          </div>
+        ) : (
+          <div className="grid content-start gap-6">
+            <Card className="rounded-lg">
+              <CardHeader>
+                <CardTitle>Live progress</CardTitle>
+              </CardHeader>
+              <CardContent className="grid gap-3">
+                {consumerStages.map((stageItem, index) => {
+                  let done = false;
+                  let current = false;
 
-                if (view.job.status !== "completed" && active) {
-                  if (!isGithubWorkflow) {
-                    done = currentIndex >= 0 && index < currentIndex;
-                    current = (stageItem.matches as readonly string[]).includes(activeStage);
-                  } else {
-                    const paidCount = view.services.filter((s) => s.status === "paid").length;
-                    if (activeStage === "queued" || activeStage === "planning") {
-                      current = index === 0;
-                      done = index < 0;
-                    } else if (activeStage === "purchasing") {
-                      done = index < 1 + Math.min(paidCount, 2);
-                      current = index === 1 + Math.min(paidCount, 2);
-                    } else if (activeStage === "generating_receipt") {
-                      done = index < 4;
-                      current = index === 4;
-                    } else if (activeStage === "publishing_onchain_proof") {
-                      done = index < 5;
-                      current = index === 5;
+                  if (active) {
+                    if (!isGithubWorkflow) {
+                      done = currentIndex >= 0 && index < currentIndex;
+                      current = (stageItem.matches as readonly string[]).includes(activeStage);
+                    } else {
+                      const paidCount = view.services.filter((s) => s.status === "paid").length;
+                      if (activeStage === "queued" || activeStage === "planning") {
+                        current = index === 0;
+                        done = index < 0;
+                      } else if (activeStage === "purchasing") {
+                        done = index < 1 + Math.min(paidCount, 2);
+                        current = index === 1 + Math.min(paidCount, 2);
+                      } else if (activeStage === "generating_receipt") {
+                        done = index < 4;
+                        current = index === 4;
+                      } else if (activeStage === "publishing_onchain_proof") {
+                        done = index < 5;
+                        current = index === 5;
+                      }
                     }
                   }
-                }
 
-                return (
-                  <div key={stageItem.id} className="flex items-center gap-3 text-sm">
-                    {done ? (
-                      <Check className="size-5 text-primary" />
-                    ) : current && active ? (
-                      <LoaderCircle className="size-5 animate-spin text-primary" />
-                    ) : (
-                      <Circle className="size-5 text-muted-foreground/40" />
-                    )}
-                    <span className={done || current ? "font-medium" : "text-muted-foreground"}>
-                      {stageItem.label}
-                    </span>
-                  </div>
-                );
-              })}
-              {view.job.status === "failed" ? (
-                <p className="text-sm text-destructive">Failed · {view.job.error}</p>
-              ) : null}
-              {pollError ? <p className="text-sm text-destructive">{pollError}</p> : null}
-              {view.job.progressMessage ? (
-                <p className="mt-2 text-xs text-muted-foreground">{view.job.progressMessage}</p>
-              ) : null}
-            </CardContent>
-          </Card>
-        </div>
+                  return (
+                    <div key={stageItem.id} className="flex items-center gap-3 text-sm">
+                      {done ? (
+                        <Check className="size-5 text-primary" />
+                      ) : current && active ? (
+                        <LoaderCircle className="size-5 animate-spin text-primary" />
+                      ) : (
+                        <Circle className="size-5 text-muted-foreground/40" />
+                      )}
+                      <span className={done || current ? "font-medium" : "text-muted-foreground"}>
+                        {stageItem.label}
+                      </span>
+                    </div>
+                  );
+                })}
+                {view.job.status === "failed" ? (
+                  <p className="text-sm text-destructive">Failed · {view.job.error}</p>
+                ) : null}
+                {pollError ? <p className="text-sm text-destructive">{pollError}</p> : null}
+                {view.job.progressMessage ? (
+                  <p className="mt-2 text-xs text-muted-foreground">{view.job.progressMessage}</p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <div className="grid content-start gap-6">
           {isGithubWorkflow ? (
@@ -723,9 +794,9 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                       ].map(({ key, title, cat }) => (
                         <div key={key} className="rounded-md border p-4 flex flex-col justify-between">
                           <div>
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <p className="font-semibold text-sm">{title}</p>
-                              <div className="flex items-center gap-1.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-3 mb-3">
+                              <h4 className="font-semibold text-sm text-foreground">{title}</h4>
+                              <div className="flex flex-wrap items-center gap-2">
                                 {renderConfidenceBadge(cat?.confidence)}
                                 <Badge variant="outline" className={categoryStatusBadge(cat?.status).color}>
                                   {categoryStatusBadge(cat?.status).label}
@@ -793,9 +864,9 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   </div>
                   {assessment?.categories?.maintenance ? (
                     <div className="rounded-md border p-4 text-xs">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <p className="font-semibold text-sm">Maintenance Status Assessment</p>
-                        <div className="flex items-center gap-1.5">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b pb-3 mb-3">
+                        <h4 className="font-semibold text-sm text-foreground">Maintenance Status Assessment</h4>
+                        <div className="flex flex-wrap items-center gap-2">
                           {renderConfidenceBadge(assessment.categories.maintenance.confidence)}
                           <Badge variant="outline" className={categoryStatusBadge(assessment.categories.maintenance.status).color}>
                             {categoryStatusBadge(assessment.categories.maintenance.status).label}
@@ -1091,7 +1162,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
-        <details className="mt-6 rounded-md border p-4">
+        <details className="mt-6 rounded-md border p-4" id="technical-details">
           <summary className="cursor-pointer font-semibold text-sm text-muted-foreground hover:text-foreground">
             Payment & verification details
           </summary>
