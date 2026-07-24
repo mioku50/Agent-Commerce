@@ -63,7 +63,9 @@ import {
 } from "../providers/github-repository-ref.ts";
 import {
   isGitHubRepositorySnapshot,
+  type GitHubRepositorySnapshot,
 } from "../providers/github-types.ts";
+import type { GitHubDueDiligenceAssessment } from "./github-due-diligence.ts";
 
 type ServiceDiscoveryResponse = {
   services?: ApiService[];
@@ -130,6 +132,11 @@ export type BuyerAgentServiceResult = {
   error: string | null;
 };
 
+export type BuyerAgentWorkflowArtifacts = {
+  githubRepositorySnapshot?: GitHubRepositorySnapshot;
+  githubDueDiligenceAssessment?: GitHubDueDiligenceAssessment;
+};
+
 export type BuyerAgentExecutionResult = {
   agentRunId: string | null;
   agentWallet: Address;
@@ -153,6 +160,7 @@ export type BuyerAgentExecutionResult = {
     reasoning: string;
   }>;
   serviceResults: BuyerAgentServiceResult[];
+  workflowArtifacts: BuyerAgentWorkflowArtifacts;
   status: "completed" | "failed";
   summary: string;
 };
@@ -1421,11 +1429,26 @@ export async function executeBuyerAgent(
 
     const paidPreviews: unknown[] = [];
     const runtimeServiceOutputs = new Map<string, unknown>();
+    const workflowArtifacts: BuyerAgentWorkflowArtifacts = {};
     for (const decision of selected) {
       try {
-        serviceResults.push(
-          await executePaidStep(decision, paidPreviews, runtimeServiceOutputs),
+        const stepResult = await executePaidStep(
+          decision,
+          paidPreviews,
+          runtimeServiceOutputs,
         );
+        serviceResults.push(stepResult);
+        if (stepResult.status === "paid") {
+          const rawResult = runtimeServiceOutputs.get(decision.service.slug);
+          if (decision.service.slug === "github-repository-intelligence" && rawResult) {
+            workflowArtifacts.githubRepositorySnapshot = rawResult as GitHubRepositorySnapshot;
+          }
+          if (decision.service.slug === "github-due-diligence-analysis" && rawResult) {
+            workflowArtifacts.githubDueDiligenceAssessment = (
+              rawResult as { assessment: GitHubDueDiligenceAssessment }
+            ).assessment;
+          }
+        }
       } catch (error) {
         serviceResults.push({
           serviceId: decision.service.id,
@@ -1525,6 +1548,7 @@ export async function executeBuyerAgent(
         reasoning: decision.reasoning,
       })),
       serviceResults,
+      workflowArtifacts,
       status: finalStatus,
       summary,
     };

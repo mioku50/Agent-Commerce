@@ -4,7 +4,11 @@
  */
 
 import { createHash } from "node:crypto";
-import type { BuyerAgentServiceResult } from "./execution.ts";
+import type {
+  BuyerAgentExecutionResult,
+  BuyerAgentServiceResult,
+  BuyerAgentWorkflowArtifacts,
+} from "./execution.ts";
 import {
   HOSTED_AGENT_MAX_TASK_LENGTH,
   HOSTED_AGENT_MAX_BUDGET_USDC,
@@ -531,25 +535,33 @@ export function buildHostedFinalReport(input: {
   receiptIds: string[];
   proofTransactionHashes: string[];
   serviceResults: BuyerAgentServiceResult[];
+  executionResult?: {
+    workflowArtifacts?: BuyerAgentWorkflowArtifacts;
+  } | BuyerAgentExecutionResult | null;
+  workflowArtifacts?: BuyerAgentWorkflowArtifacts | null;
   explorerUrl: string;
 }): HostedFinalReport {
+  const { request } = input;
   const serviceResults = input.serviceResults.map(safeHostedServiceResult);
   const paidCount = serviceResults.filter((result) => result.status === "paid").length;
   const failedCount = serviceResults.filter((result) => result.status === "failed").length;
-  const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText ?? "");
+  const inputMetadata = hostedWorkflowInputMetadata(request.inputText ?? "");
 
-  const intelResult = serviceResults.find((r) => r.serviceSlug === "github-repository-intelligence");
-  const dueDiligenceResult = serviceResults.find((r) => r.serviceSlug === "github-due-diligence-analysis");
+  const executionResult = input.executionResult ?? { workflowArtifacts: input.workflowArtifacts };
+  const snapshot = executionResult.workflowArtifacts?.githubRepositorySnapshot ?? null;
+  const assessment = executionResult.workflowArtifacts?.githubDueDiligenceAssessment ?? null;
 
-  const intelResp = intelResult?.response as Record<string, unknown> | null;
-  const snapshot = intelResp?.snapshot ?? (intelResp && "repository" in intelResp ? intelResp : null);
-
-  const dueDiligenceResp = dueDiligenceResult?.response as Record<string, unknown> | null;
-  const assessment = dueDiligenceResp?.assessment ?? (dueDiligenceResp && "overallStatus" in dueDiligenceResp ? dueDiligenceResp : null);
-
-  const workflowData = input.request.workflowType === "github_due_diligence"
-    ? { repository: input.request.repository, snapshot, assessment }
-    : null;
+  const workflowData =
+    request.workflowType === "github_due_diligence"
+      ? snapshot
+        ? {
+            kind: "github_due_diligence",
+            repository: request.repository!,
+            snapshot,
+            assessment,
+          }
+        : null
+      : null;
 
   return {
     version: 4,

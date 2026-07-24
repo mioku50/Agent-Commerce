@@ -8,6 +8,7 @@ import { NextRequest } from "next/server.js";
 import { privateKeyToAccount } from "viem/accounts";
 import {
   HOSTED_WORKFLOW_TYPES,
+  buildHostedFinalReport,
   createHostedWorkflowPlan,
   validateHostedWorkflowRequest,
 } from "../lib/agent/hosted-workflows.ts";
@@ -241,6 +242,38 @@ async function runTests() {
       delete process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS;
     }
   }
+
+  // Test 8: Final report generation from workflow artifacts
+  const dummyAssessment = {
+    overallStatus: "healthy_signals" as const,
+    summary: "Healthy repository signals.",
+    categories: {} as any,
+    risks: [],
+  };
+  const report = buildHostedFinalReport({
+    jobId: "00000000-0000-4000-8000-000000000088",
+    request: req1,
+    plan,
+    agentRunId: "00000000-0000-4000-8000-000000000089",
+    agentWallet: "0x1111111111111111111111111111111111111111",
+    spentUsdc: "0.002",
+    receiptIds: [],
+    proofTransactionHashes: [],
+    serviceResults: [],
+    executionResult: {
+      workflowArtifacts: {
+        githubRepositorySnapshot: dummySnapshot as any,
+        githubDueDiligenceAssessment: dummyAssessment as any,
+      },
+    },
+    explorerUrl: "https://testnet.arcscan.app",
+  });
+  assert.ok(report.workflowData, "workflowData must be populated for github_due_diligence");
+  assert.equal(report.workflowData.kind, "github_due_diligence");
+  assert.deepEqual(report.workflowData.repository, req1.repository);
+  assert.equal(report.workflowData.snapshot, dummySnapshot);
+  assert.equal(report.workflowData.assessment, dummyAssessment);
+  console.log("✓ buildHostedFinalReport builds workflowData directly from executionResult.workflowArtifacts");
 
   console.log("\nALL GITHUB WORKFLOW TESTS PASSED CLEANLY!");
 }

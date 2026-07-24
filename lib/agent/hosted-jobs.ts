@@ -287,6 +287,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       receiptIds: result.paidStepIds,
       proofTransactionHashes,
       serviceResults: result.serviceResults,
+      executionResult: result,
       explorerUrl: configuredExplorerUrl(),
     });
     const structuredResult = await synthesizeHostedFinalReport({
