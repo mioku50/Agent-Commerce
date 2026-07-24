@@ -1,5 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
-import { previewHostedWorkflow } from "@/lib/agent/hosted-jobs";
+import { NextRequest, NextResponse } from "next/server.js";
+import { previewHostedWorkflow } from "../../../../lib/agent/hosted-jobs.ts";
 import {
   HOSTED_AGENT_MAX_BUDGET_USDC,
   getHostedRunnerConfig,
@@ -9,18 +9,18 @@ import {
   optionalRequesterWallet,
   safeHostedError,
   validateIdempotencyKey,
-} from "@/lib/agent/hosted-policy";
+} from "../../../../lib/agent/hosted-policy.ts";
 import {
   hashHostedWorkflowInput,
   isHostedWorkflowType,
   validateHostedWorkflowRequest,
-} from "@/lib/agent/hosted-workflows";
-import { getHostedWorkflowTemplate } from "@/lib/agent/workflow-templates";
+} from "../../../../lib/agent/hosted-workflows.ts";
+import { getHostedWorkflowTemplate } from "../../../../lib/agent/workflow-templates.ts";
 import {
   createHostedWorkflowQuote,
   HostedCheckoutPolicyError,
   sponsoredWorkflowAuthorizationMessage,
-} from "@/lib/commerce/workflow-checkout";
+} from "../../../../lib/commerce/workflow-checkout.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

@@ -4,6 +4,8 @@
  */
 
 import assert from "node:assert/strict";
+import { NextRequest } from "next/server.js";
+import { privateKeyToAccount } from "viem/accounts";
 import {
   HOSTED_WORKFLOW_TYPES,
   createHostedWorkflowPlan,
@@ -13,6 +15,7 @@ import { getHostedWorkflowTemplate } from "../lib/agent/workflow-templates.ts";
 import { serviceRegistry, getServiceBySlug } from "../lib/services/registry.ts";
 import { hostedServiceAllowlist, hostedIdempotencyRequestHash } from "../lib/agent/hosted-policy.ts";
 import { requestBodyForService } from "../lib/agent/execution.ts";
+import { POST as createQuotePost } from "../app/api/hosted-agent/quotes/route.ts";
 
 async function runTests() {
   console.log("Running GitHub Workflow Tests...");
@@ -148,6 +151,80 @@ async function runTests() {
   });
   assert.equal(hash1, hash1Repeat, "Identical request must produce identical request hash");
   console.log("✓ Idempotency request hash correctly includes repository reference");
+
+  // Test 7: Quote Endpoint Rejection when GitHub services are disabled
+  const testPrivateKey = "0x1111111111111111111111111111111111111111111111111111111111111111" as const;
+  const testAddress = privateKeyToAccount(testPrivateKey).address;
+  process.env.HOSTED_AGENT_PRIVATE_KEY = testPrivateKey;
+  process.env.HOSTED_AGENT_ADDRESS = testAddress;
+  process.env.SELLER_ADDRESS ||= "0x2222222222222222222222222222222222222222";
+  process.env.HOSTED_AGENT_BASE_URL ||= "http://localhost:3000";
+  process.env.HOSTED_AGENT_RATE_LIMIT_SECRET ||= "test-rate-limit-secret-123456";
+
+  const originalAllowlist = process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS;
+  try {
+    // Case 7a: Exclude both GitHub services
+    process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS = "premium-quote,text-analyzer,pyth-market-price";
+    const reqExcludedBoth = new NextRequest("http://localhost:3000/api/hosted-agent/quotes", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "test-idempotency-key-disabled-both-github",
+      },
+      body: JSON.stringify({
+        workflowType: "github_due_diligence",
+        inputText: "https://github.com/circlefin/agent-commerce",
+        requesterWallet: "0x1111111111111111111111111111111111111111",
+      }),
+    });
+    const resExcludedBoth = await createQuotePost(reqExcludedBoth);
+    const dataExcludedBoth = (await resExcludedBoth.json()) as { error?: string; reason?: string };
+    assert.equal(
+      resExcludedBoth.status,
+      503,
+      "Quote creation must return HTTP status 503 when required services are excluded",
+    );
+    assert.equal(
+      dataExcludedBoth.reason,
+      "workflow_services_unavailable",
+      "Response reason must be workflow_services_unavailable when 0 services are selected",
+    );
+
+    // Case 7b: Exclude only one required GitHub service (github-due-diligence-analysis missing)
+    process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS = "github-repository-intelligence";
+    const reqExcludedOne = new NextRequest("http://localhost:3000/api/hosted-agent/quotes", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "idempotency-key": "test-idempotency-key-disabled-one-github",
+      },
+      body: JSON.stringify({
+        workflowType: "github_due_diligence",
+        inputText: "https://github.com/circlefin/agent-commerce",
+        requesterWallet: "0x1111111111111111111111111111111111111111",
+      }),
+    });
+    const resExcludedOne = await createQuotePost(reqExcludedOne);
+    assert.equal(
+      resExcludedOne.status,
+      503,
+      "Quote creation must return HTTP status 503 when GitHub workflow is incomplete",
+    );
+    const dataExcludedOne = (await resExcludedOne.json()) as { error?: string; reason?: string };
+    assert.equal(
+      dataExcludedOne.reason,
+      "github_workflow_incomplete",
+      "Response reason must be github_workflow_incomplete when required analysis service is missing",
+    );
+
+    console.log("✓ Quote creation rejects with 503 and github_workflow_incomplete when GitHub services are disabled");
+  } finally {
+    if (originalAllowlist !== undefined) {
+      process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS = originalAllowlist;
+    } else {
+      delete process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS;
+    }
+  }
 
   console.log("\nALL GITHUB WORKFLOW TESTS PASSED CLEANLY!");
 }
