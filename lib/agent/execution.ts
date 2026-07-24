@@ -57,6 +57,10 @@ import type {
 } from "../services/registry.ts";
 import { inferPythSymbol } from "../providers/pyth.ts";
 import type { PythMarketSymbol } from "../providers/types.ts";
+import {
+  parseGitHubRepositoryInput,
+  type GitHubRepositoryRef,
+} from "../providers/github-repository-ref.ts";
 
 type ServiceDiscoveryResponse = {
   services?: ApiService[];
@@ -82,6 +86,7 @@ export type BuyerAgentExecutionOptions = {
   task: string;
   requestInputText?: string | null;
   marketSymbol?: PythMarketSymbol | null;
+  repository?: GitHubRepositoryRef | null;
   spendingLimit: number;
   baseUrl: string;
   sellerAddress: Address;
@@ -374,8 +379,44 @@ export function requestBodyForService(
   inputText: string | null | undefined,
   paidPreviews: unknown[],
   marketSymbol?: PythMarketSymbol | null,
+  repository?: GitHubRepositoryRef | null,
 ) {
   if (service.method !== "POST") return undefined;
+
+  if (service.slug === "github-repository-intelligence") {
+    let repoRef = repository;
+    if (!repoRef && inputText) {
+      try {
+        repoRef = parseGitHubRepositoryInput(inputText);
+      } catch {
+        // ignore invalid input for fallback
+      }
+    }
+    if (repoRef) {
+      return { owner: repoRef.owner, repository: repoRef.name };
+    }
+  }
+
+  if (service.slug === "github-due-diligence-analysis") {
+    let snapshot: unknown = null;
+    for (const preview of paidPreviews) {
+      if (preview && typeof preview === "object") {
+        const item = preview as Record<string, unknown>;
+        const resp = (item.response ?? item) as Record<string, unknown>;
+        if (resp && typeof resp === "object") {
+          if ("ref" in resp && "repository" in resp) {
+            snapshot = resp;
+            break;
+          }
+          if ("snapshot" in resp && typeof resp.snapshot === "object" && resp.snapshot) {
+            snapshot = resp.snapshot;
+            break;
+          }
+        }
+      }
+    }
+    return { repository, snapshot };
+  }
 
   if (service.slug === "text-analyzer") {
     return createTextAnalyzerBody(task, inputText, paidPreviews);
@@ -1066,6 +1107,7 @@ export async function executeBuyerAgent(
       options.requestInputText,
       paidPreviews,
       options.marketSymbol,
+      options.repository,
     );
 
     updateLocalStep(runLog, stepIndex, { status: "selected" });

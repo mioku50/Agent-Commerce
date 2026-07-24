@@ -39,6 +39,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     const serverEnforcedBody = {
       workflowType: storedQuote.workflow_type,
       inputText: body.inputText,
+      repositoryUrl: body.repositoryUrl ?? storedQuote.planner_snapshot?.repository?.canonicalUrl,
       marketSymbol: body.marketSymbol ?? storedQuote.planner_snapshot?.marketSymbol,
       task: storedQuote.task,
       budgetUsdc: storedQuote.budget_usdc,
@@ -58,6 +59,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
         inputSha256,
         task: workflowRequest.task,
         marketSymbol: workflowRequest.marketSymbol,
+        repository: workflowRequest.repository,
         budgetUsdc: workflowRequest.budgetUsdc,
       }),
       request: workflowRequest,

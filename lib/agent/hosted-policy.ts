@@ -28,6 +28,16 @@ const SAFE_HOSTED_SERVICES = [
     endpoint: "/api/provider/pyth/price",
     method: "POST" as const,
   },
+  {
+    slug: "github-repository-intelligence",
+    endpoint: "/api/provider/github/repository-intelligence",
+    method: "POST" as const,
+  },
+  {
+    slug: "github-due-diligence-analysis",
+    endpoint: "/api/premium/github/due-diligence",
+    method: "POST" as const,
+  },
 ] as const;
 
 function boundedInteger(
@@ -81,7 +91,10 @@ function hostedBaseUrl() {
 
 export function hostedServiceAllowlist() {
   const requested = new Set(
-    (process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS ?? "premium-quote,text-analyzer,pyth-market-price")
+    (
+      process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS ??
+      "premium-quote,text-analyzer,pyth-market-price,github-repository-intelligence,github-due-diligence-analysis"
+    )
       .split(",")
       .map((value) => value.trim())
       .filter(Boolean),
@@ -135,6 +148,7 @@ export function getHostedRunnerDiagnostic() {
       payerAddress: config.agentAddress,
       maxBudgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
       supportedWorkflows: [
+        "github_due_diligence",
         "sentiment_tone",
         "builder_update",
         "market_context",
@@ -157,6 +171,7 @@ export function getHostedRunnerDiagnostic() {
           : null,
       maxBudgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
       supportedWorkflows: [
+        "github_due_diligence",
         "sentiment_tone",
         "builder_update",
         "market_context",
@@ -236,6 +251,7 @@ export function hostedIdempotencyRequestHash(input: {
   inputSha256: string;
   task: string;
   marketSymbol?: string | null;
+  repository?: { canonicalUrl: string } | null;
   budgetUsdc: number;
 }) {
   return hmac(
@@ -246,6 +262,7 @@ export function hostedIdempotencyRequestHash(input: {
       input.inputSha256,
       input.task,
       input.marketSymbol ?? "none",
+      input.repository?.canonicalUrl ?? "none",
       input.budgetUsdc.toFixed(6),
     ].join("\n"),
   );

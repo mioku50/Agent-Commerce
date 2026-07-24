@@ -411,6 +411,106 @@ export const serviceRegistry = [
     agentReasoningHint:
       "Use this planned service when the agent needs location context and can justify paying for a concise external signal.",
   },
+  {
+    id: "github-repository-intelligence",
+    slug: "github-repository-intelligence",
+    name: "GitHub Repository Intelligence",
+    shortDescription: "Fetches public repository metadata, commits, releases, and governance files.",
+    longDescription:
+      "Fetches public GitHub repository metadata, sampled commits, releases, contributors, languages, build manifests, and governance files via server-side GitHub API integration.",
+    category: "Developer Intelligence",
+    method: "POST",
+    endpoint: "/api/provider/github/repository-intelligence",
+    priceLabel: "0.0015 USDC",
+    priceUsd: 0.0015,
+    status: "live",
+    sourceType: "provider_backed",
+    presentation: {
+      providerType: "live_provider",
+      providerName: "GitHub API",
+      providerStatus: "live",
+      assetSymbol: null,
+      dataFreshness: "Sourced from live GitHub REST API with 5-minute cache",
+      billingLabel:
+        "0.0015 USDC pays Arc Agent Commerce for access to its server-side GitHub intelligence provider.",
+    },
+    isPaid: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        owner: { type: "string" },
+        repository: { type: "string" },
+      },
+      required: ["owner", "repository"],
+      additionalProperties: false,
+    },
+    outputSchema: {
+      type: "object",
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/provider/github/repository-intelligence",
+      body: { owner: "circlefin", repository: "agent-commerce" },
+    },
+    exampleResponse: {
+      provider: "GitHub REST API",
+      repository: { fullName: "circlefin/agent-commerce" },
+    },
+    exampleUseCase:
+      "An agent collects live repository activity and metadata before evaluating project health.",
+    agentReasoningHint:
+      "Use to fetch public GitHub repository data, commits, releases, and governance file presence.",
+  },
+  {
+    id: "github-due-diligence-analysis",
+    slug: "github-due-diligence-analysis",
+    name: "GitHub Due Diligence Analysis",
+    shortDescription: "Evaluates repository health and risks using deterministic rules.",
+    longDescription:
+      "Processes a GitHubRepositorySnapshot using transparent, deterministic rules to generate health category signals, activity metrics, and severity-coded risk flags.",
+    category: "Risk Analysis",
+    method: "POST",
+    endpoint: "/api/premium/github/due-diligence",
+    priceLabel: "0.0005 USDC",
+    priceUsd: 0.0005,
+    status: "live",
+    sourceType: "static",
+    presentation: {
+      providerType: "internal_deterministic",
+      providerName: null,
+      providerStatus: "deterministic",
+      assetSymbol: null,
+      dataFreshness: null,
+      billingLabel:
+        "0.0005 USDC pays Arc Agent Commerce for deterministic due diligence analysis.",
+    },
+    isPaid: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        repository: { type: "object" },
+        snapshot: { type: "object" },
+      },
+      required: ["snapshot"],
+    },
+    outputSchema: {
+      type: "object",
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/premium/github/due-diligence",
+      body: {
+        snapshot: { repository: { fullName: "circlefin/agent-commerce" } },
+      },
+    },
+    exampleResponse: {
+      assessment: { overallStatus: "healthy_signals" },
+    },
+    exampleUseCase:
+      "An agent generates a transparent risk and health evaluation of a GitHub repository.",
+    agentReasoningHint:
+      "Use to calculate deterministic project health signals and risk rules from a repository snapshot.",
+  },
 ] satisfies readonly ApiService[];
 
 export function getServiceById(serviceId: string) {

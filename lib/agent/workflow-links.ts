@@ -7,10 +7,12 @@ import {
   type PythMarketSymbol,
 } from "../providers/types.ts";
 
-export const DEFAULT_HOSTED_WORKFLOW: HostedWorkflowType = "sentiment_tone";
+export const DEFAULT_HOSTED_WORKFLOW: HostedWorkflowType = "github_due_diligence";
 export const DEFAULT_MARKET_SYMBOL: PythMarketSymbol = "BTC/USD";
 
 const workflowAliases: Record<string, HostedWorkflowType> = {
+  github: "github_due_diligence",
+  github_due_diligence: "github_due_diligence",
   sentiment: "sentiment_tone",
   sentiment_tone: "sentiment_tone",
   builder_update: "builder_update",
@@ -20,6 +22,7 @@ const workflowAliases: Record<string, HostedWorkflowType> = {
 };
 
 const workflowQueryValues: Record<HostedWorkflowType, string> = {
+  github_due_diligence: "github",
   sentiment_tone: "sentiment",
   builder_update: "builder_update",
   market_context: "market_context",

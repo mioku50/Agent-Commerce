@@ -6,6 +6,7 @@
 import type { ServicePresentationMetadata } from "../services/presentation.ts";
 
 export const HOSTED_WORKFLOW_TYPES = [
+  "github_due_diligence",
   "sentiment_tone",
   "builder_update",
   "market_context",
@@ -24,7 +25,12 @@ export type HostedWorkflowTemplate = {
   estimatedSpendUsdc: number;
   benefitLabel: string;
   services: Array<{
-    slug: "text-analyzer" | "premium-quote" | "pyth-market-price";
+    slug:
+      | "text-analyzer"
+      | "premium-quote"
+      | "pyth-market-price"
+      | "github-repository-intelligence"
+      | "github-due-diligence-analysis";
     name: string;
     priceUsdc: number;
     purpose: string;
@@ -32,6 +38,41 @@ export type HostedWorkflowTemplate = {
   }>;
   expectedResult: string[];
 };
+
+const githubServices: HostedWorkflowTemplate["services"] = [
+  {
+    slug: "github-repository-intelligence",
+    name: "GitHub Repository Intelligence",
+    priceUsdc: 0.0015,
+    purpose:
+      "Fetches live public GitHub metadata, recent commits, releases, contributors, and governance files.",
+    presentation: {
+      providerType: "live_provider",
+      providerName: "GitHub API",
+      providerStatus: "live",
+      assetSymbol: null,
+      dataFreshness: "Sourced from live GitHub REST API with 5-minute cache",
+      billingLabel:
+        "0.0015 USDC pays Arc Agent Commerce for access to its server-side GitHub intelligence provider.",
+    },
+  },
+  {
+    slug: "github-due-diligence-analysis",
+    name: "GitHub Due Diligence Analysis",
+    priceUsdc: 0.0005,
+    purpose:
+      "Evaluates repository health, release discipline, governance risk, and activity metrics using deterministic assessment rules.",
+    presentation: {
+      providerType: "internal_deterministic",
+      providerName: null,
+      providerStatus: "deterministic",
+      assetSymbol: null,
+      dataFreshness: null,
+      billingLabel:
+        "0.0005 USDC pays Arc Agent Commerce for deterministic due diligence analysis.",
+    },
+  },
+];
 
 const commonServices: HostedWorkflowTemplate["services"] = [
   {
@@ -96,6 +137,23 @@ const marketServices: HostedWorkflowTemplate["services"] = [
 ];
 
 export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
+  {
+    value: "github_due_diligence",
+    label: "GitHub Project Due Diligence",
+    shortLabel: "GitHub Due Diligence",
+    description:
+      "Analyze a public GitHub repository and receive an evidence-backed project health report.",
+    task: "Analyze the selected public GitHub repository using live repository data and deterministic due diligence rules.",
+    placeholder: "https://github.com/owner/repository",
+    estimatedSpendUsdc: 0.002,
+    benefitLabel: "Live GitHub data · Maintenance & risk analysis · Arc verification",
+    services: githubServices,
+    expectedResult: [
+      "Live repository metadata, commits, releases, and file presence",
+      "Deterministic health status, category signals, and risk analysis",
+      "Receipts and a verified Arc proof for every paid call",
+    ],
+  },
   {
     value: "sentiment_tone",
     label: "Sentiment & Tone Report",
@@ -169,3 +227,4 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
 export function getHostedWorkflowTemplate(type: HostedWorkflowType) {
   return hostedWorkflowTemplates.find((template) => template.value === type);
 }
+

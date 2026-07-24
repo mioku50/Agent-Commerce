@@ -5,6 +5,8 @@ export const DEFAULT_AGENT_TASK =
 export const DEFAULT_AGENT_BUDGET_USDC = 0.0113;
 
 const PURCHASE_ORDER = [
+  "github-repository-intelligence",
+  "github-due-diligence-analysis",
   "text-analyzer",
   "pyth-market-price",
   "premium-quote",
@@ -125,6 +127,14 @@ function serviceReasonForSelection(service: ApiService, task: string) {
     return `Seller-created mock service matches the task context and is safe for the stored-response MVP: ${task}`;
   }
 
+  if (service.slug === "github-repository-intelligence") {
+    return "The task requires live public GitHub repository data, recent commits, releases, and governance file presence.";
+  }
+
+  if (service.slug === "github-due-diligence-analysis") {
+    return "The task evaluates repository health, release discipline, and project risk using deterministic due diligence rules.";
+  }
+
   if (service.slug === "premium-quote") {
     return "Low-cost proof of payment and useful short context for the task.";
   }
@@ -157,8 +167,14 @@ function shouldSelectLiveService(service: ApiService, task: string, budget: numb
     return false;
   }
 
+  if (service.slug === "github-repository-intelligence") {
+    return matches(task, /\b(github|repository|repo|due diligence|codebase)\b/);
+  }
+  if (service.slug === "github-due-diligence-analysis") {
+    return matches(task, /\b(github|repository|repo|due diligence|due-diligence|health|risk)\b/);
+  }
   if (service.slug === "premium-quote") {
-    return !matches(task, /\b(market|crypto|bitcoin|btc|ethereum|ether|eth|solana|sol|token price)\b/);
+    return !matches(task, /\b(market|crypto|bitcoin|btc|ethereum|ether|eth|solana|sol|token price|github|repository|repo|due diligence)\b/);
   }
   if (service.slug === "pyth-market-price") {
     return matches(task, /\b(market|crypto|bitcoin|btc|ethereum|ether|eth|solana|sol|price|token)\b/);
@@ -167,7 +183,8 @@ function shouldSelectLiveService(service: ApiService, task: string, budget: numb
     return matches(task, /\b(demo dataset|fixture|integration test)\b/);
   }
   if (service.slug === "text-analyzer") {
-    return matches(task, /\b(text|summary|summarize|analysis|analyze|report|draft|write|sentiment|tone)\b/);
+    return !matches(task, /\b(github|repository|repo|due diligence)\b/) &&
+      matches(task, /\b(text|summary|summarize|analysis|analyze|report|draft|write|sentiment|tone)\b/);
   }
   if (service.slug === "agent-task") {
     return (

@@ -44,6 +44,7 @@ export async function POST(request: NextRequest) {
     const serverEnforcedBody = {
       workflowType: body.workflowType,
       inputText: body.inputText,
+      repositoryUrl: body.repositoryUrl,
       marketSymbol: body.marketSymbol,
       task: template.task,
       budgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
@@ -71,6 +72,7 @@ export async function POST(request: NextRequest) {
       inputSha256,
       task: workflowRequest.task,
       marketSymbol: workflowRequest.marketSymbol,
+      repository: workflowRequest.repository,
       budgetUsdc: workflowRequest.budgetUsdc,
     });
     const plan = await previewHostedWorkflow(workflowRequest);

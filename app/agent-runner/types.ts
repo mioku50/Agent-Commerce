@@ -1,4 +1,7 @@
+import type { GitHubRepositoryRef } from "@/lib/providers/github-repository-ref";
+
 export type HostedWorkflowType =
+  | "github_due_diligence"
   | "sentiment_tone"
   | "builder_update"
   | "market_context"
@@ -33,6 +36,7 @@ export type HostedPlannerSnapshot = {
   inputPreview: string;
   inputSha256: string;
   marketSymbol: PythMarketSymbol | null;
+  repository?: GitHubRepositoryRef | null;
   warnings: string[];
 };
 
@@ -99,6 +103,8 @@ export type HostedFinalReport = {
     sha256: string;
   };
   marketSymbol: PythMarketSymbol | null;
+  repository?: GitHubRepositoryRef | null;
+  workflowData?: Record<string, unknown> | null;
   summary: string;
   keyFindings: string[];
   apiResults: HostedApiResult[];

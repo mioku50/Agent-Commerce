@@ -23,6 +23,10 @@ import {
 } from "../providers/pyth.ts";
 import type { PythMarketSymbol } from "../providers/types.ts";
 import {
+  parseGitHubRepositoryInput,
+  type GitHubRepositoryRef,
+} from "../providers/github-repository-ref.ts";
+import {
   servicePresentationMetadata,
   type ServicePresentationMetadata,
 } from "../services/presentation.ts";
@@ -40,6 +44,7 @@ export type HostedWorkflowRequest = {
   task: string;
   inputText: string;
   marketSymbol: PythMarketSymbol | null;
+  repository: GitHubRepositoryRef | null;
   budgetUsdc: number;
 };
 
@@ -55,7 +60,7 @@ export type HostedPlanService = {
 };
 
 export type HostedPlannerSnapshot = {
-  version: 3;
+  version: 4;
   workflowType: HostedWorkflowType;
   workflowLabel: string;
   effectiveTask: string;
@@ -70,11 +75,12 @@ export type HostedPlannerSnapshot = {
   inputPreview: string;
   inputSha256: string;
   marketSymbol: PythMarketSymbol | null;
+  repository: GitHubRepositoryRef | null;
   warnings: string[];
 };
 
 export type HostedFinalReport = {
-  version: 3;
+  version: 4;
   workflowType: HostedWorkflowType;
   aggregationMode: "deterministic_structured" | "ai_generated_synthesis";
   aggregationLabel: string;
@@ -84,6 +90,13 @@ export type HostedFinalReport = {
     sha256: string;
   };
   marketSymbol: PythMarketSymbol | null;
+  repository: GitHubRepositoryRef | null;
+  workflowData?: {
+    repository?: GitHubRepositoryRef | null;
+    snapshot?: unknown;
+    assessment?: unknown;
+    [key: string]: unknown;
+  } | null;
   summary: string;
   keyFindings: string[];
   apiResults: BuyerAgentServiceResult[];
@@ -104,6 +117,7 @@ export type HostedFinalReport = {
 };
 
 const WORKFLOW_LABELS: Record<HostedWorkflowType, string> = {
+  github_due_diligence: "GitHub Project Due Diligence",
   sentiment_tone: "Sentiment & Tone Report",
   builder_update: "Builder Update Summary",
   market_context: "Market Context Brief",
@@ -226,28 +240,42 @@ export function validateHostedWorkflowRequest(input: {
   workflowType?: unknown;
   task?: unknown;
   inputText?: unknown;
+  repositoryUrl?: unknown;
   marketSymbol?: unknown;
   budgetUsdc?: unknown;
 }): HostedWorkflowRequest {
   if (!isHostedWorkflowType(input.workflowType)) {
     throw new Error(
-      "Workflow type must be sentiment_tone, builder_update, market_context, or custom_task.",
+      "Workflow type must be github_due_diligence, sentiment_tone, builder_update, market_context, or custom_task.",
     );
   }
 
   const workflowType = input.workflowType;
+  let repository: GitHubRepositoryRef | null = null;
+  let rawInputText = typeof input.inputText === "string" ? input.inputText : "";
+
+  if (workflowType === "github_due_diligence") {
+    const rawRepoInput =
+      typeof input.repositoryUrl === "string" && input.repositoryUrl.trim()
+        ? input.repositoryUrl.trim()
+        : rawInputText.trim();
+    repository = parseGitHubRepositoryInput(rawRepoInput);
+    rawInputText = repository.canonicalUrl;
+  }
+
   const rawTask = normalizedText(input.task).replace(/\s+/g, " ");
   const templateTask =
     getHostedWorkflowTemplate(workflowType)?.task || defaultWorkflowTask(workflowType);
 
   const isStandardWorkflow =
+    workflowType === "github_due_diligence" ||
     workflowType === "sentiment_tone" ||
     workflowType === "builder_update" ||
     workflowType === "market_context";
 
   const task = isStandardWorkflow || !rawTask ? templateTask : rawTask;
 
-  const inputText = normalizedText(input.inputText);
+  const inputText = normalizedText(rawInputText);
   if (task.length > HOSTED_AGENT_MAX_TASK_LENGTH) {
     throw new Error(`Task must contain at most ${HOSTED_AGENT_MAX_TASK_LENGTH} characters.`);
   }
@@ -294,11 +322,15 @@ export function validateHostedWorkflowRequest(input: {
     task,
     inputText,
     marketSymbol,
+    repository,
     budgetUsdc: validateHostedBudget(rawBudget),
   };
 }
 
 export function defaultWorkflowTask(workflowType: HostedWorkflowType) {
+  if (workflowType === "github_due_diligence") {
+    return "Analyze the selected public GitHub repository using live repository data and deterministic due diligence rules.";
+  }
   if (workflowType === "sentiment_tone") {
     return "Analyze the submitted text and produce a sentiment and tone workflow report.";
   }
@@ -312,6 +344,9 @@ export function defaultWorkflowTask(workflowType: HostedWorkflowType) {
 }
 
 export function effectiveWorkflowTask(input: HostedWorkflowRequest) {
+  if (input.workflowType === "github_due_diligence") {
+    return `${input.task} Analyze ${input.repository?.fullName ?? input.inputText} using live GitHub repository intelligence and deterministic due diligence analysis.`;
+  }
   if (input.workflowType === "sentiment_tone") {
     return `${input.task} Use paid text analysis and concise research context for the report.`;
   }
@@ -369,7 +404,7 @@ export function createHostedWorkflowPlan(input: {
   });
 
   return {
-    version: 3,
+    version: 4,
     workflowType: input.request.workflowType,
     workflowLabel: workflowLabel(input.request.workflowType),
     effectiveTask,
@@ -388,6 +423,7 @@ export function createHostedWorkflowPlan(input: {
     inputPreview: inputMetadata.preview,
     inputSha256: inputMetadata.sha256,
     marketSymbol: input.request.marketSymbol,
+    repository: input.request.repository,
     warnings: plan.warnings,
   };
 }
@@ -397,6 +433,14 @@ function findingForResult(result: BuyerAgentServiceResult) {
     return `${result.serviceName} failed; the report preserves the partial result without retrying a payment automatically.`;
   }
   const response = result.response as Record<string, unknown> | null;
+  if (result.serviceSlug === "github-repository-intelligence" && response) {
+    const repoInfo = response.repository as Record<string, unknown> | undefined;
+    return `GitHub Repository Intelligence fetched metadata, recent commits, and releases for ${String(repoInfo?.fullName ?? "the repository")}.`;
+  }
+  if (result.serviceSlug === "github-due-diligence-analysis" && response) {
+    const assessment = response.assessment as Record<string, unknown> | undefined;
+    return `GitHub Due Diligence Analysis evaluated project health signals and risk rules (status: ${String(assessment?.overallStatus ?? "evaluated")}).`;
+  }
   if (result.serviceSlug === "text-analyzer" && response) {
     return `Text Analyzer measured ${String(response.word_count ?? "unknown")} words, ${String(response.sentence_count ?? "unknown")} sentences, and ${String(response.char_count ?? "unknown")} characters.`;
   }
@@ -413,6 +457,12 @@ function findingForResult(result: BuyerAgentServiceResult) {
 function deterministicWorkflowFindings(request: HostedWorkflowRequest) {
   const text = request.inputText?.trim() ?? "";
   if (!text) return [];
+  if (request.workflowType === "github_due_diligence") {
+    return [
+      `Target GitHub repository: ${request.repository?.fullName ?? request.inputText}.`,
+      "Deterministic due diligence workflow combines live server-side GitHub API intelligence with automated category assessments.",
+    ];
+  }
   const words: string[] = text.toLowerCase().match(/[a-z0-9'-]+/g) ?? [];
   if (request.workflowType === "sentiment_tone") {
     const positive = new Set([
@@ -487,8 +537,22 @@ export function buildHostedFinalReport(input: {
   const paidCount = serviceResults.filter((result) => result.status === "paid").length;
   const failedCount = serviceResults.filter((result) => result.status === "failed").length;
   const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText ?? "");
+
+  const intelResult = serviceResults.find((r) => r.serviceSlug === "github-repository-intelligence");
+  const dueDiligenceResult = serviceResults.find((r) => r.serviceSlug === "github-due-diligence-analysis");
+
+  const intelResp = intelResult?.response as Record<string, unknown> | null;
+  const snapshot = intelResp?.snapshot ?? (intelResp && "repository" in intelResp ? intelResp : null);
+
+  const dueDiligenceResp = dueDiligenceResult?.response as Record<string, unknown> | null;
+  const assessment = dueDiligenceResp?.assessment ?? (dueDiligenceResp && "overallStatus" in dueDiligenceResp ? dueDiligenceResp : null);
+
+  const workflowData = input.request.workflowType === "github_due_diligence"
+    ? { repository: input.request.repository, snapshot, assessment }
+    : null;
+
   return {
-    version: 3,
+    version: 4,
     workflowType: input.request.workflowType,
     aggregationMode: "deterministic_structured",
     aggregationLabel: "Structured workflow result (no LLM configured)",
@@ -507,6 +571,8 @@ export function buildHostedFinalReport(input: {
       sha256: inputMetadata.sha256,
     },
     marketSymbol: input.request.marketSymbol,
+    repository: input.request.repository,
+    workflowData,
     summary: `${workflowLabel(input.request.workflowType)} completed ${paidCount} of ${input.plan.selectedServices.length} selected paid API call(s) using deterministic aggregation${failedCount > 0 ? `; ${failedCount} call(s) failed` : ""}.`,
     keyFindings: [
       ...deterministicWorkflowFindings(input.request),
@@ -531,3 +597,4 @@ export function buildHostedFinalReport(input: {
     generatedAt: new Date().toISOString(),
   };
 }
+
