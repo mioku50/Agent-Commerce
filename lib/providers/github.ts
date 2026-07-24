@@ -310,34 +310,156 @@ function parseGoMod(content: string): { prod: string[]; dev: string[] } {
   return { prod: Array.from(prod), dev: Array.from(dev) };
 }
 
-function buildRepositoryStructure(rootFiles: Array<Record<string, any>>): GitHubRepositoryStructure {
+export function extractProjectSummaryFromReadme(readme: string): string | null {
+  if (!readme || typeof readme !== "string") return null;
+
+  // 1. Remove HTML comments, style, script, and HTML tags (<div ...>, <picture ...>, <img>, <a>, <span>, etc.)
+  let text = readme
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .replace(/<style[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ");
+
+  // 2. Remove code blocks
+  text = text.replace(/```[\s\S]*?```/g, "");
+
+  // 3. Remove inline code
+  text = text.replace(/`[^`]+`/g, "");
+
+  // 4. Remove badge links [![alt](img_url)](link_url)
+  text = text.replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, "");
+
+  // 5. Remove standalone images ![alt](url)
+  text = text.replace(/!\[[^\]]*\]\([^)]*\)/g, "");
+
+  // 6. Replace regular markdown links [text](url) with text
+  text = text.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1");
+
+  // 7. Remove raw HTTP/HTTPS URLs
+  text = text.replace(/https?:\/\/\S+/g, "");
+
+  // 8. Remove markdown headers (# Header)
+  text = text.replace(/^#{1,6}\s+.*$/gm, "");
+
+  // 9. Remove horizontal rules (---, ***, ___)
+  text = text.replace(/^[-*=_]{3,}$/gm, "");
+
+  // 10. Remove blockquotes (> quote)
+  text = text.replace(/^>.*$/gm, "");
+
+  // 11. Remove table formatting lines (lines starting with or containing pipe |)
+  text = text.replace(/^\s*\|.*$/gm, "");
+
+  // 12. Split into paragraphs and find first clean prose paragraph (40..500 chars)
+  const paragraphs = text
+    .split(/\n\s*\n/)
+    .map((p) => p.replace(/\s+/g, " ").trim())
+    .filter((p) => {
+      if (p.length < 40) return false;
+      if (p.startsWith("|") || p.startsWith("-") || p.startsWith("*")) return false;
+      return true;
+    });
+
+  if (paragraphs.length === 0) return null;
+  const chosen = paragraphs[0];
+  return chosen.length > 500 ? chosen.slice(0, 497) + "..." : chosen;
+}
+
+export interface GitTreeItem {
+  path: string;
+  type?: string;
+  size?: number;
+}
+
+export function buildRepositoryStructureFromGitTree(
+  rawTree: GitTreeItem[]
+): GitHubRepositoryStructure {
   const sourceDirectories = new Set<string>();
   const testDirectories = new Set<string>();
   const entrypoints = new Set<string>();
   const dockerFiles = new Set<string>();
   const configFiles = new Set<string>();
 
-  const srcDirNames = new Set(["src", "lib", "app", "core", "pkg", "services", "modules", "internal", "api", "bot", "agents"]);
-  const testDirNames = new Set(["tests", "test", "spec", "__tests__", "testing"]);
-  const entryNames = new Set(["main.py", "app.py", "index.ts", "index.js", "server.ts", "server.js", "cli.ts", "cli.py", "main.go", "bot.py", "run.py"]);
-  const dockerNames = new Set(["dockerfile", "docker-compose.yml", "docker-compose.yaml", "containerfile"]);
-  const configNames = new Set([
-    "package.json", "tsconfig.json", "pyproject.toml", "requirements.txt", "cargo.toml", "go.mod",
-    "foundry.toml", "hardhat.config.ts", "hardhat.config.js", "next.config.ts", "next.config.js", "next.config.mjs", ".env.example"
-  ]);
+  const srcDirNames = new Set(["src", "lib", "app", "pkg", "packages", "core", "services", "modules", "internal", "api"]);
+  const testDirNames = new Set(["tests", "test", "spec", "__tests__"]);
 
-  for (const item of rootFiles) {
-    const name = String(item.name || "").trim();
-    const lower = name.toLowerCase();
-    const type = item.type || (item.size === 0 || item.size === undefined ? "dir" : "file");
+  // Limit to max 1000 paths and depth <= 6
+  const items = rawTree
+    .filter((item) => item.path && item.path.split("/").length <= 6)
+    .slice(0, 1000);
 
-    if (type === "dir" || !item.size) {
-      if (srcDirNames.has(lower)) sourceDirectories.add(name);
-      if (testDirNames.has(lower)) testDirectories.add(name);
-    } else {
-      if (entryNames.has(lower)) entrypoints.add(name);
-      if (dockerNames.has(lower)) dockerFiles.add(name);
-      if (configNames.has(lower)) configFiles.add(name);
+  for (const item of items) {
+    const rawPath = item.path;
+    const parts = rawPath.split("/");
+    const depth = parts.length;
+    const fileName = parts[parts.length - 1];
+    const fileNameLower = fileName.toLowerCase();
+    const isFile = item.type === "blob" || item.type === "file" || (!item.type && Boolean(item.size));
+    const isDir = item.type === "tree" || item.type === "dir" || (!item.type && !item.size);
+
+    // 1. Detect Source and Test Directories
+    if (isDir || depth > 1) {
+      const topDir = parts[0];
+      const topDirLower = topDir.toLowerCase();
+      if (srcDirNames.has(topDirLower)) sourceDirectories.add(topDir);
+      if (testDirNames.has(topDirLower)) testDirectories.add(topDir);
+    }
+
+    // 2. Detect Entrypoints
+    if (isFile) {
+      if (
+        (depth === 1 &&
+          ["main.py", "app.py", "server.py", "index.ts", "index.js", "server.ts", "server.js", "cli.ts", "cli.py", "main.go", "bot.py", "run.py"].includes(fileNameLower)) ||
+        rawPath === "src/main.py" ||
+        rawPath === "app/main.py" ||
+        rawPath === "src/index.ts" ||
+        rawPath === "src/server.ts" ||
+        rawPath === "app/page.tsx" ||
+        rawPath === "src/main.rs" ||
+        rawPath === "src/lib.rs" ||
+        fileNameLower === "__main__.py" ||
+        /^cmd\/[^\/]+\/main\.go$/i.test(rawPath) ||
+        /^packages\/[^\/]+\/(?:src\/)?index\.(?:ts|js)$/i.test(rawPath)
+      ) {
+        entrypoints.add(rawPath);
+      }
+    }
+
+    // 3. Detect Docker Files
+    if (isFile) {
+      if (
+        fileNameLower === "dockerfile" ||
+        fileNameLower === "docker-compose.yml" ||
+        fileNameLower === "docker-compose.yaml" ||
+        fileNameLower === "containerfile" ||
+        /^dockerfile\..*$/i.test(fileName) ||
+        /^docker-compose\..*\.ya?ml$/i.test(fileName)
+      ) {
+        dockerFiles.add(depth === 1 ? fileName : rawPath);
+      }
+    }
+
+    // 4. Detect Config Files
+    if (isFile) {
+      if (
+        fileNameLower === "tsconfig.json" ||
+        fileNameLower === "pytest.ini" ||
+        fileNameLower === "setup.cfg" ||
+        fileNameLower === "tox.ini" ||
+        fileNameLower === "ruff.toml" ||
+        fileNameLower === "package.json" ||
+        fileNameLower === "pyproject.toml" ||
+        fileNameLower === "requirements.txt" ||
+        fileNameLower === "cargo.toml" ||
+        fileNameLower === "go.mod" ||
+        fileNameLower === "foundry.toml" ||
+        fileNameLower === ".env.example" ||
+        /^\.eslintrc/i.test(fileName) ||
+        /^hardhat\.config\.(?:ts|js)$/i.test(fileName) ||
+        /^next\.config\.(?:ts|js|mjs)$/i.test(fileName)
+      ) {
+        configFiles.add(depth === 1 ? fileName : rawPath);
+      }
     }
   }
 
@@ -481,13 +603,9 @@ function buildProjectPurpose(
   commitCount90d: number,
   primaryLanguage?: string | null,
 ): GitHubProjectPurpose {
-  let summary = repository.description || "";
+  let summary = repository.description?.trim() || "";
   if (!summary && readmeExcerpt) {
-    const lines = readmeExcerpt
-      .split("\n")
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0 && !l.startsWith("#"));
-    summary = lines[0] || "No summary provided.";
+    summary = extractProjectSummaryFromReadme(readmeExcerpt) || "";
   }
   if (!summary) {
     summary = `${repository.fullName} repository.`;
@@ -612,6 +730,7 @@ export async function fetchGitHubRepositorySnapshot(
     packageJsonExcerptResult,
     cargoExcerptResult,
     goModExcerptResult,
+    gitTreeResult,
   ] = await Promise.allSettled([
     githubFetch<Array<Record<string, any>>>(
       `/repos/${ref.owner}/${ref.name}/commits?per_page=100`,
@@ -667,6 +786,10 @@ export async function fetchGitHubRepositorySnapshot(
     githubFetchContentExcerpt(ref.owner, ref.name, "package.json"),
     githubFetchContentExcerpt(ref.owner, ref.name, "Cargo.toml"),
     githubFetchContentExcerpt(ref.owner, ref.name, "go.mod"),
+    githubFetch<{ tree?: Array<{ path: string; type: string }>; truncated?: boolean }>(
+      `/repos/${ref.owner}/${ref.name}/git/trees/${repository.defaultBranch}?recursive=1`,
+      { timeoutMs: 6000 },
+    ).catch(() => null),
   ]);
 
   const warnings: string[] = [];
@@ -984,7 +1107,22 @@ export async function fetchGitHubRepositorySnapshot(
   if (fileMap.has("cargo.toml") && !manifests.includes("Cargo.toml")) manifests.push("Cargo.toml");
   if (fileMap.has("go.mod") && !manifests.includes("go.mod")) manifests.push("go.mod");
 
-  const repositoryStructure = buildRepositoryStructure(rootFiles);
+  let repositoryStructure: GitHubRepositoryStructure;
+  if (
+    gitTreeResult.status === "fulfilled" &&
+    gitTreeResult.value &&
+    Array.isArray(gitTreeResult.value.tree) &&
+    gitTreeResult.value.tree.length > 0 &&
+    !gitTreeResult.value.truncated
+  ) {
+    repositoryStructure = buildRepositoryStructureFromGitTree(gitTreeResult.value.tree);
+  } else {
+    const fallbackItems: GitTreeItem[] = rootFiles.map((f) => ({
+      path: String(f.name || ""),
+      type: f.type === "dir" || (!f.size && f.type !== "file") ? "tree" : "blob",
+    }));
+    repositoryStructure = buildRepositoryStructureFromGitTree(fallbackItems);
+  }
   const detectedCapabilities = detectCapabilities(
     Array.from(prodDepsSet),
     Array.from(devDepsSet),

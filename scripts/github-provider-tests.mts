@@ -8,6 +8,7 @@ import { parseGitHubRepositoryInput } from "../lib/providers/github-repository-r
 import {
   fetchGitHubRepositorySnapshot,
   clearGitHubSnapshotCache,
+  extractProjectSummaryFromReadme,
 } from "../lib/providers/github.ts";
 import { ProviderError } from "../lib/providers/errors.ts";
 
@@ -22,8 +23,31 @@ async function runTests() {
     globalThis.fetch = (async (url: string | URL | Request) => {
       const urlStr = url.toString();
 
+      // Recursive Git Tree API
+      if (urlStr.includes("/git/trees")) {
+        return new Response(
+          JSON.stringify({
+            sha: "tree123",
+            tree: [
+              { path: "README.md", type: "blob", size: 2500 },
+              { path: "app/main.py", type: "blob", size: 1200 },
+              { path: "src/index.ts", type: "blob", size: 800 },
+              { path: "cmd/server/main.go", type: "blob", size: 900 },
+              { path: "packages/core/index.ts", type: "blob", size: 600 },
+              { path: "tests/test_main.py", type: "blob", size: 500 },
+              { path: "docker-compose.prod.yml", type: "blob", size: 400 },
+              { path: "tsconfig.json", type: "blob", size: 300 },
+              { path: ".eslintrc.js", type: "blob", size: 200 },
+              { path: "ruff.toml", type: "blob", size: 150 },
+            ],
+            truncated: false,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
       // Main repository metadata
-      if (urlStr.includes("/repos/circle/agent-commerce") && !urlStr.includes("/commits") && !urlStr.includes("/releases") && !urlStr.includes("/contributors") && !urlStr.includes("/languages") && !urlStr.includes("/contents") && !urlStr.includes("/readme")) {
+      if (urlStr.includes("/repos/circle/agent-commerce") && !urlStr.includes("/commits") && !urlStr.includes("/releases") && !urlStr.includes("/contributors") && !urlStr.includes("/languages") && !urlStr.includes("/contents") && !urlStr.includes("/readme") && !urlStr.includes("/git/trees")) {
         return new Response(
           JSON.stringify({
             id: 123456,
@@ -210,6 +234,18 @@ async function runTests() {
     assert.equal(snapshot1.source.cacheStatus, "live");
     assert.equal(snapshot1.source.cacheAgeSeconds, 0);
     assert.equal(snapshot1.source.provider, "GitHub REST API v3");
+    assert.ok(snapshot1.repositoryStructure?.entrypoints.includes("app/main.py"));
+    assert.ok(snapshot1.repositoryStructure?.entrypoints.includes("src/index.ts"));
+    assert.ok(snapshot1.repositoryStructure?.entrypoints.includes("cmd/server/main.go"));
+    assert.ok(snapshot1.repositoryStructure?.entrypoints.includes("packages/core/index.ts"));
+    assert.ok(snapshot1.repositoryStructure?.sourceDirectories.includes("app"));
+    assert.ok(snapshot1.repositoryStructure?.sourceDirectories.includes("src"));
+    assert.ok(snapshot1.repositoryStructure?.sourceDirectories.includes("packages"));
+    assert.ok(snapshot1.repositoryStructure?.testDirectories.includes("tests"));
+    assert.ok(snapshot1.repositoryStructure?.dockerFiles.includes("docker-compose.prod.yml"));
+    assert.ok(snapshot1.repositoryStructure?.configFiles.includes("tsconfig.json"));
+    assert.ok(snapshot1.repositoryStructure?.configFiles.includes(".eslintrc.js"));
+    assert.ok(snapshot1.repositoryStructure?.configFiles.includes("ruff.toml"));
     console.log("    ✓ Snapshot structure matches expected schema");
 
     // Test 2: In-memory cache behavior & timestamp preservation
@@ -431,6 +467,40 @@ async function runTests() {
     assert.ok(magdaSnapshot.repositoryStructure?.dockerFiles.includes("docker-compose.yml"));
     assert.equal(magdaSnapshot.projectPurpose?.primaryInterface, "Telegram bot");
     console.log("    ✓ magda-agent fixture dependency profile, capabilities, and repository structure correctly extracted");
+
+    // Test 10: extractProjectSummaryFromReadme HTML and markdown sanitizer
+    console.log("  - Test 10: extractProjectSummaryFromReadme HTML and markdown sanitizer...");
+    const dirtyReadme = `
+<div align="center">
+  <picture>
+    <img src="https://example.com/logo.png" alt="Logo" width="200" />
+  </picture>
+  <h1>magda-agent</h1>
+  [![Build Status](https://img.shields.io/badge/build-passing-brightgreen)](https://example.com)
+  [![Coverage](https://img.shields.io/badge/coverage-100%25-green)](https://example.com)
+</div>
+
+# magda-agent
+
+Magda is an autonomous AI Telegram agent with vector memory and FastAPI server for automated customer intelligence.
+
+## Quick Start
+\`\`\`bash
+pip install magda
+\`\`\`
+
+> Note: Blockquote text
+`;
+
+    const cleanSummary = extractProjectSummaryFromReadme(dirtyReadme);
+    assert.equal(
+      cleanSummary,
+      "Magda is an autonomous AI Telegram agent with vector memory and FastAPI server for automated customer intelligence.",
+    );
+    assert.ok(!cleanSummary?.includes("<div"));
+    assert.ok(!cleanSummary?.includes("img.shields.io"));
+    assert.ok(!cleanSummary?.includes("#"));
+    console.log("    ✓ extractProjectSummaryFromReadme strips HTML containers, badges, and headers cleanly");
 
   } finally {
     globalThis.fetch = originalFetch;
