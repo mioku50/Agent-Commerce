@@ -261,5 +261,42 @@ assert(!jsonStr.includes("investment grade"), "Result must not contain 'investme
 assert(!jsonStr.includes("buy recommendation"), "Result must not contain investment recommendation");
 console.log("✔ Safety constraints check passed.");
 
+// Test 10: Testing rich P1.4 categories and magda-agent executive summary synthesis
+console.log("Test 10: Testing rich P1.4 categories and executive summary synthesis...");
+const magdaSnapshot = createBaseSnapshot();
+magdaSnapshot.repository.name = "magda-agent";
+magdaSnapshot.repository.fullName = "circlefin/magda-agent";
+magdaSnapshot.repository.description = "Magda Autonomous AI Telegram Agent";
+magdaSnapshot.projectPurpose = {
+  summary: "Magda Autonomous AI Telegram Agent with vector memory and FastAPI server",
+  primaryInterface: "Telegram bot",
+  capabilities: ["API server", "Telegram bot", "Vector memory", "LLM integration", "Machine learning", "Scheduled jobs", "Testing", "WebSockets"],
+  targetUsers: "Telegram users & subscribers",
+  developmentStage: "Active development",
+};
+magdaSnapshot.dependencyProfile = {
+  manifests: ["requirements.txt"],
+  productionDependencies: ["fastapi", "uvicorn", "openai", "chromadb", "torch", "transformers", "python-telegram-bot", "croniter", "websockets"],
+  developmentDependencies: ["pytest"],
+  detectedCapabilities: ["API server", "Telegram bot", "Vector memory", "LLM integration", "Machine learning", "Scheduled jobs", "Testing", "WebSockets"],
+};
+magdaSnapshot.repositoryStructure = {
+  sourceDirectories: ["src"],
+  testDirectories: ["tests"],
+  entrypoints: ["main.py"],
+  dockerFiles: ["Dockerfile", "docker-compose.yml"],
+  configFiles: ["requirements.txt"],
+};
+
+const magdaResult = analyzeGitHubDueDiligence(magdaSnapshot);
+
+assert.equal(magdaResult.categories.testing.status, "strong");
+assert.equal(magdaResult.categories.dependencyHygiene.status, "strong");
+assert.equal(magdaResult.categories.deploymentReadiness.status, "strong");
+assert.equal(magdaResult.categories.operationalMaturity.status, "strong");
+assert.ok(magdaResult.overallSummary.includes("Magda Autonomous AI Telegram Agent"));
+assert.ok(magdaResult.overallSummary.includes("Target stack"));
+console.log("✔ Rich P1.4 categories and executive summary synthesis test passed.");
+
 console.log("\n[github-due-diligence-test] ALL TEST SUITES PASSED SUCCESSFULLY!");
 

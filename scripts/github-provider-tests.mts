@@ -351,6 +351,87 @@ async function runTests() {
     assert.ok(partialSnapshot.source.warnings.includes("pull_requests_unavailable"));
     console.log("    ✓ Sub-fetch failures populate source.warnings and set source.partial = true");
 
+    // Test 9: magda-agent fixture dependency profiling, capabilities, & structure
+    console.log("  - Test 9: magda-agent fixture dependency profiling, capabilities, & structure...");
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+
+      if (urlStr.includes("/repos/circle/magda-agent") && !urlStr.includes("/commits") && !urlStr.includes("/releases") && !urlStr.includes("/contributors") && !urlStr.includes("/languages") && !urlStr.includes("/contents") && !urlStr.includes("/readme") && !urlStr.includes("/pulls") && !urlStr.includes("/issues")) {
+        return new Response(
+          JSON.stringify({
+            id: 777,
+            name: "magda-agent",
+            full_name: "circle/magda-agent",
+            owner: { login: "circle" },
+            description: "Magda Autonomous AI Telegram Agent with vector memory and FastAPI server",
+            private: false,
+            stargazers_count: 50,
+            language: "Python",
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (urlStr.includes("requirements.txt")) {
+        const reqs = "fastapi==0.109.0\nuvicorn==0.27.0\nopenai==1.12.0\nchromadb==0.4.22\ntorch==2.2.0\ntransformers==4.37.2\npython-telegram-bot==20.8\ncroniter==2.0.1\nwebsockets==12.0\npytest==8.0.0\n";
+        return new Response(
+          JSON.stringify({ encoding: "base64", content: Buffer.from(reqs).toString("base64") }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (urlStr.endsWith("/contents")) {
+        return new Response(
+          JSON.stringify([
+            { name: "README.md", size: 3000 },
+            { name: "requirements.txt", size: 400 },
+            { name: "Dockerfile", size: 500 },
+            { name: "docker-compose.yml", size: 600 },
+            { name: "main.py", size: 1200 },
+            { name: "src", type: "dir" },
+            { name: "tests", type: "dir" },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (urlStr.includes("/languages")) {
+        return new Response(JSON.stringify({ Python: 50000 }), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+
+      return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+
+    clearGitHubSnapshotCache();
+    const magdaRef = parseGitHubRepositoryInput("circle/magda-agent");
+    const magdaSnapshot = await fetchGitHubRepositorySnapshot(magdaRef);
+
+    assert.equal(magdaSnapshot.dependencyProfile?.manifests.includes("requirements.txt"), true);
+    assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("fastapi"));
+    assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("openai"));
+    assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("chromadb"));
+    assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("torch"));
+    assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("python-telegram-bot"));
+    assert.ok(magdaSnapshot.dependencyProfile?.developmentDependencies.includes("pytest"));
+
+    const caps = magdaSnapshot.dependencyProfile?.detectedCapabilities ?? [];
+    assert.ok(caps.includes("API server"));
+    assert.ok(caps.includes("Telegram bot"));
+    assert.ok(caps.includes("Vector memory"));
+    assert.ok(caps.includes("LLM integration"));
+    assert.ok(caps.includes("Machine learning"));
+    assert.ok(caps.includes("Scheduled jobs"));
+    assert.ok(caps.includes("Testing"));
+    assert.ok(caps.includes("WebSockets"));
+
+    assert.ok(magdaSnapshot.repositoryStructure?.sourceDirectories.includes("src"));
+    assert.ok(magdaSnapshot.repositoryStructure?.testDirectories.includes("tests"));
+    assert.ok(magdaSnapshot.repositoryStructure?.entrypoints.includes("main.py"));
+    assert.ok(magdaSnapshot.repositoryStructure?.dockerFiles.includes("Dockerfile"));
+    assert.ok(magdaSnapshot.repositoryStructure?.dockerFiles.includes("docker-compose.yml"));
+    assert.equal(magdaSnapshot.projectPurpose?.primaryInterface, "Telegram bot");
+    console.log("    ✓ magda-agent fixture dependency profile, capabilities, and repository structure correctly extracted");
+
   } finally {
     globalThis.fetch = originalFetch;
   }

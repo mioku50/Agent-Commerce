@@ -111,6 +111,29 @@ export interface GitHubSourceMetadata {
   partial?: boolean;
 }
 
+export interface GitHubProjectPurpose {
+  summary: string;
+  primaryInterface: string;
+  capabilities: string[];
+  targetUsers: string;
+  developmentStage: string;
+}
+
+export interface GitHubDependencyProfile {
+  manifests: string[];
+  productionDependencies: string[];
+  developmentDependencies: string[];
+  detectedCapabilities: string[];
+}
+
+export interface GitHubRepositoryStructure {
+  sourceDirectories: string[];
+  testDirectories: string[];
+  entrypoints: string[];
+  dockerFiles: string[];
+  configFiles: string[];
+}
+
 export interface GitHubRepositorySnapshot {
   version: 1;
   ref: GitHubRepositoryRef;
@@ -121,6 +144,9 @@ export interface GitHubRepositorySnapshot {
   collaboration: GitHubCollaborationMetrics;
   documentation: GitHubDocumentationMetrics;
   stack: GitHubStackMetrics;
+  projectPurpose?: GitHubProjectPurpose;
+  dependencyProfile?: GitHubDependencyProfile;
+  repositoryStructure?: GitHubRepositoryStructure;
   excerpts: GitHubExcerpts;
   source: GitHubSourceMetadata;
 }

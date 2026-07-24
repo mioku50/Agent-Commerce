@@ -48,6 +48,11 @@ export interface GitHubDueDiligenceCategories {
   releaseDiscipline: GitHubCategoryAssessment;
   contributorDistribution: GitHubCategoryAssessment;
   automation: GitHubCategoryAssessment;
+  testing: GitHubCategoryAssessment;
+  dependencyHygiene: GitHubCategoryAssessment;
+  documentationDepth: GitHubCategoryAssessment;
+  deploymentReadiness: GitHubCategoryAssessment;
+  operationalMaturity: GitHubCategoryAssessment;
 }
 
 export interface GitHubDueDiligenceAssessment {
@@ -276,6 +281,116 @@ export function analyzeGitHubDueDiligence(
     autoSummary = "No GitHub Actions CI workflow files (.github/workflows) detected.";
   }
 
+  // Testing
+  let testingStatus: AssessmentStatus = "unknown";
+  let testingSummary = "";
+  const testingEvidence: string[] = [];
+
+  const detectedCaps = snapshot.dependencyProfile?.detectedCapabilities ?? [];
+  const testDirs = snapshot.repositoryStructure?.testDirectories ?? [];
+  const hasTestCap = detectedCaps.includes("Testing");
+
+  testingEvidence.push(`Test directories detected: ${testDirs.length > 0 ? testDirs.join(", ") : "None"}.`);
+  testingEvidence.push(`Testing framework detected: ${hasTestCap ? "Yes" : "No"}.`);
+
+  if (hasTestCap && testDirs.length > 0 && Boolean(snapshot.stack?.hasWorkflows)) {
+    testingStatus = "strong";
+    testingSummary = "Active test suite and test runner detected alongside CI automation.";
+  } else if (hasTestCap || testDirs.length > 0) {
+    testingStatus = "moderate";
+    testingSummary = "Test framework or test directory present in repository.";
+  } else {
+    testingStatus = "weak";
+    testingSummary = "No unit test framework or test directory detected.";
+  }
+
+  // Dependency Hygiene
+  let depStatus: AssessmentStatus = "unknown";
+  let depSummary = "";
+  const depEvidence: string[] = [];
+
+  const manifests = snapshot.dependencyProfile?.manifests ?? [];
+  const prodDeps = snapshot.dependencyProfile?.productionDependencies ?? [];
+  const devDeps = snapshot.dependencyProfile?.developmentDependencies ?? [];
+
+  depEvidence.push(`Dependency manifests found: ${manifests.length > 0 ? manifests.join(", ") : "None"}.`);
+  depEvidence.push(`Production dependencies count: ${prodDeps.length}.`);
+  depEvidence.push(`Development dependencies count: ${devDeps.length}.`);
+
+  if (manifests.length >= 1 && devDeps.length >= 1) {
+    depStatus = "strong";
+    depSummary = `Structured dependency manifests (${manifests.join(", ")}) with clear dev dependency separation.`;
+  } else if (manifests.length >= 1) {
+    depStatus = "moderate";
+    depSummary = `Dependency manifests present (${manifests.join(", ")}).`;
+  } else {
+    depStatus = "weak";
+    depSummary = "No standard dependency manifests detected in repository root.";
+  }
+
+  // Documentation Depth
+  let docDepthStatus: AssessmentStatus = "unknown";
+  let docDepthSummary = "";
+  const docDepthEvidence: string[] = [];
+
+  const readmeBytes = snapshot.documentation?.readmeSize ?? 0;
+  docDepthEvidence.push(`README size: ${readmeBytes} bytes.`);
+  docDepthEvidence.push(`Security policy present: ${snapshot.documentation?.hasSecurityPolicy ? "Yes" : "No"}.`);
+  docDepthEvidence.push(`Contributing guide present: ${snapshot.documentation?.hasContributing ? "Yes" : "No"}.`);
+
+  if (readmeBytes > 5000 && snapshot.documentation?.hasSecurityPolicy && snapshot.documentation?.hasContributing) {
+    docDepthStatus = "strong";
+    docDepthSummary = "In-depth documentation with detailed README (>5KB), security policy, and contributing guide.";
+  } else if (readmeBytes > 1000) {
+    docDepthStatus = "moderate";
+    docDepthSummary = "Standard documentation depth present in repository.";
+  } else {
+    docDepthStatus = "weak";
+    docDepthSummary = "Minimal documentation depth detected.";
+  }
+
+  // Deployment Readiness
+  let deployStatus: AssessmentStatus = "unknown";
+  let deploySummary = "";
+  const deployEvidence: string[] = [];
+
+  const dockerFiles = snapshot.repositoryStructure?.dockerFiles ?? [];
+  const entrypoints = snapshot.repositoryStructure?.entrypoints ?? [];
+
+  deployEvidence.push(`Containerization files: ${dockerFiles.length > 0 ? dockerFiles.join(", ") : "None"}.`);
+  deployEvidence.push(`Application entrypoints: ${entrypoints.length > 0 ? entrypoints.join(", ") : "None"}.`);
+  deployEvidence.push(`CI workflows: ${snapshot.stack?.hasWorkflows ? "Present" : "Missing"}.`);
+
+  if (dockerFiles.length > 0 && snapshot.stack?.hasWorkflows) {
+    deployStatus = "strong";
+    deploySummary = `Containerization assets (${dockerFiles.join(", ")}) and CI build workflows configured.`;
+  } else if (dockerFiles.length > 0 || snapshot.stack?.hasWorkflows || entrypoints.length > 0) {
+    deployStatus = "moderate";
+    deploySummary = "Basic deployment or entrypoint configuration present.";
+  } else {
+    deployStatus = "weak";
+    deploySummary = "No containerization or deployment workflow files detected.";
+  }
+
+  // Operational Maturity
+  let opMaturityStatus: AssessmentStatus = "unknown";
+  let opMaturitySummary = "";
+  const opMaturityEvidence: string[] = [];
+
+  const strongCount = [activityStatus, maintenanceStatus, docStatus, releaseStatus, contribStatus, autoStatus, testingStatus, depStatus, deployStatus].filter((s) => s === "strong").length;
+  opMaturityEvidence.push(`High confidence engineering signals: ${strongCount} of 9 categories strong.`);
+
+  if (strongCount >= 5) {
+    opMaturityStatus = "strong";
+    opMaturitySummary = "High operational maturity across release management, CI, testing, and governance.";
+  } else if (strongCount >= 2) {
+    opMaturityStatus = "moderate";
+    opMaturitySummary = "Moderate operational maturity signals observed.";
+  } else {
+    opMaturityStatus = "weak";
+    opMaturitySummary = "Low operational maturity signals detected.";
+  }
+
   const categories: GitHubDueDiligenceCategories = {
     activity: { status: activityStatus, summary: activitySummary, evidence: activityEvidence },
     maintenance: { status: maintenanceStatus, summary: maintenanceSummary, evidence: maintenanceEvidence },
@@ -283,6 +398,11 @@ export function analyzeGitHubDueDiligence(
     releaseDiscipline: { status: releaseStatus, summary: releaseSummary, evidence: releaseEvidence },
     contributorDistribution: { status: contribStatus, summary: contribSummary, evidence: contribEvidence },
     automation: { status: autoStatus, summary: autoSummary, evidence: autoEvidence },
+    testing: { status: testingStatus, summary: testingSummary, evidence: testingEvidence },
+    dependencyHygiene: { status: depStatus, summary: depSummary, evidence: depEvidence },
+    documentationDepth: { status: docDepthStatus, summary: docDepthSummary, evidence: docDepthEvidence },
+    deploymentReadiness: { status: deployStatus, summary: deploySummary, evidence: deployEvidence },
+    operationalMaturity: { status: opMaturityStatus, summary: opMaturitySummary, evidence: opMaturityEvidence },
   };
 
   // --- 2. Risk Evaluation ---
@@ -404,7 +524,7 @@ export function analyzeGitHubDueDiligence(
     });
   }
 
-  // --- 3. Overall Status Calculation ---
+  // --- 3. Overall Status Calculation & Synthesized Executive Summary ---
 
   let overallStatus: DueDiligenceOverallStatus = "healthy_signals";
   let overallSummary = "";
@@ -417,22 +537,32 @@ export function analyzeGitHubDueDiligence(
     snapshot.source?.partial === true ||
     !snapshot.repository?.fullName;
 
+  const purposePrefix = snapshot.projectPurpose?.summary
+    ? `${snapshot.projectPurpose.summary.replace(/\.$/, "")}. `
+    : "";
+  const primaryLang = snapshot.stack?.primaryLanguage || "Software";
+  const frameworks = snapshot.stack?.detectedFrameworks?.length
+    ? ` built with ${snapshot.stack.detectedFrameworks.join(", ")}`
+    : "";
+  const testingSignal = testingStatus === "strong" || testingStatus === "moderate"
+    ? "verified test coverage"
+    : "limited automated testing";
+  const govSignal = docStatus === "strong"
+    ? "comprehensive governance documentation"
+    : "standard repository governance";
+
   if (isPartialOrIncomplete) {
     overallStatus = "limited_data";
-    overallSummary =
-      "Limited repository metadata could be retrieved from GitHub REST API v3; exercise caution.";
+    overallSummary = `Limited repository metadata could be retrieved for ${snapshot.repository?.fullName || "the target repository"}. ${purposePrefix}Exercise caution due to partial upstream API response.`;
   } else if (highRisks.length >= 1) {
     overallStatus = "high_attention";
-    overallSummary =
-      "Significant risk factors detected (e.g. archived status or prolonged inactivity) requiring careful review before integration.";
+    overallSummary = `${purposePrefix}Target stack: ${primaryLang}${frameworks}. Significant risk factors detected (${highRisks.map((r) => r.title.toLowerCase()).join(", ")}) with ${testingSignal} and ${govSignal}. Careful manual review is required before integration.`;
   } else if (mediumRisks.length >= 2) {
     overallStatus = "review_needed";
-    overallSummary =
-      "The repository shows active elements but contains notable risk factors requiring review before integration.";
+    overallSummary = `${purposePrefix}Target stack: ${primaryLang}${frameworks}. The repository shows active development with ${testingSignal} and ${govSignal}, but contains notable risk factors (${mediumRisks.map((r) => r.title.toLowerCase()).join(", ")}) requiring review before integration.`;
   } else {
     overallStatus = "healthy_signals";
-    overallSummary =
-      "The repository demonstrates strong activity, release discipline, and active maintenance with minimal risk factors.";
+    overallSummary = `${purposePrefix}Target stack: ${primaryLang}${frameworks}. The repository demonstrates healthy activity, ${testingSignal}, and ${govSignal} with minimal risk factors detected.`;
   }
 
   // --- 4. Evidence-backed Strengths List ---

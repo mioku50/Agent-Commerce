@@ -16,6 +16,9 @@ import type {
   GitHubStackMetrics,
   GitHubExcerpts,
   GitHubSourceMetadata,
+  GitHubProjectPurpose,
+  GitHubDependencyProfile,
+  GitHubRepositoryStructure,
 } from "./github-types.ts";
 import { redactHostedWorkflowText } from "../agent/hosted-workflows.ts";
 
@@ -188,6 +191,344 @@ async function githubFetchReadmeExcerpt(
   }
 }
 
+function parseRequirementsTxt(content: string): { prod: string[]; dev: string[] } {
+  const prod = new Set<string>();
+  const dev = new Set<string>();
+
+  const devPackages = new Set([
+    "pytest", "pytest-cov", "black", "flake8", "mypy", "ruff",
+    "coverage", "isort", "tox", "pytest-asyncio", "pytest-mock"
+  ]);
+
+  const lines = content.split("\n");
+  for (let line of lines) {
+    line = line.trim();
+    if (!line || line.startsWith("#") || line.startsWith("-r") || line.startsWith("-e")) continue;
+    const commentIdx = line.indexOf("#");
+    if (commentIdx !== -1) {
+      line = line.slice(0, commentIdx).trim();
+    }
+    const match = line.match(/^([a-zA-Z0-9_\-\.]+)/);
+    if (match) {
+      const pkg = match[1].toLowerCase();
+      if (devPackages.has(pkg)) {
+        dev.add(pkg);
+      } else {
+        prod.add(pkg);
+      }
+    }
+  }
+
+  return { prod: Array.from(prod), dev: Array.from(dev) };
+}
+
+function parsePyprojectToml(content: string): { prod: string[]; dev: string[] } {
+  const prod = new Set<string>();
+  const dev = new Set<string>();
+
+  const devPackages = new Set([
+    "pytest", "pytest-cov", "black", "flake8", "mypy", "ruff",
+    "coverage", "isort", "tox", "pytest-asyncio", "pytest-mock"
+  ]);
+
+  const matches = content.match(/["']([a-zA-Z0-9_\-\.]+)(?:[<>=~!\[;]|\s*["'])/g) || [];
+  for (const match of matches) {
+    const pkgMatch = match.match(/["']([a-zA-Z0-9_\-\.]+)/);
+    if (pkgMatch) {
+      const pkg = pkgMatch[1].toLowerCase();
+      if (["dependencies", "dev-dependencies", "tool", "poetry", "project", "build-system", "requires"].includes(pkg)) continue;
+      if (devPackages.has(pkg)) {
+        dev.add(pkg);
+      } else {
+        prod.add(pkg);
+      }
+    }
+  }
+
+  return { prod: Array.from(prod), dev: Array.from(dev) };
+}
+
+function parsePackageJson(content: string): { prod: string[]; dev: string[] } {
+  const prod = new Set<string>();
+  const dev = new Set<string>();
+
+  try {
+    const parsed = JSON.parse(content);
+    if (parsed.dependencies && typeof parsed.dependencies === "object") {
+      Object.keys(parsed.dependencies).forEach((k) => prod.add(k.toLowerCase()));
+    }
+    if (parsed.devDependencies && typeof parsed.devDependencies === "object") {
+      Object.keys(parsed.devDependencies).forEach((k) => dev.add(k.toLowerCase()));
+    }
+  } catch {
+    const depMatches = content.match(/"dependencies"\s*:\s*\{([^}]+)\}/);
+    if (depMatches) {
+      const keys = depMatches[1].match(/"([^"]+)":/g) || [];
+      for (const k of keys) prod.add(k.replace(/"/g, "").replace(":", "").trim().toLowerCase());
+    }
+    const devDepMatches = content.match(/"devDependencies"\s*:\s*\{([^}]+)\}/);
+    if (devDepMatches) {
+      const keys = devDepMatches[1].match(/"([^"]+)":/g) || [];
+      for (const k of keys) dev.add(k.replace(/"/g, "").replace(":", "").trim().toLowerCase());
+    }
+  }
+
+  return { prod: Array.from(prod), dev: Array.from(dev) };
+}
+
+function parseCargoToml(content: string): { prod: string[]; dev: string[] } {
+  const prod = new Set<string>();
+  const dev = new Set<string>();
+
+  const matches = content.match(/^([a-zA-Z0-9_\-]+)\s*=\s*/gm) || [];
+  for (const match of matches) {
+    const name = match.split("=")[0].trim().toLowerCase();
+    if (!["package", "dependencies", "dev-dependencies", "workspace", "profile"].includes(name)) {
+      prod.add(name);
+    }
+  }
+
+  return { prod: Array.from(prod), dev: Array.from(dev) };
+}
+
+function parseGoMod(content: string): { prod: string[]; dev: string[] } {
+  const prod = new Set<string>();
+  const dev = new Set<string>();
+
+  const matches = content.match(/require\s+\(?([^\)]+)\)?/);
+  if (matches) {
+    const lines = matches[1].split("\n");
+    for (let line of lines) {
+      line = line.trim();
+      const parts = line.split(/\s+/);
+      if (parts[0] && parts[0].includes("/")) {
+        prod.add(parts[0]);
+      }
+    }
+  }
+
+  return { prod: Array.from(prod), dev: Array.from(dev) };
+}
+
+function buildRepositoryStructure(rootFiles: Array<Record<string, any>>): GitHubRepositoryStructure {
+  const sourceDirectories = new Set<string>();
+  const testDirectories = new Set<string>();
+  const entrypoints = new Set<string>();
+  const dockerFiles = new Set<string>();
+  const configFiles = new Set<string>();
+
+  const srcDirNames = new Set(["src", "lib", "app", "core", "pkg", "services", "modules", "internal", "api", "bot", "agents"]);
+  const testDirNames = new Set(["tests", "test", "spec", "__tests__", "testing"]);
+  const entryNames = new Set(["main.py", "app.py", "index.ts", "index.js", "server.ts", "server.js", "cli.ts", "cli.py", "main.go", "bot.py", "run.py"]);
+  const dockerNames = new Set(["dockerfile", "docker-compose.yml", "docker-compose.yaml", "containerfile"]);
+  const configNames = new Set([
+    "package.json", "tsconfig.json", "pyproject.toml", "requirements.txt", "cargo.toml", "go.mod",
+    "foundry.toml", "hardhat.config.ts", "hardhat.config.js", "next.config.ts", "next.config.js", "next.config.mjs", ".env.example"
+  ]);
+
+  for (const item of rootFiles) {
+    const name = String(item.name || "").trim();
+    const lower = name.toLowerCase();
+    const type = item.type || (item.size === 0 || item.size === undefined ? "dir" : "file");
+
+    if (type === "dir" || !item.size) {
+      if (srcDirNames.has(lower)) sourceDirectories.add(name);
+      if (testDirNames.has(lower)) testDirectories.add(name);
+    } else {
+      if (entryNames.has(lower)) entrypoints.add(name);
+      if (dockerNames.has(lower)) dockerFiles.add(name);
+      if (configNames.has(lower)) configFiles.add(name);
+    }
+  }
+
+  return {
+    sourceDirectories: Array.from(sourceDirectories),
+    testDirectories: Array.from(testDirectories),
+    entrypoints: Array.from(entrypoints),
+    dockerFiles: Array.from(dockerFiles),
+    configFiles: Array.from(configFiles),
+  };
+}
+
+function detectCapabilities(
+  prodDeps: string[],
+  devDeps: string[],
+  manifests: string[],
+  structure: GitHubRepositoryStructure,
+  readmeExcerpt: string | null,
+): string[] {
+  const capabilities = new Set<string>();
+  const allDeps = new Set([
+    ...prodDeps.map((d) => d.toLowerCase()),
+    ...devDeps.map((d) => d.toLowerCase()),
+  ]);
+  const readmeLower = (readmeExcerpt || "").toLowerCase();
+
+  // 1. API server
+  if (
+    allDeps.has("fastapi") ||
+    allDeps.has("uvicorn") ||
+    allDeps.has("express") ||
+    allDeps.has("next") ||
+    allDeps.has("flask") ||
+    allDeps.has("django") ||
+    allDeps.has("gin") ||
+    allDeps.has("actix-web") ||
+    allDeps.has("axum")
+  ) {
+    capabilities.add("API server");
+  }
+
+  // 2. Telegram bot
+  if (
+    allDeps.has("python-telegram-bot") ||
+    allDeps.has("aiogram") ||
+    allDeps.has("telebot") ||
+    allDeps.has("pytelegrambotapi") ||
+    allDeps.has("telegraf") ||
+    allDeps.has("grammy") ||
+    allDeps.has("go-telegram-bot-api") ||
+    readmeLower.includes("telegram bot")
+  ) {
+    capabilities.add("Telegram bot");
+  }
+
+  // 3. Vector memory
+  if (
+    allDeps.has("chromadb") ||
+    allDeps.has("pinecone") ||
+    allDeps.has("qdrant") ||
+    allDeps.has("weaviate") ||
+    allDeps.has("milvus") ||
+    allDeps.has("pgvector") ||
+    allDeps.has("faiss") ||
+    allDeps.has("faiss-cpu")
+  ) {
+    capabilities.add("Vector memory");
+  }
+
+  // 4. LLM integration
+  if (
+    allDeps.has("openai") ||
+    allDeps.has("langchain") ||
+    allDeps.has("llama-index") ||
+    allDeps.has("anthropic") ||
+    allDeps.has("@ai-sdk/openai") ||
+    allDeps.has("ollama") ||
+    readmeLower.includes("llm") ||
+    readmeLower.includes("gpt")
+  ) {
+    capabilities.add("LLM integration");
+  }
+
+  // 5. Machine learning
+  if (
+    allDeps.has("transformers") ||
+    allDeps.has("torch") ||
+    allDeps.has("pytorch") ||
+    allDeps.has("tensorflow") ||
+    allDeps.has("scikit-learn") ||
+    allDeps.has("onnx")
+  ) {
+    capabilities.add("Machine learning");
+  }
+
+  // 6. Scheduled jobs
+  if (
+    allDeps.has("croniter") ||
+    allDeps.has("celery") ||
+    allDeps.has("apscheduler") ||
+    allDeps.has("node-cron") ||
+    allDeps.has("bull") ||
+    allDeps.has("bullmq")
+  ) {
+    capabilities.add("Scheduled jobs");
+  }
+
+  // 7. Testing
+  if (
+    allDeps.has("pytest") ||
+    allDeps.has("pytest-cov") ||
+    allDeps.has("vitest") ||
+    allDeps.has("jest") ||
+    allDeps.has("mocha") ||
+    allDeps.has("playwright") ||
+    allDeps.has("cypress") ||
+    structure.testDirectories.length > 0
+  ) {
+    capabilities.add("Testing");
+  }
+
+  // 8. WebSockets
+  if (
+    allDeps.has("websockets") ||
+    allDeps.has("ws") ||
+    allDeps.has("socket.io") ||
+    allDeps.has("gorilla/websocket")
+  ) {
+    capabilities.add("WebSockets");
+  }
+
+  return Array.from(capabilities);
+}
+
+function buildProjectPurpose(
+  repository: GitHubRepositoryMetadata,
+  readmeExcerpt: string | null,
+  detectedCapabilities: string[],
+  structure: GitHubRepositoryStructure,
+  releasesTotalCount: number,
+  commitCount90d: number,
+  primaryLanguage?: string | null,
+): GitHubProjectPurpose {
+  let summary = repository.description || "";
+  if (!summary && readmeExcerpt) {
+    const lines = readmeExcerpt
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith("#"));
+    summary = lines[0] || "No summary provided.";
+  }
+  if (!summary) {
+    summary = `${repository.fullName} repository.`;
+  }
+
+  let primaryInterface = "Library / Service";
+  if (detectedCapabilities.includes("Telegram bot")) {
+    primaryInterface = "Telegram bot";
+  } else if (detectedCapabilities.includes("API server")) {
+    primaryInterface = "REST API";
+  } else if (structure.entrypoints.some((e) => e.includes("cli"))) {
+    primaryInterface = "CLI tool";
+  } else if (primaryLanguage) {
+    primaryInterface = `${primaryLanguage} Application`;
+  }
+
+  let targetUsers = "Software developers & engineers";
+  if (detectedCapabilities.includes("Telegram bot")) {
+    targetUsers = "Telegram users & subscribers";
+  } else if (detectedCapabilities.includes("LLM integration") || detectedCapabilities.includes("API server")) {
+    targetUsers = "Developers & AI agent systems";
+  }
+
+  let developmentStage = "Active development";
+  if (repository.isArchived) {
+    developmentStage = "Archived";
+  } else if (releasesTotalCount > 0) {
+    developmentStage = "Production ready";
+  } else if (commitCount90d === 0) {
+    developmentStage = "Maintenance / Inactive";
+  }
+
+  return {
+    summary,
+    primaryInterface,
+    capabilities: detectedCapabilities,
+    targetUsers,
+    developmentStage,
+  };
+}
+
 export async function fetchGitHubRepositorySnapshot(
   ref: GitHubRepositoryRef,
   options?: { forceFresh?: boolean },
@@ -266,6 +607,11 @@ export async function fetchGitHubRepositorySnapshot(
     readmeExcerptResult,
     securityExcerptResult,
     contributingExcerptResult,
+    requirementsExcerptResult,
+    pyprojectExcerptResult,
+    packageJsonExcerptResult,
+    cargoExcerptResult,
+    goModExcerptResult,
   ] = await Promise.allSettled([
     githubFetch<Array<Record<string, any>>>(
       `/repos/${ref.owner}/${ref.name}/commits?per_page=100`,
@@ -316,6 +662,11 @@ export async function fetchGitHubRepositorySnapshot(
     githubFetchReadmeExcerpt(ref.owner, ref.name),
     githubFetchContentExcerpt(ref.owner, ref.name, ["SECURITY.md", ".github/SECURITY.md"]),
     githubFetchContentExcerpt(ref.owner, ref.name, ["CONTRIBUTING.md", ".github/CONTRIBUTING.md"]),
+    githubFetchContentExcerpt(ref.owner, ref.name, ["requirements.txt", "requirements.in", "requirements/prod.txt"]),
+    githubFetchContentExcerpt(ref.owner, ref.name, "pyproject.toml"),
+    githubFetchContentExcerpt(ref.owner, ref.name, "package.json"),
+    githubFetchContentExcerpt(ref.owner, ref.name, "Cargo.toml"),
+    githubFetchContentExcerpt(ref.owner, ref.name, "go.mod"),
   ]);
 
   const warnings: string[] = [];
@@ -585,6 +936,80 @@ export async function fetchGitHubRepositorySnapshot(
   const partial = warnings.length > 0;
   const upstreamStatus = partial ? "partial_success" : "success";
 
+  // Parse manifests and build rich intelligence
+  const reqContent = requirementsExcerptResult.status === "fulfilled" ? requirementsExcerptResult.value : null;
+  const pyprojectContent = pyprojectExcerptResult.status === "fulfilled" ? pyprojectExcerptResult.value : null;
+  const pkgJsonContent = packageJsonExcerptResult.status === "fulfilled" ? packageJsonExcerptResult.value : null;
+  const cargoContent = cargoExcerptResult.status === "fulfilled" ? cargoExcerptResult.value : null;
+  const goModContent = goModExcerptResult.status === "fulfilled" ? goModExcerptResult.value : null;
+
+  const manifests: string[] = [];
+  const prodDepsSet = new Set<string>();
+  const devDepsSet = new Set<string>();
+
+  if (reqContent) {
+    manifests.push("requirements.txt");
+    const { prod, dev } = parseRequirementsTxt(reqContent);
+    prod.forEach((d) => prodDepsSet.add(d));
+    dev.forEach((d) => devDepsSet.add(d));
+  }
+  if (pyprojectContent) {
+    manifests.push("pyproject.toml");
+    const { prod, dev } = parsePyprojectToml(pyprojectContent);
+    prod.forEach((d) => prodDepsSet.add(d));
+    dev.forEach((d) => devDepsSet.add(d));
+  }
+  if (pkgJsonContent) {
+    manifests.push("package.json");
+    const { prod, dev } = parsePackageJson(pkgJsonContent);
+    prod.forEach((d) => prodDepsSet.add(d));
+    dev.forEach((d) => devDepsSet.add(d));
+  }
+  if (cargoContent) {
+    manifests.push("Cargo.toml");
+    const { prod, dev } = parseCargoToml(cargoContent);
+    prod.forEach((d) => prodDepsSet.add(d));
+    dev.forEach((d) => devDepsSet.add(d));
+  }
+  if (goModContent) {
+    manifests.push("go.mod");
+    const { prod, dev } = parseGoMod(goModContent);
+    prod.forEach((d) => prodDepsSet.add(d));
+    dev.forEach((d) => devDepsSet.add(d));
+  }
+
+  if (fileMap.has("requirements.txt") && !manifests.includes("requirements.txt")) manifests.push("requirements.txt");
+  if (fileMap.has("package.json") && !manifests.includes("package.json")) manifests.push("package.json");
+  if (fileMap.has("pyproject.toml") && !manifests.includes("pyproject.toml")) manifests.push("pyproject.toml");
+  if (fileMap.has("cargo.toml") && !manifests.includes("Cargo.toml")) manifests.push("Cargo.toml");
+  if (fileMap.has("go.mod") && !manifests.includes("go.mod")) manifests.push("go.mod");
+
+  const repositoryStructure = buildRepositoryStructure(rootFiles);
+  const detectedCapabilities = detectCapabilities(
+    Array.from(prodDepsSet),
+    Array.from(devDepsSet),
+    manifests,
+    repositoryStructure,
+    excerpts.readmeExcerpt,
+  );
+
+  const dependencyProfile: GitHubDependencyProfile = {
+    manifests,
+    productionDependencies: Array.from(prodDepsSet),
+    developmentDependencies: Array.from(devDepsSet),
+    detectedCapabilities,
+  };
+
+  const projectPurpose = buildProjectPurpose(
+    repository,
+    excerpts.readmeExcerpt,
+    detectedCapabilities,
+    repositoryStructure,
+    releases.totalCount,
+    activity.commitCount90d,
+    primaryLanguage,
+  );
+
   const snapshot: GitHubRepositorySnapshot = {
     version: 1,
     ref,
@@ -595,6 +1020,9 @@ export async function fetchGitHubRepositorySnapshot(
     collaboration,
     documentation,
     stack,
+    projectPurpose,
+    dependencyProfile,
+    repositoryStructure,
     excerpts,
     source: {
       fetchedAt: new Date(now).toISOString(),
