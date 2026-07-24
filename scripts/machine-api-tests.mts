@@ -267,6 +267,7 @@ mockQuotesStore.set("idempotency_hash_consumed_1", fixtureConsumedQuote);
 // Seed Fixture Jobs
 const fixtureCompletedJob = {
   id: "job-existing-1",
+  agent_run_id: "run-existing-1",
   byoa_agent_id: "agent-1",
   requester_wallet: mockAgent.owner_wallet,
   workflow_type: "github_due_diligence",
@@ -277,12 +278,21 @@ const fixtureCompletedJob = {
   status: "completed",
   progress_stage: "completed",
   spent_usdc: "0.002",
+  planner_snapshot: {
+    selectedServices: [
+      { slug: "github_repo_info" },
+      { slug: "github_activity" },
+    ],
+  },
   selected_services: [
     { slug: "github_repo_info", priceUsdc: "0.001" },
     { slug: "github_activity", priceUsdc: "0.001" },
   ],
   receipt_ids: ["rcpt-1", "rcpt-2"],
-  proof_transaction_hashes: ["0xproof1", "0xproof2"],
+  proof_transaction_hashes: [
+    "0x1111111111111111111111111111111111111111111111111111111111111111",
+    "0x2222222222222222222222222222222222222222222222222222222222222222",
+  ],
   structured_result: {
     summary: "High quality repository with clear structure.",
     completedWithWarnings: false,
@@ -402,6 +412,63 @@ function createMockSupabaseClient(): any {
         limit() {
           return Promise.resolve({ data: [], error: null });
         },
+        then(onfulfilled?: (value: any) => any) {
+          let res = { data: [] as any[], error: null };
+          if (tableName === "agent_runs") {
+            res = { data: [{ agent_wallet: mockAgent.agent_wallet }] as any, error: null };
+          } else if (tableName === "agent_purchase_steps") {
+            res = {
+              data: [
+                { id: "rcpt-1", service_slug: "github_repo_info", service_name: "GitHub Repository Info", price_usdc: "0.001", status: "paid", reasoning: "", payment_event_id: "evt-1", response_preview: null, error: null },
+                { id: "rcpt-2", service_slug: "github_activity", service_name: "GitHub Activity", price_usdc: "0.001", status: "paid", reasoning: "", payment_event_id: "evt-2", response_preview: null, error: null },
+              ] as any,
+              error: null,
+            };
+          } else if (tableName === "payment_events") {
+            res = {
+              data: [
+                {
+                  id: "evt-1",
+                  receipt_hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+                  service_hash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+                  request_hash: "0x3333333333333333333333333333333333333333333333333333333333333333",
+                  response_hash: "0x4444444444444444444444444444444444444444444444444444444444444444",
+                  onchain_contract_address: "0x2222222222222222222222222222222222222222",
+                  onchain_chain_id: 5042002,
+                  onchain_tx_hash: "0x1111111111111111111111111111111111111111111111111111111111111111",
+                  onchain_status: "verified",
+                  onchain_block_number: 100,
+                  onchain_proof_id: "0x1111111111111111111111111111111111111111111111111111111111111111",
+                  onchain_attester: "0x2222222222222222222222222222222222222222",
+                  onchain_verified_at: "2026-01-01T00:00:00.000Z",
+                  onchain_last_attempt_at: null,
+                  onchain_attempt_count: 1,
+                  onchain_error: null,
+                },
+                {
+                  id: "evt-2",
+                  receipt_hash: "0x5555555555555555555555555555555555555555555555555555555555555555",
+                  service_hash: "0x6666666666666666666666666666666666666666666666666666666666666666",
+                  request_hash: "0x7777777777777777777777777777777777777777777777777777777777777777",
+                  response_hash: "0x8888888888888888888888888888888888888888888888888888888888888888",
+                  onchain_contract_address: "0x2222222222222222222222222222222222222222",
+                  onchain_chain_id: 5042002,
+                  onchain_tx_hash: "0x2222222222222222222222222222222222222222222222222222222222222222",
+                  onchain_status: "verified",
+                  onchain_block_number: 101,
+                  onchain_proof_id: "0x5555555555555555555555555555555555555555555555555555555555555555",
+                  onchain_attester: "0x2222222222222222222222222222222222222222",
+                  onchain_verified_at: "2026-01-01T00:00:00.000Z",
+                  onchain_last_attempt_at: null,
+                  onchain_attempt_count: 1,
+                  onchain_error: null,
+                },
+              ] as any,
+              error: null,
+            };
+          }
+          return Promise.resolve(res).then(onfulfilled);
+        },
         async maybeSingle() {
           if (tableName === "byoa_agent_credentials") {
             const row = mockCredentials[filterEqVal];
@@ -425,6 +492,9 @@ function createMockSupabaseClient(): any {
             const compositeKey = `${filters.credential_id}:${filters.route}:${filters.idempotency_key_hash}`;
             const row = mockIdempotencyDbStore.get(compositeKey);
             return { data: row || null, error: null };
+          }
+          if (tableName === "agent_runs") {
+            return { data: { agent_wallet: mockAgent.agent_wallet }, error: null };
           }
           return { data: null, error: null };
         },
@@ -943,6 +1013,40 @@ async function testRunByIdGetEndpoint() {
     const json = await res.json();
     assert.equal(json.error.code, "run_not_found");
     assert.match(json.error.message, /not owned by this credential/i);
+  }
+
+  // Test 4: Verification Integrity - Receipts without verified Arc proof records evaluate to verification_pending (never verified)
+  {
+    const jobNoProofs = {
+      ...fixtureCompletedJob,
+      id: "job-no-proofs-1",
+      agent_run_id: null,
+      proof_transaction_hashes: [],
+    };
+    mockJobsStore.set("job-no-proofs-1", jobNoProofs);
+
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs/job-no-proofs-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ runId: "job-no-proofs-1" });
+    const res = await runByIdGET(req, { params });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.runId, "job-no-proofs-1");
+    assert.equal(json.status, "completed");
+    assert.equal(
+      json.verification.status,
+      "verification_pending",
+      "Receipts without verified proof records must evaluate to verification_pending",
+    );
+    assert.notEqual(
+      json.verification.status,
+      "verified",
+      "Receipts without verified proof records must NEVER evaluate to verified",
+    );
+    assert.equal(json.verification.verifiedSteps, 0);
+    assert.equal(json.verification.requiredSteps, 2);
   }
 
   console.log("✔ GET /api/agent/v1/runs/[runId] tests passed.");

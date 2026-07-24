@@ -431,8 +431,8 @@ async function runTests() {
   assert.equal(fullReport.proofTransactionHashes.length, 2);
   const fullVerification = evaluateArcVerificationState({
     proofs: [
-      { receiptId: "receipt-intel-101", status: "verified" },
-      { receiptId: "receipt-analysis-102", status: "verified" },
+      { receiptId: "receipt-intel-101", status: "verified", transactionHash: "0xtxproof101" },
+      { receiptId: "receipt-analysis-102", status: "verified", transactionHash: "0xtxproof102" },
     ],
     services: [
       { serviceSlug: "github-repository-intelligence", status: "paid", receiptId: "receipt-intel-101" },
@@ -440,7 +440,7 @@ async function runTests() {
     ],
     isGithubWorkflow: true,
   });
-  assert.equal(fullVerification.label, "Verified on Arc");
+  assert.equal(fullVerification.label, "Verified 2 of 2");
   assert.equal(fullVerification.variant, "verified");
   console.log("✓ Large payload (>1600 chars) chaining test passed with full untruncated snapshot & 2/2 Arc proofs verified");
 
@@ -485,7 +485,7 @@ async function runTests() {
 
   // 10b. Verify Arc verification badge evaluates to Partially verified · 1 of 2 steps
   const partialVerification = evaluateArcVerificationState({
-    proofs: [{ receiptId: "receipt-intel-201", status: "verified" }],
+    proofs: [{ receiptId: "receipt-intel-201", status: "verified", transactionHash: "0xtxproof201" }],
     services: [
       { serviceSlug: "github-repository-intelligence", status: "paid", receiptId: "receipt-intel-201" },
       { serviceSlug: "github-due-diligence-analysis", status: "skipped" },

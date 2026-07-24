@@ -167,24 +167,35 @@ function buildStructuredReport(
       ? "low"
       : assessment?.categories?.activity?.confidence || "high";
 
-  const selectedCount = Array.isArray(job.selected_services)
-    ? job.selected_services.length
-    : Array.isArray(job.receipt_ids) && job.receipt_ids.length > 0
-    ? job.receipt_ids.length
-    : 1;
+  const selectedCount =
+    Array.isArray(job.selected_services) && job.selected_services.length > 0
+      ? job.selected_services.length
+      : Array.isArray(job.receipt_ids) && job.receipt_ids.length > 0
+      ? job.receipt_ids.length
+      : 1;
 
-  const verifiedCount = Array.isArray(job.proof_transaction_hashes)
-    ? job.proof_transaction_hashes.length
-    : Array.isArray(job.receipt_ids)
-    ? job.receipt_ids.length
-    : 0;
+  const proofRecords = jobView?.proofs || [];
+  const hasFailedProof = proofRecords.some((p) => p.status === "failed");
 
-  const verificationStatus =
-    verifiedCount > 0 && verifiedCount >= selectedCount
-      ? "verified"
-      : verifiedCount > 0
-      ? "partially_verified"
-      : "unverified";
+  const verifiedHashes = Array.isArray(job.proof_transaction_hashes)
+    ? job.proof_transaction_hashes.filter((h): h is string => Boolean(h && typeof h === "string" && h.trim()))
+    : [];
+
+  const verifiedSteps =
+    proofRecords.length > 0
+      ? proofRecords.filter((p) => p.status === "verified" && Boolean(p.transactionHash)).length
+      : verifiedHashes.length;
+
+  let verificationStatus: string;
+  if (hasFailedProof || (job.status === "failed" && verifiedSteps === 0)) {
+    verificationStatus = "verification_failed";
+  } else if (verifiedSteps > 0 && verifiedSteps >= selectedCount) {
+    verificationStatus = "verified";
+  } else if (verifiedSteps > 0 && verifiedSteps < selectedCount) {
+    verificationStatus = "partially_verified";
+  } else {
+    verificationStatus = "verification_pending";
+  }
 
   const proofs = (jobView?.proofs || []).map((p) => ({
     receiptId: p.receiptId,

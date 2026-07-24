@@ -8,6 +8,7 @@ import { authenticateMachineRequest } from "../../../../../../lib/api/machine-au
 import { createMachineErrorResponse } from "../../../../../../lib/api/machine-errors.ts";
 import {
   getHostedAgentJob,
+  getHostedAgentJobView,
   type HostedAgentJobRow,
 } from "../../../../../../lib/agent/hosted-jobs.ts";
 
@@ -85,24 +86,50 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   const mapped = mapMachineStatus(job);
 
-  const selectedCount = Array.isArray(job.selected_services)
-    ? job.selected_services.length
-    : Array.isArray(job.receipt_ids) && job.receipt_ids.length > 0
-    ? job.receipt_ids.length
-    : 1;
+  const selectedCount =
+    Array.isArray(job.selected_services) && job.selected_services.length > 0
+      ? job.selected_services.length
+      : Array.isArray(job.receipt_ids) && job.receipt_ids.length > 0
+      ? job.receipt_ids.length
+      : 1;
 
-  const verifiedCount = Array.isArray(job.proof_transaction_hashes)
-    ? job.proof_transaction_hashes.length
-    : Array.isArray(job.receipt_ids)
-    ? job.receipt_ids.length
-    : 0;
+  let proofRecords: Array<{ status: string; transactionHash?: string | null }> = [];
+  let hasFailedProof = false;
 
-  const verificationStatus =
-    verifiedCount > 0 && verifiedCount >= selectedCount
-      ? "verified"
-      : verifiedCount > 0
-      ? "partially_verified"
-      : "unverified";
+  try {
+    const view = await getHostedAgentJobView(job.id);
+    if (view && Array.isArray(view.proofs)) {
+      proofRecords = view.proofs;
+      hasFailedProof = view.proofs.some((p) => p.status === "failed");
+    }
+  } catch {
+    // Ignore error in view fetch, fallback to job.proof_transaction_hashes
+  }
+
+  const verifiedHashes = Array.isArray(job.proof_transaction_hashes)
+    ? job.proof_transaction_hashes.filter((h): h is string => Boolean(h && typeof h === "string" && h.trim()))
+    : [];
+
+  const verifiedSteps =
+    proofRecords.length > 0
+      ? proofRecords.filter((p) => p.status === "verified" && Boolean(p.transactionHash)).length
+      : verifiedHashes.length;
+
+  let verificationStatus:
+    | "verified"
+    | "partially_verified"
+    | "verification_pending"
+    | "verification_failed";
+
+  if (hasFailedProof || (job.status === "failed" && verifiedSteps === 0)) {
+    verificationStatus = "verification_failed";
+  } else if (verifiedSteps > 0 && verifiedSteps >= selectedCount) {
+    verificationStatus = "verified";
+  } else if (verifiedSteps > 0 && verifiedSteps < selectedCount) {
+    verificationStatus = "partially_verified";
+  } else {
+    verificationStatus = "verification_pending";
+  }
 
   const response: Record<string, unknown> = {
     runId: job.id,
@@ -116,7 +143,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     response.reportId = job.id;
     response.verification = {
       status: verificationStatus,
-      verifiedSteps: verifiedCount,
+      verifiedSteps,
       requiredSteps: selectedCount,
     };
   }
