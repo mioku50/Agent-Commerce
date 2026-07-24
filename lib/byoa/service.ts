@@ -49,11 +49,17 @@ export class ByoaError extends Error {
 
 let byoaClient: SupabaseClient | null = null;
 
+export function setByoaClientForTesting(client: SupabaseClient | null) {
+  byoaClient = client;
+}
+
 export function getByoaClient() {
-  const config = getServerSupabaseConfig();
-  byoaClient ??= createClient(config.url, config.key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  if (!byoaClient) {
+    const config = getServerSupabaseConfig();
+    byoaClient = createClient(config.url, config.key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
   return byoaClient;
 }
 

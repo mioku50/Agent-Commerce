@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { randomUUID } from "node:crypto";
 
 export type MachineErrorCode =

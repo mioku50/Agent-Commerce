@@ -117,11 +117,17 @@ export class HostedCheckoutPolicyError extends Error {
 
 let checkoutClient: SupabaseClient | null = null;
 
+export function setCheckoutClientForTesting(client: SupabaseClient | null) {
+  checkoutClient = client;
+}
+
 function getCheckoutClient() {
-  const config = getServerSupabaseConfig();
-  checkoutClient ??= createClient(config.url, config.key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  if (!checkoutClient) {
+    const config = getServerSupabaseConfig();
+    checkoutClient = createClient(config.url, config.key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
   return checkoutClient;
 }
 

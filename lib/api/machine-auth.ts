@@ -4,7 +4,7 @@
  */
 
 import { timingSafeEqual } from "node:crypto";
-import { NextResponse } from "next/server";
+import { NextResponse } from "next/server.js";
 import { createMachineErrorResponse } from "./machine-errors.ts";
 import { getByoaClient } from "../byoa/service.ts";
 import { hashApiCredential } from "../byoa/auth.ts";
