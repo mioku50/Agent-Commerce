@@ -20,6 +20,7 @@ export type MachineErrorCode =
   | "payment_invalid"
   | "spending_limit_exceeded"
   | "run_not_found"
+  | "report_not_found"
   | "report_not_ready"
   | "provider_unavailable"
   | "rate_limited"

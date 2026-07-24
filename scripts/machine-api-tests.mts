@@ -18,6 +18,7 @@ import { GET as workflowsGET } from "../app/api/agent/v1/workflows/route.ts";
 import { POST as quotesPOST } from "../app/api/agent/v1/quotes/route.ts";
 import { POST as runsPOST } from "../app/api/agent/v1/runs/route.ts";
 import { GET as runByIdGET } from "../app/api/agent/v1/runs/[runId]/route.ts";
+import { GET as reportByIdGET } from "../app/api/agent/v1/reports/[reportId]/route.ts";
 
 console.log("[machine-api-tests] Running Machine API v1 tests...");
 
@@ -254,8 +255,18 @@ const fixtureOtherAgentJob = {
   requester_wallet: getAddress("0x9999999999999999999999999999999999999999"),
 };
 
+const fixtureRunningJob = {
+  ...fixtureCompletedJob,
+  id: "job-running-1",
+  status: "running",
+  progress_stage: "purchasing",
+  completed_at: null,
+  structured_result: null,
+};
+
 mockJobsStore.set("job-existing-1", fixtureCompletedJob);
 mockJobsStore.set("job-other-agent", fixtureOtherAgentJob);
+mockJobsStore.set("job-running-1", fixtureRunningJob);
 
 function createMockSupabaseClient(): any {
   return {
@@ -838,13 +849,99 @@ async function testRunByIdGetEndpoint() {
   console.log("✔ GET /api/agent/v1/runs/[runId] tests passed.");
 }
 
+// --- Section 7: Endpoint Tests for GET /api/agent/v1/reports/[reportId] ---
+console.log("-> Testing GET /api/agent/v1/reports/[reportId]...");
+
+async function testReportByIdGetEndpoint() {
+  // Test 1: Retrieving structured JSON report (default Accept header)
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/reports/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ reportId: "job-existing-1" });
+    const res = await reportByIdGET(req, { params });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("Content-Type"), "application/json");
+
+    const json = await res.json();
+    assert.equal(json.reportId, "job-existing-1");
+    assert.equal(json.workflow, "github_due_diligence");
+    assert.equal(json.status, "completed");
+    assert.equal(json.repository.fullName, "circlefin/agent-commerce");
+    assert.equal(json.repository.canonicalUrl, "https://github.com/circlefin/agent-commerce");
+    assert.equal(typeof json.executiveSummary, "string");
+    assert.equal(typeof json.projectPurpose, "string");
+    assert(json.technology && typeof json.technology === "object");
+    assert(json.activity && typeof json.activity === "object");
+    assert(Array.isArray(json.strengths));
+    assert(Array.isArray(json.risks));
+    assert(Array.isArray(json.questionsBeforeAdoption));
+    assert.equal(typeof json.confidence, "string");
+    assert.equal(json.verification.status, "verified");
+    assert.equal(json.verification.network, "arc-testnet");
+    assert(Array.isArray(json.verification.proofs));
+    assert(json.generatedAt, "generatedAt must be set");
+  }
+
+  // Test 2: Retrieving markdown report with Accept: text/markdown
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/reports/job-existing-1", {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        Accept: "text/markdown",
+      },
+    });
+    const params = Promise.resolve({ reportId: "job-existing-1" });
+    const res = await reportByIdGET(req, { params });
+    assert.equal(res.status, 200);
+    assert.match(res.headers.get("Content-Type") || "", /text\/markdown/);
+
+    const markdown = await res.text();
+    assert(markdown.includes("# GitHub Due Diligence Report:"), "Markdown should contain title header");
+    assert(markdown.includes("## Executive Summary"), "Markdown should contain Executive Summary section");
+    assert(markdown.includes("## Verification & Arc Proofs"), "Markdown should contain Verification section");
+  }
+
+  // Test 3: Attempting to read another credential's report returns 404 report_not_found
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/reports/job-other-agent", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ reportId: "job-other-agent" });
+    const res = await reportByIdGET(req, { params });
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "report_not_found");
+  }
+
+  // Test 4: Requesting report before completion returns 400 report_not_ready
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/reports/job-running-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ reportId: "job-running-1" });
+    const res = await reportByIdGET(req, { params });
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.error.code, "report_not_ready");
+  }
+
+  console.log("✔ GET /api/agent/v1/reports/[reportId] tests passed.");
+}
+
 async function runSuite() {
   await testWorkflowsEndpoint();
   await testQuotesEndpoint();
   await testRunsPostEndpoint();
   await testRunByIdGetEndpoint();
+  await testReportByIdGetEndpoint();
   console.log("✅ All Machine API v1 tests passed successfully!");
 }
+
 
 runSuite().catch((err) => {
   console.error("❌ Machine API test failure:", err);
