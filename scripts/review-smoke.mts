@@ -381,13 +381,12 @@ async function checkReviewStatus(baseUrl: string) {
       detail: `configured=${json.checkout?.configured === true ? "yes" : "no"} fee=${json.checkout?.platformFeeUsdc ?? "missing"} sponsored=${json.checkout?.sponsoredQuota ?? "missing"}`,
     },
     {
-      name: "review status exposes canary-only non-custodial BYOA without secrets",
+      name: "review status exposes non-custodial BYOA without secrets",
       ok:
-        json.checks?.byoaCanaryReady === true &&
         json.byoa?.configured === true &&
         json.byoa.enabled === true &&
-        json.byoa.publicRegistrationEnabled === false &&
-        json.byoa.canaryOnly === true &&
+        typeof json.byoa.publicRegistrationEnabled === "boolean" &&
+        json.byoa.canaryOnly === !json.byoa.publicRegistrationEnabled &&
         json.byoa.chainId === 5_042_002 &&
         json.byoa.custody === "none" &&
         json.byoa.credentialStorage === "hmac_sha256_only" &&

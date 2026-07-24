@@ -62,7 +62,7 @@ export default async function Home() {
                   className="h-11 w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 />
               </div>
-              <div className="flex gap-3">
+              <div className="flex flex-col sm:flex-row gap-3">
                 <Button type="submit" size="lg">
                   <Bot />
                   Analyze Repository

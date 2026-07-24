@@ -20,9 +20,9 @@ try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
 
   await page.goto(`${baseUrl()}/`, { waitUntil: "load" });
+  await page.locator('a[href="/agent-runner?workflow=github"]').first().waitFor();
   await page.locator('a[href="/agent-runner?workflow=sentiment"]').first().waitFor();
   await page.locator('a[href="/agent-runner?workflow=builder_update"]').first().waitFor();
-  await page.locator('a[href="/agent-runner?workflow=market_context&symbol=BTC%2FUSD"]').first().waitFor();
 
   await page.goto(`${baseUrl()}/agent-runner?workflow=builder_update`, { waitUntil: "load" });
   assert.equal(await page.locator("#workflow-type").inputValue(), "builder_update");
@@ -34,11 +34,12 @@ try {
   assert.equal(await page.locator("#workflow-type").inputValue(), "market_context");
   assert.equal(await page.locator("#market-symbol").inputValue(), "ETH/USD");
   await page.goto(`${baseUrl()}/agent-runner?workflow=invalid&symbol=DOGE%2FUSD`, { waitUntil: "load" });
-  assert.equal(await page.locator("#workflow-type").inputValue(), "sentiment_tone");
-  await page.getByText("Enter at least 20 characters to preview the workflow.", { exact: true }).waitFor();
+  assert.equal(await page.locator("#workflow-type").inputValue(), "github_due_diligence");
+  await page.getByText("Enter a public GitHub repository URL (e.g. github.com/owner/repository).", { exact: true }).waitFor();
   await page.getByText("Payment wallet", { exact: false }).first().waitFor();
   await page.getByText("Sponsored workflows will not charge your wallet.", { exact: false }).first().waitFor();
   await page.getByText("Sponsored reports are free. After the free quota, this wallet confirms the displayed total price.", { exact: false }).first().waitFor();
+  await page.goto(`${baseUrl()}/agent-runner?workflow=sentiment`, { waitUntil: "load" });
   await page.getByText("AI processing", { exact: false }).waitFor();
   await page.getByLabel("Workflow", { exact: true }).focus();
   await page.keyboard.press("Tab");
@@ -47,7 +48,7 @@ try {
   await page.goto(`${baseUrl()}/workflows`, { waitUntil: "load" });
   await page.locator('a[href="/agent-runner?workflow=custom"]').waitFor();
   const provider = page.locator('[data-provider-type="live_provider"]').first();
-  await provider.getByText("Live Provider · Pyth Network", { exact: true }).waitFor();
+  await provider.getByText("Live Provider · GitHub API", { exact: true }).waitFor();
   await provider.getByText("USDC pays Arc Agent Commerce", { exact: false }).waitFor();
 
   await page.goto(`${baseUrl()}/results?workflow=market_context&status=warnings&sort=oldest&q=ETH`, { waitUntil: "load" });

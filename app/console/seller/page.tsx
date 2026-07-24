@@ -161,7 +161,7 @@ async function SellerServices() {
         ) : (
           <Card className="rounded-lg lg:col-span-2">
             <CardContent className="p-6 text-sm text-muted-foreground">
-              No custom seller-created services yet. Use "Create API Service" to publish one.
+              No custom seller-created services yet. Use &quot;Create API Service&quot; to publish one.
             </CardContent>
           </Card>
         )}

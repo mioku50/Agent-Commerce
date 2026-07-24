@@ -21,9 +21,13 @@ const FORBIDDEN_PATTERNS = [
   /\bidempotency\b/i,
   /\bpolicy_denied\b/i,
   /\bwallet_already_registered\b/i,
+  /\bGITHUB_TOKEN\b/i,
+  /\bAuthorization\b/i,
+  /\braw headers?\b/i,
+  /\breceipt count\b/i,
 ];
 
-const PUBLIC_PATHS = ["/", "/agent-runner", "/results"];
+const PUBLIC_PATHS = ["/", "/agent-runner", "/agent-runner?workflow=github", "/results"];
 
 const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
