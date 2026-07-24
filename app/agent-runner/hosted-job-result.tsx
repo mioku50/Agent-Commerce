@@ -121,6 +121,33 @@ function fallbackReasonLabel(
   return "Deterministic report selected";
 }
 
+function ArcVerificationBadge({ proofs }: { proofs: HostedJobView["proofs"] }) {
+  if (proofs.length > 0 && proofs.every((proof) => proof.status === "verified")) {
+    return (
+      <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/10">
+        <BadgeCheck className="size-3.5" />
+        Verified on Arc
+      </Badge>
+    );
+  }
+  if (
+    proofs.length > 0 &&
+    proofs.some((proof) => (proof.status as string) === "pending" || (proof.status as string) === "submitted")
+  ) {
+    return (
+      <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-500 bg-amber-500/10">
+        <LoaderCircle className="size-3.5 animate-spin" />
+        Verification pending
+      </Badge>
+    );
+  }
+  return (
+    <Badge variant="outline" className="gap-1 border-muted bg-muted/50 text-muted-foreground">
+      Verification unavailable
+    </Badge>
+  );
+}
+
 export function HostedJobResult({ initialView }: { initialView: HostedJobView }) {
   const [view, setView] = useState(initialView);
   const [pollError, setPollError] = useState<string | null>(null);
@@ -168,9 +195,6 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
     (stage.matches as readonly string[]).includes(activeStage),
   );
   const active = view.job.status === "queued" || view.job.status === "running";
-  const isVerifiedOnArc =
-    view.job.status === "completed" ||
-    view.proofs.some((proof) => proof.status === "verified");
 
   const report = view.job.structuredResult;
   const reportInput = report?.input ?? {
@@ -235,12 +259,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   {overallStatusBadge(assessment.overallStatus).label}
                 </Badge>
               ) : null}
-              {isVerifiedOnArc ? (
-                <Badge variant="outline" className="gap-1 border-primary/30 text-primary">
-                  <BadgeCheck className="size-3.5" />
-                  Verified on Arc
-                </Badge>
-              ) : null}
+              <ArcVerificationBadge proofs={view.proofs} />
               <Button asChild variant="outline">
                 <Link href="/agent-runner">
                   <RotateCcw className="size-4" />
@@ -327,12 +346,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                           {overallStatusBadge(assessment.overallStatus).label}
                         </Badge>
                       ) : null}
-                      {isVerifiedOnArc ? (
-                        <Badge variant="outline" className="gap-1 border-primary/30 text-primary">
-                          <BadgeCheck className="size-3.5" />
-                          Verified on Arc
-                        </Badge>
-                      ) : null}
+                      <ArcVerificationBadge proofs={view.proofs} />
                     </div>
                     <h2 className="text-2xl font-bold tracking-tight">GitHub Project Due Diligence</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -428,6 +442,11 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                             </div>
                             <p className="text-xs leading-5 text-muted-foreground">{cat?.summary}</p>
                           </div>
+                          {key === "contributorDistribution" ? (
+                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
+                              Based on sampled contributor data
+                            </p>
+                          ) : null}
                           {cat?.evidence?.length ? (
                             <div className="mt-3 border-t pt-2 text-[11px] text-muted-foreground/80 grid gap-1">
                               {cat.evidence.map((ev, i) => (
@@ -466,7 +485,9 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   </div>
                   {snapshot?.contributors?.topContributors?.length ? (
                     <div className="mt-3 rounded-md border bg-secondary/10 p-3 text-xs">
-                      <p className="font-medium text-muted-foreground mb-2">Top Maintainers (Commit Share)</p>
+                      <p className="font-medium text-muted-foreground mb-2">
+                        Top Maintainers (Commit Share · Based on sampled contributor data)
+                      </p>
                       <div className="flex flex-wrap gap-2">
                         {snapshot.contributors.topContributors.slice(0, 5).map((c) => (
                           <Badge key={c.login} variant="secondary" className="font-mono text-xs">
