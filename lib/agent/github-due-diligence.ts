@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { GitHubRepositorySnapshot } from "@/lib/providers/github-types";
+import type { GitHubRepositorySnapshot, DataConfidence } from "@/lib/providers/github-types";
 
 export type AssessmentStatus = "strong" | "moderate" | "weak" | "unknown";
 
@@ -38,6 +38,7 @@ export interface GitHubDueDiligenceRisk {
 
 export interface GitHubCategoryAssessment {
   status: AssessmentStatus;
+  confidence: DataConfidence;
   summary: string;
   evidence: string[];
 }
@@ -332,14 +333,28 @@ export function analyzeGitHubDueDiligence(
   const manifests = snapshot.dependencyProfile?.manifests ?? [];
   const prodDeps = snapshot.dependencyProfile?.productionDependencies ?? [];
   const devDeps = snapshot.dependencyProfile?.developmentDependencies ?? [];
+  const configFiles = snapshot.repositoryStructure?.configFiles ?? [];
 
   depEvidence.push(`Dependency manifests found: ${manifests.length > 0 ? manifests.join(", ") : "None"}.`);
   depEvidence.push(`Production dependencies count: ${prodDeps.length}.`);
   depEvidence.push(`Development dependencies count: ${devDeps.length}.`);
 
-  if (manifests.length >= 1 && devDeps.length >= 1) {
+  const hasLockfile =
+    manifests.some((m) => /lock|go\.sum/i.test(m)) ||
+    configFiles.some((f) => /lock|go\.sum/i.test(f));
+
+  const hasSeparateDevManifest = manifests.some((m) =>
+    /requirements[-_]?dev|dev[-_]?requirements|\.dev\./i.test(m)
+  );
+
+  const hasExplicitDevGroup =
+    devDeps.length >= 1 &&
+    (manifests.some((m) => m.endsWith("package.json") || m.endsWith("pyproject.toml")) ||
+      hasSeparateDevManifest);
+
+  if (manifests.length >= 1 && (hasLockfile || hasSeparateDevManifest || hasExplicitDevGroup)) {
     depStatus = "strong";
-    depSummary = `Structured dependency manifests (${manifests.join(", ")}) with clear dev dependency separation.`;
+    depSummary = `Structured dependency manifests (${manifests.join(", ")}) with explicit dev dependency separation or lockfile.`;
   } else if (manifests.length >= 1) {
     depStatus = "moderate";
     depSummary = `Dependency manifests present (${manifests.join(", ")}).`;
@@ -400,29 +415,72 @@ export function analyzeGitHubDueDiligence(
   const strongCount = [activityStatus, maintenanceStatus, docStatus, releaseStatus, contribStatus, autoStatus, testingStatus, depStatus, deployStatus].filter((s) => s === "strong").length;
   opMaturityEvidence.push(`High confidence engineering signals: ${strongCount} of 9 categories strong.`);
 
-  if (strongCount >= 5) {
+  if (
+    releaseStatus === "strong" &&
+    autoStatus === "strong" &&
+    testingStatus !== "weak" &&
+    docStatus !== "weak" &&
+    deployStatus !== "weak"
+  ) {
     opMaturityStatus = "strong";
-    opMaturitySummary = "High operational maturity across release management, CI, testing, and governance.";
-  } else if (strongCount >= 2) {
+  } else if (
+    autoStatus !== "weak" &&
+    testingStatus !== "weak" &&
+    deployStatus !== "weak"
+  ) {
     opMaturityStatus = "moderate";
-    opMaturitySummary = "Moderate operational maturity signals observed.";
   } else {
     opMaturityStatus = "weak";
-    opMaturitySummary = "Low operational maturity signals detected.";
   }
 
+  const confirmedStrongList: string[] = [];
+  if (releaseStatus === "strong") confirmedStrongList.push("release management");
+  if (autoStatus === "strong") confirmedStrongList.push("CI automation");
+  if (testingStatus === "strong") confirmedStrongList.push("test coverage");
+  if (docStatus === "strong") confirmedStrongList.push("governance documentation");
+  if (deployStatus === "strong") confirmedStrongList.push("deployment readiness");
+  if (activityStatus === "strong") confirmedStrongList.push("development activity");
+  if (maintenanceStatus === "strong") confirmedStrongList.push("active maintenance");
+
+  if (opMaturityStatus === "strong") {
+    opMaturitySummary = `High operational maturity across ${confirmedStrongList.join(", ")}.`;
+  } else if (opMaturityStatus === "moderate") {
+    opMaturitySummary = confirmedStrongList.length > 0
+      ? `Moderate operational maturity with strong ${confirmedStrongList.join(", ")}.`
+      : "Moderate operational maturity signals observed.";
+  } else {
+    opMaturitySummary = confirmedStrongList.length > 0
+      ? `Low operational maturity despite strong ${confirmedStrongList.join(", ")}.`
+      : "Low operational maturity signals detected.";
+  }
+
+  const isPartialOrIncomplete =
+    isFallback ||
+    snapshot.source?.partial === true ||
+    !snapshot.repository?.fullName;
+
+  const getCategoryConfidence = (catKey: string, catStatus: AssessmentStatus): DataConfidence => {
+    if (isPartialOrIncomplete || isFallback || catStatus === "unknown") {
+      return "low";
+    }
+    if (["activity", "documentation", "releaseDiscipline", "documentationDepth"].includes(catKey)) {
+      return "high";
+    }
+    return "medium";
+  };
+
   const categories: GitHubDueDiligenceCategories = {
-    activity: { status: activityStatus, summary: activitySummary, evidence: activityEvidence },
-    maintenance: { status: maintenanceStatus, summary: maintenanceSummary, evidence: maintenanceEvidence },
-    documentation: { status: docStatus, summary: docSummary, evidence: docEvidence },
-    releaseDiscipline: { status: releaseStatus, summary: releaseSummary, evidence: releaseEvidence },
-    contributorDistribution: { status: contribStatus, summary: contribSummary, evidence: contribEvidence },
-    automation: { status: autoStatus, summary: autoSummary, evidence: autoEvidence },
-    testing: { status: testingStatus, summary: testingSummary, evidence: testingEvidence },
-    dependencyHygiene: { status: depStatus, summary: depSummary, evidence: depEvidence },
-    documentationDepth: { status: docDepthStatus, summary: docDepthSummary, evidence: docDepthEvidence },
-    deploymentReadiness: { status: deployStatus, summary: deploySummary, evidence: deployEvidence },
-    operationalMaturity: { status: opMaturityStatus, summary: opMaturitySummary, evidence: opMaturityEvidence },
+    activity: { status: activityStatus, confidence: getCategoryConfidence("activity", activityStatus), summary: activitySummary, evidence: activityEvidence },
+    maintenance: { status: maintenanceStatus, confidence: getCategoryConfidence("maintenance", maintenanceStatus), summary: maintenanceSummary, evidence: maintenanceEvidence },
+    documentation: { status: docStatus, confidence: getCategoryConfidence("documentation", docStatus), summary: docSummary, evidence: docEvidence },
+    releaseDiscipline: { status: releaseStatus, confidence: getCategoryConfidence("releaseDiscipline", releaseStatus), summary: releaseSummary, evidence: releaseEvidence },
+    contributorDistribution: { status: contribStatus, confidence: getCategoryConfidence("contributorDistribution", contribStatus), summary: contribSummary, evidence: contribEvidence },
+    automation: { status: autoStatus, confidence: getCategoryConfidence("automation", autoStatus), summary: autoSummary, evidence: autoEvidence },
+    testing: { status: testingStatus, confidence: getCategoryConfidence("testing", testingStatus), summary: testingSummary, evidence: testingEvidence },
+    dependencyHygiene: { status: depStatus, confidence: getCategoryConfidence("dependencyHygiene", depStatus), summary: depSummary, evidence: depEvidence },
+    documentationDepth: { status: docDepthStatus, confidence: getCategoryConfidence("documentationDepth", docDepthStatus), summary: docDepthSummary, evidence: docDepthEvidence },
+    deploymentReadiness: { status: deployStatus, confidence: getCategoryConfidence("deploymentReadiness", deployStatus), summary: deploySummary, evidence: deployEvidence },
+    operationalMaturity: { status: opMaturityStatus, confidence: getCategoryConfidence("operationalMaturity", opMaturityStatus), summary: opMaturitySummary, evidence: opMaturityEvidence },
   };
 
   // --- 2. Risk Evaluation ---
@@ -563,11 +621,6 @@ export function analyzeGitHubDueDiligence(
   const highRisks = risks.filter((r) => r.severity === "high");
   const mediumRisks = risks.filter((r) => r.severity === "medium");
 
-  const isPartialOrIncomplete =
-    isFallback ||
-    snapshot.source?.partial === true ||
-    !snapshot.repository?.fullName;
-
   const purposePrefix = snapshot.projectPurpose?.summary
     ? `${snapshot.projectPurpose.summary.replace(/\.$/, "")}. `
     : "";
@@ -588,7 +641,7 @@ export function analyzeGitHubDueDiligence(
   } else if (highRisks.length >= 1) {
     overallStatus = "high_attention";
     overallSummary = `${purposePrefix}Target stack: ${primaryLang}${frameworks}. Significant risk factors detected (${highRisks.map((r) => r.title.toLowerCase()).join(", ")}) with ${testingSignal} and ${govSignal}. Careful manual review is required before integration.`;
-  } else if (mediumRisks.length >= 2) {
+  } else if (mediumRisks.length >= 2 || !hasLicense) {
     overallStatus = "review_needed";
     overallSummary = `${purposePrefix}Target stack: ${primaryLang}${frameworks}. The repository shows active development with ${testingSignal} and ${govSignal}, but contains notable risk factors (${mediumRisks.map((r) => r.title.toLowerCase()).join(", ")}) requiring review before integration.`;
   } else {

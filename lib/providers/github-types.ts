@@ -5,6 +5,8 @@
 
 import type { GitHubRepositoryRef } from "./github-repository-ref";
 
+export type DataConfidence = "high" | "medium" | "low";
+
 export interface GitHubRepositoryMetadata {
   id: number;
   owner: string;

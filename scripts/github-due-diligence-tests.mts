@@ -174,14 +174,20 @@ assert(staleRisk, "Stale repository must produce 'stale_development' risk");
 assert.equal(staleRisk.severity, "high");
 console.log("✔ Stale development test passed.");
 
-// Test 5: 1 medium risk yields healthy_signals, 2 medium risks yield review_needed
-console.log("Test 5: Testing medium risk overall status thresholds (1 medium -> healthy_signals, 2 medium -> review_needed)...");
+// Test 5: 1 medium risk yields healthy_signals, 2 medium risks or missing license yield review_needed
+console.log("Test 5: Testing medium risk overall status thresholds (1 medium -> healthy_signals, 2 medium or missing license -> review_needed)...");
+const oneMediumRiskSnapshot = createBaseSnapshot();
+oneMediumRiskSnapshot.documentation.hasReadme = false;
+
+const oneMediumRiskResult = analyzeGitHubDueDiligence(oneMediumRiskSnapshot);
+assert.equal(oneMediumRiskResult.overallStatus, "healthy_signals", "1 non-license medium risk must result in healthy_signals");
+
 const noLicenseSnapshot = createBaseSnapshot();
 noLicenseSnapshot.documentation.hasLicense = false;
 noLicenseSnapshot.repository.license = null;
 
 const noLicenseResult = analyzeGitHubDueDiligence(noLicenseSnapshot);
-assert.equal(noLicenseResult.overallStatus, "healthy_signals", "1 medium risk must result in healthy_signals");
+assert.equal(noLicenseResult.overallStatus, "review_needed", "Missing license MUST force overall status to review_needed");
 
 const licenseRisk = noLicenseResult.risks.find((r) => r.code === "missing_license");
 assert(licenseRisk, "Missing license must produce 'missing_license' risk");
@@ -298,7 +304,7 @@ magdaSnapshot.repositoryStructure = {
 const magdaResult = analyzeGitHubDueDiligence(magdaSnapshot);
 
 assert.equal(magdaResult.categories.testing.status, "strong");
-assert.equal(magdaResult.categories.dependencyHygiene.status, "strong");
+assert.equal(magdaResult.categories.dependencyHygiene.status, "moderate");
 assert.equal(magdaResult.categories.deploymentReadiness.status, "strong");
 assert.equal(magdaResult.categories.operationalMaturity.status, "strong");
 assert.ok(magdaResult.overallSummary.includes("Magda Autonomous AI Telegram Agent"));
@@ -333,5 +339,64 @@ assert(concentrationRisk, "1 human maintainer with 100% human share must trigger
 assert.equal(botHeavyResult.categories.contributorDistribution.status, "weak");
 console.log("✔ Bot contributor separation and automation_heavy_history test passed.");
 
+// Test 12: 0 releases + missing license results in Operational Maturity != strong and Overall Status === review_needed
+console.log("Test 12: Testing 0 releases + missing license results in Operational Maturity != strong and Overall Status === review_needed...");
+const noReleaseNoLicenseSnapshot = createBaseSnapshot();
+noReleaseNoLicenseSnapshot.releases.totalCount = 0;
+noReleaseNoLicenseSnapshot.releases.latestRelease = null;
+noReleaseNoLicenseSnapshot.releases.releaseCount90d = 0;
+noReleaseNoLicenseSnapshot.documentation.hasLicense = false;
+noReleaseNoLicenseSnapshot.repository.license = null;
+
+const noReleaseNoLicenseResult = analyzeGitHubDueDiligence(noReleaseNoLicenseSnapshot);
+assert.notEqual(
+  noReleaseNoLicenseResult.categories.operationalMaturity.status,
+  "strong",
+  "Operational Maturity status CANNOT be strong when releases = 0"
+);
+assert.equal(
+  noReleaseNoLicenseResult.overallStatus,
+  "review_needed",
+  "Missing license MUST force overall status to review_needed"
+);
+console.log("✔ 0 releases + missing license calibration test passed.");
+
+// Test 13: Single requirements.txt evaluates to moderate for Dependency Hygiene
+console.log("Test 13: Testing single requirements.txt evaluates to moderate for Dependency Hygiene...");
+const singleReqSnapshot = createBaseSnapshot();
+singleReqSnapshot.dependencyProfile = {
+  manifests: ["requirements.txt"],
+  productionDependencies: ["fastapi", "uvicorn"],
+  developmentDependencies: [],
+  detectedCapabilities: ["API server"],
+};
+singleReqSnapshot.repositoryStructure = {
+  sourceDirectories: ["src"],
+  testDirectories: [],
+  entrypoints: ["main.py"],
+  dockerFiles: [],
+  configFiles: ["requirements.txt"],
+};
+
+const singleReqResult = analyzeGitHubDueDiligence(singleReqSnapshot);
+assert.equal(
+  singleReqResult.categories.dependencyHygiene.status,
+  "moderate",
+  "Single requirements.txt without separate dev manifest or lockfile must evaluate to moderate"
+);
+console.log("✔ Single requirements.txt Dependency Hygiene test passed.");
+
+// Test 14: Confidence field presence on all category assessments
+console.log("Test 14: Testing confidence field presence on all category assessments...");
+const sampleResult = analyzeGitHubDueDiligence(createBaseSnapshot());
+for (const [catName, assessment] of Object.entries(sampleResult.categories)) {
+  assert.ok(
+    ["high", "medium", "low"].includes(assessment.confidence),
+    `Category ${catName} must have a valid confidence field ("high", "medium", or "low"), got: ${assessment.confidence}`
+  );
+}
+console.log("✔ Confidence field presence test passed.");
+
 console.log("\n[github-due-diligence-test] ALL TEST SUITES PASSED SUCCESSFULLY!");
+
 
