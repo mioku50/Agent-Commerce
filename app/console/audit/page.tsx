@@ -1,12 +1,13 @@
 import Link from "next/link";
-import { ArrowRight, ListChecks, ShieldCheck, BadgeCheck, ReceiptText } from "lucide-react";
+import { ArrowRight, ListChecks, ShieldCheck, BadgeCheck, ReceiptText, FileCode, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { serviceRegistry } from "@/lib/services/registry";
 
 export const metadata = {
   title: "Audit & Verification | Developer Console | Arc Agent Commerce",
-  description: "Unified audit trail for Activity, Arc Proofs, Agent Passports, and Commerce Receipts.",
+  description: "Unified audit trail for Activity, Arc Proofs, Agent Passports, Commerce Receipts, and Audited Services.",
 };
 
 const auditCards = [
@@ -51,7 +52,7 @@ export default function ConsoleAuditPage() {
           </div>
           <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">Audit & Verification</h1>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Complete transparency layer for Arc Agent Commerce. Access real-time activity timelines, onchain Arc proofs, buyer agent passports, and verified commerce receipts.
+            Complete transparency layer for Arc Agent Commerce. Access real-time activity timelines, onchain Arc proofs, buyer agent passports, verified commerce receipts, and audited service endpoint registries.
           </p>
         </div>
       </section>
@@ -84,6 +85,55 @@ export default function ConsoleAuditPage() {
             </Card>
           );
         })}
+      </section>
+
+      <section className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
+        <div className="border-t pt-8">
+          <div className="mb-4 flex items-center gap-2">
+            <FileCode className="size-5 text-primary" />
+            <h2 className="text-2xl font-bold">Audited Service Endpoints & Verification Scope</h2>
+          </div>
+          <p className="mb-6 text-sm text-muted-foreground">
+            Every paid service call generates structured execution logs, payment receipts, buyer identity links, and Arc settlement proofs.
+          </p>
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            {serviceRegistry.map((service) => (
+              <Card key={service.id} className="rounded-lg shadow-sm">
+                <CardHeader>
+                  <div className="mb-2 flex flex-wrap items-center gap-2">
+                    <Badge variant="default">{service.status}</Badge>
+                    <Badge variant="outline">{service.category}</Badge>
+                    <Badge variant="outline">{service.priceLabel}</Badge>
+                  </div>
+                  <CardTitle className="text-lg">{service.name}</CardTitle>
+                  <p className="font-mono text-xs text-muted-foreground">{service.endpoint}</p>
+                </CardHeader>
+                <CardContent className="grid gap-3 text-sm">
+                  <p className="text-muted-foreground leading-relaxed">
+                    {service.longDescription || service.shortDescription}
+                  </p>
+                  <div className="flex items-center gap-2 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                    <CheckCircle2 className="size-4" />
+                    <span>Audit scope: Receipts · Activity timelines · Arc proof registry</span>
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <Button asChild variant="outline" size="sm" className="flex-1">
+                      <Link href={`/receipts?serviceSlug=${service.slug}`}>
+                        View receipts
+                      </Link>
+                    </Button>
+                    <Button asChild variant="outline" size="sm" className="flex-1">
+                      <Link href={`/store/${service.slug}`}>
+                        View store listing
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
       </section>
     </main>
   );

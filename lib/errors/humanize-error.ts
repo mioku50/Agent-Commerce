@@ -51,6 +51,80 @@ export function humanizeError(raw: unknown): HumanizedError {
     messageStr = "";
   }
 
+  // GitHub error mappings
+  if (
+    reasonCode === "invalid_github_repository" ||
+    messageStr.includes("invalid_github_repository") ||
+    messageStr.includes("Invalid GitHub repository")
+  ) {
+    return {
+      title: "Invalid GitHub repository",
+      message: "Enter a public repository in the format owner/repository.",
+      technicalCode: "invalid_github_repository",
+    };
+  }
+
+  if (
+    reasonCode === "github_repository_not_found" ||
+    messageStr.includes("github_repository_not_found") ||
+    messageStr.includes("Repository not found")
+  ) {
+    return {
+      title: "Repository not found",
+      message: "Check the repository URL or confirm that the repository is public.",
+      technicalCode: "github_repository_not_found",
+    };
+  }
+
+  if (
+    reasonCode === "github_repository_inaccessible" ||
+    messageStr.includes("github_repository_inaccessible") ||
+    messageStr.includes("Repository unavailable")
+  ) {
+    return {
+      title: "Repository unavailable",
+      message: "This report currently supports public GitHub repositories only.",
+      technicalCode: "github_repository_inaccessible",
+    };
+  }
+
+  if (
+    reasonCode === "github_rate_limited" ||
+    messageStr.includes("github_rate_limited") ||
+    messageStr.includes("GitHub data is temporarily unavailable") ||
+    messageStr.includes("GitHub data limit has been reached")
+  ) {
+    return {
+      title: "GitHub data is temporarily unavailable",
+      message: "The GitHub data limit has been reached. Try again later.",
+      technicalCode: "github_rate_limited",
+    };
+  }
+
+  if (
+    reasonCode === "github_provider_timeout" ||
+    messageStr.includes("github_provider_timeout") ||
+    messageStr.includes("GitHub took too long to respond")
+  ) {
+    return {
+      title: "GitHub took too long to respond",
+      message: "No report was generated. Try again.",
+      technicalCode: "github_provider_timeout",
+    };
+  }
+
+  if (
+    reasonCode === "github_repository_empty" ||
+    messageStr.includes("github_repository_empty") ||
+    messageStr.includes("Repository has no activity to analyze")
+  ) {
+    return {
+      title: "Repository has no activity to analyze",
+      message: "The repository exists, but no commits were found on its default branch.",
+      technicalCode: "github_repository_empty",
+    };
+  }
+
   // Wallet already registered
   if (
     reasonCode === "wallet_already_registered" ||

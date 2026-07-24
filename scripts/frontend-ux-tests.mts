@@ -267,6 +267,48 @@ assert.deepEqual(humanizeError({ reason: "wallet_mismatch" }), {
   technicalCode: "wallet_mismatch",
 });
 
+assert.deepEqual(humanizeError("invalid_github_repository"), {
+  title: "Invalid GitHub repository",
+  message: "Enter a public repository in the format owner/repository.",
+  technicalCode: "invalid_github_repository",
+});
+
+assert.deepEqual(humanizeError("github_repository_not_found"), {
+  title: "Repository not found",
+  message: "Check the repository URL or confirm that the repository is public.",
+  technicalCode: "github_repository_not_found",
+});
+
+assert.deepEqual(humanizeError("github_repository_inaccessible"), {
+  title: "Repository unavailable",
+  message: "This report currently supports public GitHub repositories only.",
+  technicalCode: "github_repository_inaccessible",
+});
+
+assert.deepEqual(humanizeError("github_rate_limited"), {
+  title: "GitHub data is temporarily unavailable",
+  message: "The GitHub data limit has been reached. Try again later.",
+  technicalCode: "github_rate_limited",
+});
+
+assert.deepEqual(humanizeError("github_provider_timeout"), {
+  title: "GitHub took too long to respond",
+  message: "No report was generated. Try again.",
+  technicalCode: "github_provider_timeout",
+});
+
+assert.deepEqual(humanizeError("github_repository_empty"), {
+  title: "Repository has no activity to analyze",
+  message: "The repository exists, but no commits were found on its default branch.",
+  technicalCode: "github_repository_empty",
+});
+
+assert.deepEqual(humanizeError({ reason: "github_repository_not_found" }), {
+  title: "Repository not found",
+  message: "Check the repository URL or confirm that the repository is public.",
+  technicalCode: "github_repository_not_found",
+});
+
 assert.deepEqual(humanizeError("Network request failed"), {
   title: "Something went wrong",
   message: "Network request failed",
