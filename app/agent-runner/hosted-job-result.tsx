@@ -745,7 +745,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                       </p>
                     </div>
                     <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Human Maintainers</p>
+                      <p className="text-xs text-muted-foreground">Sampled Human Contributors</p>
                       <p className="font-semibold mt-1 text-lg">
                         {renderMetricDisplay(snapshot?.contributors?.sampledHumanContributorCount ?? snapshot?.contributors?.sampledCount, isDataAvailable)}
                       </p>

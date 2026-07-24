@@ -288,6 +288,12 @@ magdaSnapshot.projectPurpose = {
   targetUsers: "Telegram users & subscribers",
   developmentStage: "Active development",
 };
+magdaSnapshot.stack = {
+  primaryLanguage: "Python",
+  detectedFrameworks: ["FastAPI", "Docker"],
+  hasWorkflows: true,
+  languages: { Python: 100 },
+};
 magdaSnapshot.dependencyProfile = {
   manifests: ["requirements.txt"],
   productionDependencies: ["fastapi", "uvicorn", "openai", "chromadb", "torch", "transformers", "python-telegram-bot", "croniter", "websockets"],
@@ -307,9 +313,9 @@ const magdaResult = analyzeGitHubDueDiligence(magdaSnapshot);
 assert.equal(magdaResult.categories.testing.status, "strong");
 assert.equal(magdaResult.categories.dependencyHygiene.status, "moderate");
 assert.equal(magdaResult.categories.deploymentReadiness.status, "strong");
-assert.equal(magdaResult.categories.operationalMaturity.status, "strong");
+assert.ok(magdaResult.categories.operationalMaturity.status !== "strong");
 assert.ok(magdaResult.overallSummary.includes("Magda Autonomous AI Telegram Agent"));
-assert.ok(magdaResult.overallSummary.includes("Target stack"));
+assert.ok(magdaResult.overallSummary.includes("primarily written in Python"));
 console.log("✔ Rich P1.4 categories and executive summary synthesis test passed.");
 
 // Test 11: Bot contributor separation & automation_heavy_history risk

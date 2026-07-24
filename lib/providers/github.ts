@@ -438,7 +438,14 @@ export function extractProjectSummaryFromReadme(readme: string): string | null {
     });
 
   if (paragraphs.length === 0) return null;
-  const chosen = paragraphs[0];
+  let chosen = paragraphs[0];
+  if (chosen.includes(" / ")) {
+    const parts = chosen.split(" / ").map((p) => p.trim());
+    const englishPart = parts.find((p) => /^[a-z0-9\s.,!?:;()'"-]+$/i.test(p));
+    if (englishPart && englishPart.length >= 20) {
+      chosen = englishPart;
+    }
+  }
   return chosen.length > 500 ? chosen.slice(0, 497) + "..." : chosen;
 }
 
@@ -485,17 +492,20 @@ export function buildRepositoryStructureFromGitTree(
     // 2. Detect Entrypoints
     if (isFile) {
       if (
-        (depth === 1 &&
-          ["main.py", "app.py", "server.py", "index.ts", "index.js", "server.ts", "server.js", "cli.ts", "cli.py", "main.go", "bot.py", "run.py"].includes(fileNameLower)) ||
+        ["main.py", "app.py", "server.py", "index.ts", "index.js", "server.js", "server.ts", "cli.ts", "cli.py", "main.go", "bot.py", "run.py", "agent.py"].includes(fileNameLower) ||
+        fileNameLower === "__main__.py" ||
         rawPath === "src/main.py" ||
         rawPath === "app/main.py" ||
+        rawPath === "src/agent.py" ||
+        rawPath === "agent/main.py" ||
         rawPath === "src/index.ts" ||
         rawPath === "src/server.ts" ||
         rawPath === "app/page.tsx" ||
         rawPath === "src/main.rs" ||
         rawPath === "src/lib.rs" ||
-        fileNameLower === "__main__.py" ||
         /^cmd\/[^\/]+\/main\.go$/i.test(rawPath) ||
+        /^services\/[^\/]+\/main\.py$/i.test(rawPath) ||
+        /^[^\/]+_agent\/__main__\.py$/i.test(rawPath) ||
         /^packages\/[^\/]+\/(?:src\/)?index\.(?:ts|js)$/i.test(rawPath)
       ) {
         entrypoints.add(rawPath);

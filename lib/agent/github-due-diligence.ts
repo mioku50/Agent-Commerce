@@ -397,8 +397,13 @@ export function analyzeGitHubDueDiligence(
   deployEvidence.push(`CI workflows: ${snapshot.stack?.hasWorkflows ? "Present" : "Missing"}.`);
 
   if (dockerFiles.length > 0 && snapshot.stack?.hasWorkflows) {
-    deployStatus = "strong";
-    deploySummary = `Containerization assets (${dockerFiles.join(", ")}) and CI build workflows configured.`;
+    if (entrypoints.length === 0) {
+      deployStatus = "moderate";
+      deploySummary = `Containerization assets (${dockerFiles.join(", ")}) and CI build workflows configured, but no explicit application entrypoint was identified.`;
+    } else {
+      deployStatus = "strong";
+      deploySummary = `Containerization assets (${dockerFiles.join(", ")}) and CI build workflows configured.`;
+    }
   } else if (dockerFiles.length > 0 || snapshot.stack?.hasWorkflows || entrypoints.length > 0) {
     deployStatus = "moderate";
     deploySummary = "Basic deployment or entrypoint configuration present.";
@@ -553,7 +558,7 @@ export function analyzeGitHubDueDiligence(
       code: "single_contributor_concentration",
       title: "Single Contributor Concentration",
       severity: "medium",
-      description: `The majority of sampled human repository commits (${topHumanShare}%) originate from a single contributor.`,
+      description: `One account represents ${topHumanShare}% of the sampled lifetime contributions attributed to human contributors.`,
       impact: "High bus-factor risk if the primary maintainer steps away or becomes unavailable.",
     });
   }
@@ -625,28 +630,58 @@ export function analyzeGitHubDueDiligence(
     ? `${snapshot.projectPurpose.summary.replace(/\.$/, "")}. `
     : "";
   const primaryLang = snapshot.stack?.primaryLanguage || "Software";
-  const frameworks = snapshot.stack?.detectedFrameworks?.length
-    ? ` built with ${snapshot.stack.detectedFrameworks.join(", ")}`
+
+  const filteredFrameworks = (snapshot.stack?.detectedFrameworks || []).filter(
+    (f) =>
+      f.toLowerCase() !== primaryLang.toLowerCase() &&
+      !["docker", "container"].includes(f.toLowerCase())
+  );
+  const frameworksText = filteredFrameworks.length > 0
+    ? ` built with ${filteredFrameworks.join(", ")}`
     : "";
-  const testingSignal = testingStatus === "strong" || testingStatus === "moderate"
-    ? "verified test coverage"
-    : "limited automated testing";
-  const govSignal = docStatus === "strong"
-    ? "comprehensive governance documentation"
-    : "standard repository governance";
+
+  const hasDocker =
+    dockerFiles.length > 0 ||
+    (snapshot.stack?.detectedFrameworks || []).some(
+      (f) => f.toLowerCase() === "docker"
+    );
+  const containerName = dockerFiles.length > 0 ? dockerFiles[0] : "Docker";
+  const containerText = hasDocker
+    ? ` and uses ${containerName} for containerization`
+    : "";
+
+  const hasTest = testingStatus === "strong" || testingStatus === "moderate";
+  const hasCI = Boolean(snapshot.stack?.hasWorkflows);
+  let testingSignal = "";
+  if (hasTest && hasCI) {
+    testingSignal = "A test suite and CI automation were detected.";
+  } else if (hasTest) {
+    testingSignal = "A test suite was detected.";
+  } else if (hasCI) {
+    testingSignal = "CI automation was detected.";
+  } else {
+    testingSignal = "Limited automated testing was detected.";
+  }
+
+  const govSignal =
+    docStatus === "strong"
+      ? "comprehensive governance documentation"
+      : "standard repository governance";
+
+  const stackSummary = `The project is primarily written in ${primaryLang}${frameworksText}${containerText}. ${testingSignal}`;
 
   if (isPartialOrIncomplete) {
     overallStatus = "limited_data";
     overallSummary = `Limited repository metadata could be retrieved for ${snapshot.repository?.fullName || "the target repository"}. ${purposePrefix}Exercise caution due to partial upstream API response.`;
   } else if (highRisks.length >= 1) {
     overallStatus = "high_attention";
-    overallSummary = `${purposePrefix}Target stack: ${primaryLang}${frameworks}. Significant risk factors detected (${highRisks.map((r) => r.title.toLowerCase()).join(", ")}) with ${testingSignal} and ${govSignal}. Careful manual review is required before integration.`;
+    overallSummary = `${purposePrefix}${stackSummary} Significant risk factors detected (${highRisks.map((r) => r.title.toLowerCase()).join(", ")}) with ${govSignal}. Careful manual review is required before integration.`;
   } else if (mediumRisks.length >= 2 || !hasLicense) {
     overallStatus = "review_needed";
-    overallSummary = `${purposePrefix}Target stack: ${primaryLang}${frameworks}. The repository shows active development with ${testingSignal} and ${govSignal}, but contains notable risk factors (${mediumRisks.map((r) => r.title.toLowerCase()).join(", ")}) requiring review before integration.`;
+    overallSummary = `${purposePrefix}${stackSummary} The repository shows active development with ${govSignal}, but contains notable risk factors (${mediumRisks.map((r) => r.title.toLowerCase()).join(", ")}) requiring review before integration.`;
   } else {
     overallStatus = "healthy_signals";
-    overallSummary = `${purposePrefix}Target stack: ${primaryLang}${frameworks}. The repository demonstrates healthy activity, ${testingSignal}, and ${govSignal} with minimal risk factors detected.`;
+    overallSummary = `${purposePrefix}${stackSummary} The repository demonstrates healthy activity and ${govSignal} with minimal risk factors detected.`;
   }
 
   // --- 4. Evidence-backed Strengths List ---
