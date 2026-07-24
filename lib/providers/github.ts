@@ -202,6 +202,13 @@ export async function fetchGitHubRepositorySnapshot(
     `/repos/${ref.owner}/${ref.name}`,
   );
 
+  if (repoData.private === true) {
+    throw new ProviderError("github_repository_inaccessible", {
+      httpStatus: 403,
+      upstreamStatus: 403,
+    });
+  }
+
   const repository: GitHubRepositoryMetadata = {
     id: Number(repoData.id ?? 0),
     owner: String(repoData.owner?.login || ref.owner).toLowerCase(),

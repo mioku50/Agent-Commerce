@@ -4,7 +4,7 @@
  */
 
 import assert from "node:assert/strict";
-import { parseGitHubRepositoryInput } from "../lib/providers/github-repository-ref.ts";
+import { parseGitHubRepositoryInput, InvalidGitHubRepositoryError } from "../lib/providers/github-repository-ref.ts";
 
 console.log("[github-ref-test] Running GitHub repository reference parser tests...");
 
@@ -237,7 +237,7 @@ for (const tc of invalidTestCases) {
   assert.throws(
     () => parseGitHubRepositoryInput(tc.input),
     (error: unknown) => {
-      assert(error instanceof Error);
+      assert(error instanceof InvalidGitHubRepositoryError);
       assert.equal(error.message, tc.expectedError);
       return true;
     },

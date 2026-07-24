@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { isProviderError, ProviderError } from "@/lib/providers/errors";
-import { parseGitHubRepositoryInput } from "@/lib/providers/github-repository-ref";
+import { parseGitHubRepositoryInput, InvalidGitHubRepositoryError } from "@/lib/providers/github-repository-ref";
 import { fetchGitHubRepositorySnapshot } from "@/lib/providers/github";
 import { withGateway } from "@/lib/x402";
 
@@ -42,11 +42,12 @@ const handler = async (req: NextRequest) => {
         "Sourced live from GitHub REST API v3. The x402 payment is made to Arc Agent Commerce, not to GitHub.",
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes("GitHub repository")) {
+    if (error instanceof InvalidGitHubRepositoryError) {
       return NextResponse.json(
         {
           error: error.message,
           code: "invalid_github_repository",
+          reason: "invalid_github_repository",
           provider: "GitHub REST API v3",
           sourceStatus: "unavailable",
           retryable: false,

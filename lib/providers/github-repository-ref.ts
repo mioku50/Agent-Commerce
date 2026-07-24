@@ -10,9 +10,16 @@ export type GitHubRepositoryRef = {
   canonicalUrl: string;
 };
 
+export class InvalidGitHubRepositoryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "InvalidGitHubRepositoryError";
+  }
+}
+
 export function parseGitHubRepositoryInput(input: unknown): GitHubRepositoryRef {
   if (typeof input !== "string" || !input.trim()) {
-    throw new Error("Enter a public GitHub repository URL or owner/repository.");
+    throw new InvalidGitHubRepositoryError("Enter a public GitHub repository URL or owner/repository.");
   }
 
   const rawInput = input.trim();
@@ -25,12 +32,12 @@ export function parseGitHubRepositoryInput(input: unknown): GitHubRepositoryRef 
     try {
       url = new URL(rawInput.startsWith("//") ? `https:${rawInput}` : rawInput);
     } catch {
-      throw new Error("Enter a public GitHub repository URL or owner/repository.");
+      throw new InvalidGitHubRepositoryError("Enter a public GitHub repository URL or owner/repository.");
     }
 
     const host = url.hostname.toLowerCase();
     if (host !== "github.com" && host !== "www.github.com") {
-      throw new Error("Only public GitHub repositories (github.com) are supported.");
+      throw new InvalidGitHubRepositoryError("Only public GitHub repositories (github.com) are supported.");
     }
 
     parts = url.pathname.split("/").filter(Boolean);
@@ -47,14 +54,14 @@ export function parseGitHubRepositoryInput(input: unknown): GitHubRepositoryRef 
       firstSegment.includes(":") ||
       /^\[.*\]$/.test(firstSegment)
     ) {
-      throw new Error("Only public GitHub repositories (github.com) are supported.");
+      throw new InvalidGitHubRepositoryError("Only public GitHub repositories (github.com) are supported.");
     } else {
       parts = rawInput.split("/").filter(Boolean);
     }
   }
 
   if (parts.length < 2) {
-    throw new Error("Enter a valid GitHub repository in owner/repository format.");
+    throw new InvalidGitHubRepositoryError("Enter a valid GitHub repository in owner/repository format.");
   }
 
   const rawOwner = parts[0];
@@ -70,7 +77,7 @@ export function parseGitHubRepositoryInput(input: unknown): GitHubRepositoryRef 
     !/^[a-z0-9_.-]+$/i.test(rawOwner) ||
     !/^[a-z0-9_.-]+$/i.test(rawName)
   ) {
-    throw new Error("Repository owner and name contain invalid characters.");
+    throw new InvalidGitHubRepositoryError("Repository owner and name contain invalid characters.");
   }
 
   const canonicalOwner = rawOwner.toLowerCase();

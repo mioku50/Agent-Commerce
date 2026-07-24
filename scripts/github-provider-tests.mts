@@ -258,6 +258,33 @@ async function runTests() {
     );
     console.log("    ✓ Rate limit response throws github_rate_limited ProviderError");
 
+    // Test 7: Private repository handling
+    console.log("  - Test 7: Private repository rejection...");
+    globalThis.fetch = (async () => {
+      return new Response(
+        JSON.stringify({
+          id: 999,
+          name: "private-repo",
+          full_name: "circle/private-repo",
+          owner: { login: "circle" },
+          private: true,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }) as typeof fetch;
+
+    clearGitHubSnapshotCache();
+    const privateRef = parseGitHubRepositoryInput("circle/private-repo");
+    await assert.rejects(
+      async () => {
+        await fetchGitHubRepositorySnapshot(privateRef);
+      },
+      (err: unknown) => {
+        return err instanceof ProviderError && err.code === "github_repository_inaccessible" && err.httpStatus === 403;
+      },
+    );
+    console.log("    ✓ Private repository throws github_repository_inaccessible ProviderError (403)");
+
   } finally {
     globalThis.fetch = originalFetch;
   }
