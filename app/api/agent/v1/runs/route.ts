@@ -70,23 +70,25 @@ export async function POST(request: NextRequest) {
   }
 
   // Idempotency deduplication check
-  const idempotencyCheck = resolveMachineIdempotency(
+  const idempotencyCheck = await resolveMachineIdempotency(
     idempotencyKey,
     context.credential.id,
     body,
+    "/api/agent/v1/runs",
+    context.agentId,
   );
 
   if (idempotencyCheck.conflict) {
     return createMachineErrorResponse(
-      "quote_already_used",
+      "idempotency_conflict",
       "This Idempotency-Key is already bound to a different run request.",
       409,
     );
   }
 
-  if (idempotencyCheck.cached && idempotencyCheck.result) {
-    return NextResponse.json(idempotencyCheck.result, {
-      status: 200,
+  if (idempotencyCheck.cachedResponse?.body) {
+    return NextResponse.json(idempotencyCheck.cachedResponse.body, {
+      status: idempotencyCheck.cachedResponse.status,
       headers: { "Cache-Control": "no-store" },
     });
   }
@@ -305,11 +307,18 @@ export async function POST(request: NextRequest) {
       pollAfterMs: 2000,
     };
 
-    saveMachineIdempotency(
+    await saveMachineIdempotency(
       idempotencyKey,
       context.credential.id,
       body,
       responsePayload,
+      {
+        agentId: context.agentId,
+        route: "/api/agent/v1/runs",
+        responseStatus: 201,
+        resourceType: "run",
+        resourceId: jobId,
+      },
     );
 
     // Launch execution asynchronously

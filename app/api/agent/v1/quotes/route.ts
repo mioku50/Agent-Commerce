@@ -69,23 +69,25 @@ export async function POST(request: NextRequest) {
   }
 
   // Idempotency deduplication check
-  const idempotencyCheck = resolveMachineIdempotency(
+  const idempotencyCheck = await resolveMachineIdempotency(
     idempotencyKey,
     context.credential.id,
     body,
+    "/api/agent/v1/quotes",
+    context.agentId,
   );
 
   if (idempotencyCheck.conflict) {
     return createMachineErrorResponse(
-      "invalid_repository",
+      "idempotency_conflict",
       "This Idempotency-Key is already bound to a different workflow input.",
       409,
     );
   }
 
-  if (idempotencyCheck.cached && idempotencyCheck.result) {
-    return NextResponse.json(idempotencyCheck.result, {
-      status: 200,
+  if (idempotencyCheck.cachedResponse?.body) {
+    return NextResponse.json(idempotencyCheck.cachedResponse.body, {
+      status: idempotencyCheck.cachedResponse.status,
       headers: { "Cache-Control": "no-store" },
     });
   }
@@ -234,11 +236,18 @@ export async function POST(request: NextRequest) {
       },
     };
 
-    saveMachineIdempotency(
+    await saveMachineIdempotency(
       idempotencyKey,
       context.credential.id,
       body,
       responsePayload,
+      {
+        agentId: context.agentId,
+        route: "/api/agent/v1/quotes",
+        responseStatus: quoteResult.created ? 201 : 200,
+        resourceType: "quote",
+        resourceId: (responsePayload as any).quoteId,
+      },
     );
 
     return NextResponse.json(responsePayload, {

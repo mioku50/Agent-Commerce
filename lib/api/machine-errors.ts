@@ -16,6 +16,7 @@ export type MachineErrorCode =
   | "workflow_disabled"
   | "quote_expired"
   | "quote_already_used"
+  | "idempotency_conflict"
   | "payment_required"
   | "payment_invalid"
   | "spending_limit_exceeded"

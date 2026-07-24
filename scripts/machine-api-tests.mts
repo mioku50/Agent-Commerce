@@ -14,6 +14,8 @@ import {
   resolveMachineIdempotency,
   saveMachineIdempotency,
   clearMachineIdempotencyStore,
+  computeCanonicalRequestHash,
+  setMachineIdempotencyClientForTesting,
 } from "../lib/api/machine-idempotency.ts";
 import { hashHostedWorkflowInput } from "../lib/agent/hosted-workflows.ts";
 import { GET as workflowsGET } from "../app/api/agent/v1/workflows/route.ts";
@@ -36,48 +38,68 @@ process.env.BYOA_MANAGEMENT_SESSION_SECRET = "test-session-secret-32-chars-long-
 process.env.BYOA_CREDENTIAL_PEPPER = "test-credential-pepper-32-chars-long-0000000000";
 
 // --- Section 1: Unit Tests for Machine Idempotency Helper ---
-console.log("-> Testing Machine Idempotency Helper...");
+async function testMachineIdempotencyUnit() {
+  console.log("-> Testing Machine Idempotency Helper & Canonical Hashing...");
 
-clearMachineIdempotencyStore();
+  // Test canonical request hash sorting
+  const payload1 = { b: 2, a: 1, nested: { y: "hello", x: "world" } };
+  const payload2 = { a: 1, nested: { x: "world", y: "hello" }, b: 2 };
+  const payloadDiff = { a: 1, nested: { x: "world", y: "different" }, b: 2 };
 
-const credId = "test-cred-123";
-const idempotencyKey = "key-alpha-1";
-const payloadA = { workflow: "github_due_diligence", repository: "circlefin/agent-commerce" };
-const payloadB = { workflow: "github_due_diligence", repository: "owner/other-repo" };
-const mockResult = {
-  quoteId: "quote-111",
-  workflow: "github_due_diligence",
-  totalUsdc: 0.002,
-  sponsored: true,
-};
+  const hash1 = computeCanonicalRequestHash(payload1);
+  const hash2 = computeCanonicalRequestHash(payload2);
+  const hashDiff = computeCanonicalRequestHash(payloadDiff);
 
-// Initial check should be uncached and non-conflicting
-const check1 = resolveMachineIdempotency(idempotencyKey, credId, payloadA);
-assert.equal(check1.cached, false);
-assert.equal(check1.conflict, false);
-assert.equal(check1.result, undefined);
+  assert.equal(hash1, hash2, "Canonical request hashes must match regardless of object key order");
+  assert.notEqual(hash1, hashDiff, "Different payloads must yield different canonical request hashes");
 
-// Save record
-saveMachineIdempotency(idempotencyKey, credId, payloadA, mockResult);
+  // In-memory store fallback test
+  clearMachineIdempotencyStore();
+  setMachineIdempotencyClientForTesting(null);
 
-// Re-check with identical payload -> should return cached result
-const check2 = resolveMachineIdempotency(idempotencyKey, credId, payloadA);
-assert.equal(check2.cached, true);
-assert.equal(check2.conflict, false);
-assert.deepEqual(check2.result, mockResult);
+  const credId = "test-cred-123";
+  const idempotencyKey = "key-alpha-1";
+  const payloadA = { workflow: "github_due_diligence", repository: "circlefin/agent-commerce" };
+  const payloadB = { workflow: "github_due_diligence", repository: "owner/other-repo" };
+  const mockResult = {
+    quoteId: "quote-111",
+    workflow: "github_due_diligence",
+    totalUsdc: 0.002,
+    sponsored: true,
+  };
 
-// Check with different payload -> should signal conflict
-const check3 = resolveMachineIdempotency(idempotencyKey, credId, payloadB);
-assert.equal(check3.cached, false);
-assert.equal(check3.conflict, true);
+  // Initial check should be uncached and non-conflicting
+  const check1 = await resolveMachineIdempotency(idempotencyKey, credId, payloadA);
+  assert.equal(check1.cached, false);
+  assert.equal(check1.conflict, false);
+  assert.equal(check1.ok, true);
+  assert.equal(check1.result, undefined);
 
-// Clear store
-clearMachineIdempotencyStore();
-const check4 = resolveMachineIdempotency(idempotencyKey, credId, payloadA);
-assert.equal(check4.cached, false);
-assert.equal(check4.conflict, false);
+  // Save record
+  await saveMachineIdempotency(idempotencyKey, credId, payloadA, mockResult);
 
-console.log("✔ Machine Idempotency Helper unit tests passed.");
+  // Re-check with identical payload -> should return cached result
+  const check2 = await resolveMachineIdempotency(idempotencyKey, credId, payloadA);
+  assert.equal(check2.cached, true);
+  assert.equal(check2.conflict, false);
+  assert.equal(check2.ok, true);
+  assert.deepEqual(check2.result, mockResult);
+
+  // Check with different payload -> should signal conflict
+  const check3 = await resolveMachineIdempotency(idempotencyKey, credId, payloadB);
+  assert.equal(check3.cached, false);
+  assert.equal(check3.conflict, true);
+  assert.equal(check3.ok, false);
+
+  // Clear store
+  clearMachineIdempotencyStore();
+  const check4 = await resolveMachineIdempotency(idempotencyKey, credId, payloadA);
+  assert.equal(check4.cached, false);
+  assert.equal(check4.conflict, false);
+  assert.equal(check4.ok, true);
+
+  console.log("✔ Machine Idempotency Helper unit tests passed.");
+}
 
 // --- Section 2: Mock Database Client Setup ---
 console.log("-> Setting up Mock Supabase Client for Machine API testing...");
@@ -270,6 +292,7 @@ mockJobsStore.set("job-existing-1", fixtureCompletedJob);
 mockJobsStore.set("job-other-agent", fixtureOtherAgentJob);
 mockJobsStore.set("job-running-1", fixtureRunningJob);
 
+const mockIdempotencyDbStore = new Map<string, any>();
 let mockDailyCallCount = 0;
 
 function createMockSupabaseClient(): any {
@@ -331,6 +354,7 @@ function createMockSupabaseClient(): any {
     from(tableName: string) {
       let filterEqField: string | null = null;
       let filterEqVal: any = null;
+      const filters: Record<string, any> = {};
 
       const chain: any = {
         select(fields?: string, opts?: any) {
@@ -348,6 +372,7 @@ function createMockSupabaseClient(): any {
         eq(field: string, val: any) {
           filterEqField = field;
           filterEqVal = val;
+          filters[field] = val;
           return chain;
         },
         gte() { return chain; },
@@ -377,6 +402,11 @@ function createMockSupabaseClient(): any {
             const row = mockJobsStore.get(filterEqVal);
             return { data: row || null, error: null };
           }
+          if (tableName === "machine_api_idempotency") {
+            const compositeKey = `${filters.credential_id}:${filters.route}:${filters.idempotency_key_hash}`;
+            const row = mockIdempotencyDbStore.get(compositeKey);
+            return { data: row || null, error: null };
+          }
           return { data: null, error: null };
         },
         async single() {
@@ -401,7 +431,28 @@ function createMockSupabaseClient(): any {
             },
           };
         },
+        upsert(row: any) {
+          if (tableName === "machine_api_idempotency") {
+            const compositeKey = `${row.credential_id}:${row.route}:${row.idempotency_key_hash}`;
+            const existing = mockIdempotencyDbStore.get(compositeKey);
+            const merged = { ...existing, ...row };
+            mockIdempotencyDbStore.set(compositeKey, merged);
+            return Promise.resolve({ data: merged, error: null });
+          }
+          return Promise.resolve({ data: row, error: null });
+        },
         insert(row: any) {
+          if (tableName === "machine_api_idempotency") {
+            const compositeKey = `${row.credential_id}:${row.route}:${row.idempotency_key_hash}`;
+            if (mockIdempotencyDbStore.has(compositeKey)) {
+              return Promise.resolve({
+                data: null,
+                error: { code: "23505", message: "duplicate key value violates unique constraint" },
+              });
+            }
+            mockIdempotencyDbStore.set(compositeKey, row);
+            return Promise.resolve({ data: row, error: null });
+          }
           if (tableName === "hosted_workflow_quotes") {
             const id = `quote_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
             const storedRow = {
@@ -448,6 +499,7 @@ const mockClient = createMockSupabaseClient();
 setByoaClientForTesting(mockClient);
 setCheckoutClientForTesting(mockClient);
 setHostedClientForTesting(mockClient);
+setMachineIdempotencyClientForTesting(mockClient);
 
 // --- Section 3: Endpoint Tests for GET /api/agent/v1/workflows ---
 console.log("-> Testing GET /api/agent/v1/workflows...");
@@ -614,7 +666,7 @@ async function testQuotesEndpoint() {
       body: JSON.stringify(validBody),
     });
     const res = await quotesPOST(req);
-    assert.equal(res.status, 200);
+    assert([200, 201].includes(res.status), `Expected 200/201 status, got ${res.status}`);
     const json = await res.json();
     assert.equal(json.quoteId, createdQuoteId, "Idempotent replay must return identical quoteId");
   }
@@ -636,7 +688,7 @@ async function testQuotesEndpoint() {
     const res = await quotesPOST(req);
     assert.equal(res.status, 409);
     const json = await res.json();
-    assert.equal(json.error.code, "invalid_repository");
+    assert.equal(json.error.code, "idempotency_conflict");
     assert.match(json.error.message, /different workflow input/i);
   }
 
@@ -787,7 +839,7 @@ async function testRunsPostEndpoint() {
       body: JSON.stringify(runBody),
     });
     const res = await runsPOST(req);
-    assert.equal(res.status, 200);
+    assert([200, 201].includes(res.status), `Expected 200/201 status, got ${res.status}`);
     const json = await res.json();
     assert.equal(json.runId, createdRunId);
     assert.equal(json.status, "queued");
@@ -997,6 +1049,7 @@ async function testOpenApiSchema() {
 }
 
 async function runSuite() {
+  await testMachineIdempotencyUnit();
   await testWorkflowsEndpoint();
   await testQuotesEndpoint();
   await testRunsPostEndpoint();
