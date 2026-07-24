@@ -63,8 +63,8 @@ export async function POST(request: NextRequest) {
   const quoteId = body.quoteId;
   if (!quoteId || typeof quoteId !== "string" || !quoteId.trim()) {
     return createMachineErrorResponse(
-      "quote_expired",
-      "Quote not found or invalid.",
+      "quote_not_found",
+      "The specified workflow quote could not be found.",
       404,
     );
   }
@@ -97,8 +97,23 @@ export async function POST(request: NextRequest) {
   const storedQuote = await getHostedWorkflowQuote(quoteId);
   if (!storedQuote) {
     return createMachineErrorResponse(
-      "quote_expired",
-      "Quote not found or invalid.",
+      "quote_not_found",
+      "The specified workflow quote could not be found.",
+      404,
+    );
+  }
+
+  // Strict Quote Ownership Verification
+  const quoteAgentId = storedQuote.byoa_agent_id || (storedQuote.planner_snapshot as any)?.metadata?.byoa_agent_id;
+  const quoteCredentialId = storedQuote.machine_credential_id || (storedQuote.planner_snapshot as any)?.metadata?.machine_credential_id;
+
+  if (
+    quoteAgentId !== context.agentId ||
+    quoteCredentialId !== context.credential.id
+  ) {
+    return createMachineErrorResponse(
+      "quote_not_found",
+      "The specified workflow quote could not be found.",
       404,
     );
   }

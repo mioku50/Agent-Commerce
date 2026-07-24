@@ -213,8 +213,12 @@ export async function POST(request: NextRequest) {
       requesterWallet: context.ownerWallet as Address,
       request: workflowRequest,
       plan,
+      byoaAgentId: context.agentId,
+      machineCredentialId: context.credential.id,
+      ownerWallet: context.ownerWallet,
     });
 
+    const isSponsored = quoteResult.quote.paymentMode === "sponsored";
     const responsePayload = {
       quoteId: quoteResult.quote.id,
       workflow: quoteResult.quote.workflowType,
@@ -225,7 +229,13 @@ export async function POST(request: NextRequest) {
           }
         : null,
       totalUsdc: quoteResult.quote.pricing.listPriceUsdc,
-      sponsored: quoteResult.quote.paymentMode === "sponsored",
+      sponsored: isSponsored,
+      checkout: {
+        mode: isSponsored ? "sponsored" : "arc_transaction",
+        asset: "USDC",
+        network: "arc-testnet",
+      },
+      downstreamSettlement: "server_side_x402",
       expiresAt: quoteResult.quote.expiresAt,
       requiredPayment: {
         network: "arc-testnet",

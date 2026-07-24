@@ -75,6 +75,9 @@ export type HostedWorkflowQuoteRow = {
   expires_at: string;
   created_at: string;
   consumed_at: string | null;
+  byoa_agent_id?: string | null;
+  machine_credential_id?: string | null;
+  owner_wallet?: string | null;
 };
 
 export type HostedWorkflowUserPaymentRow = {
@@ -141,6 +144,7 @@ function secondsUntil(value: string) {
 }
 
 function publicQuote(row: HostedWorkflowQuoteRow) {
+  const meta = (row.planner_snapshot as any)?.metadata as Record<string, any> | undefined;
   return {
     id: row.id,
     requesterWallet: getAddress(row.requester_wallet),
@@ -162,6 +166,9 @@ function publicQuote(row: HostedWorkflowQuoteRow) {
     expiresAt: row.expires_at,
     jobId: row.job_id,
     userPaymentId: row.user_payment_id,
+    byoaAgentId: row.byoa_agent_id || meta?.byoa_agent_id || null,
+    machineCredentialId: row.machine_credential_id || meta?.machine_credential_id || null,
+    ownerWallet: row.owner_wallet || meta?.owner_wallet || null,
   };
 }
 
@@ -244,6 +251,10 @@ export async function createHostedWorkflowQuote(input: {
   requesterWallet: Address;
   request: HostedWorkflowRequest;
   plan: HostedPlannerSnapshot;
+  byoaAgentId?: string;
+  machineCredentialId?: string;
+  ownerWallet?: string;
+  metadata?: Record<string, unknown>;
 }) {
   const client = getCheckoutClient();
   const existing = await client
@@ -277,6 +288,13 @@ export async function createHostedWorkflowQuote(input: {
     Date.now() + checkoutConfig.quoteExpirySeconds * 1_000,
   ).toISOString();
 
+  const quoteMeta = {
+    byoa_agent_id: input.byoaAgentId || null,
+    machine_credential_id: input.machineCredentialId || null,
+    owner_wallet: input.ownerWallet || null,
+    ...input.metadata,
+  };
+
   const row = {
     idempotency_hash: input.idempotencyHash,
     request_hash: input.requestHash,
@@ -287,7 +305,10 @@ export async function createHostedWorkflowQuote(input: {
     input_preview: inputMetadata.preview,
     input_hash: inputMetadata.sha256,
     budget_usdc: input.request.budgetUsdc,
-    planner_snapshot: input.plan,
+    planner_snapshot: {
+      ...input.plan,
+      metadata: quoteMeta,
+    },
     selected_services: input.plan.selectedServices,
     estimated_provider_cost_usdc: pricing.estimatedProviderCostUsdc,
     platform_fee_usdc: pricing.platformFeeUsdc,
@@ -336,7 +357,15 @@ export async function getHostedWorkflowQuote(quoteId: string) {
     .eq("id", quoteId)
     .maybeSingle();
   if (error) throw new Error("Unable to load hosted workflow quote.");
-  return data ? (data as HostedWorkflowQuoteRow) : null;
+  if (!data) return null;
+  const row = data as HostedWorkflowQuoteRow;
+  const meta = (row.planner_snapshot as any)?.metadata as Record<string, any> | undefined;
+  return {
+    ...row,
+    byoa_agent_id: row.byoa_agent_id || meta?.byoa_agent_id || null,
+    machine_credential_id: row.machine_credential_id || meta?.machine_credential_id || null,
+    owner_wallet: row.owner_wallet || meta?.owner_wallet || null,
+  };
 }
 
 export function validateHostedWorkflowPaymentEvidence(input: {

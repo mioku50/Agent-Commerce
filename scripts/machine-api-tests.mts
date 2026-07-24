@@ -107,6 +107,7 @@ console.log("-> Setting up Mock Supabase Client for Machine API testing...");
 const fullCred = createApiCredential("agt_test_full");
 const readOnlyCred = createApiCredential("agt_test_readonly");
 const revokedCred = createApiCredential("agt_test_revoked");
+const credB = createApiCredential("agt_test_agentB");
 
 const mockCredentials: Record<string, any> = {
   [fullCred.hash]: {
@@ -140,6 +141,17 @@ const mockCredentials: Record<string, any> = {
     scopes: ["*"],
     expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: "2026-01-01T12:00:00.000Z",
+    created_at: "2026-01-01T00:00:00.000Z",
+  },
+  [credB.hash]: {
+    id: "cred-agentB-1",
+    agent_id: "agent-2",
+    label: "Agent B Token",
+    token_prefix: credB.prefix,
+    credential_hash: credB.hash,
+    scopes: ["workflows:read", "quotes:create", "runs:create", "runs:read", "reports:read"],
+    expires_at: "2099-01-01T00:00:00.000Z",
+    revoked_at: null,
     created_at: "2026-01-01T00:00:00.000Z",
   },
 };
@@ -176,6 +188,8 @@ const mockJobsStore = new Map<string, any>();
 // Seed Fixture Quotes
 const fixtureSponsoredQuote = {
   id: "quote-sponsored-1",
+  byoa_agent_id: "agent-1",
+  machine_credential_id: "cred-full-1",
   idempotency_hash: "idempotency_hash_sponsored_1",
   request_hash: "request_hash_sponsored_1",
   requester_fingerprint: "fingerprint_1",
@@ -197,6 +211,11 @@ const fixtureSponsoredQuote = {
       { slug: "github_repo_info", priceUsdc: "0.001" },
       { slug: "github_activity", priceUsdc: "0.001" },
     ],
+    metadata: {
+      byoa_agent_id: "agent-1",
+      machine_credential_id: "cred-full-1",
+      owner_wallet: mockAgent.owner_wallet,
+    },
   },
   selected_services: [
     { slug: "github_repo_info", priceUsdc: "0.001" },
@@ -649,6 +668,11 @@ async function testQuotesEndpoint() {
     assert.equal(json.repository.canonicalUrl, "https://github.com/circlefin/agent-commerce");
     assert.equal(typeof json.totalUsdc, "number");
     assert.equal(typeof json.sponsored, "boolean");
+    assert(json.checkout, "Response must include checkout object");
+    assert.equal(json.checkout.mode, "sponsored");
+    assert.equal(json.checkout.asset, "USDC");
+    assert.equal(json.checkout.network, "arc-testnet");
+    assert.equal(json.downstreamSettlement, "server_side_x402");
     assert(json.expiresAt, "expiresAt must be set");
     assert.equal(json.requiredPayment.network, "arc-testnet");
     assert.equal(json.requiredPayment.asset, "USDC");
@@ -715,7 +739,7 @@ async function testRunsPostEndpoint() {
     assert.equal(json.error.code, "credential_missing");
   }
 
-  // Test 2: Non-existent Quote -> 404 quote_expired
+  // Test 2: Non-existent Quote -> 404 quote_not_found
   {
     const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
       method: "POST",
@@ -729,7 +753,26 @@ async function testRunsPostEndpoint() {
     const res = await runsPOST(req);
     assert.equal(res.status, 404);
     const json = await res.json();
-    assert.equal(json.error.code, "quote_expired");
+    assert.equal(json.error.code, "quote_not_found");
+    assert.equal(json.error.message, "The specified workflow quote could not be found.");
+  }
+
+  // Test 2b: Credential B attempting to execute Credential A's quote -> 404 quote_not_found
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${credB.token}`,
+        "Idempotency-Key": `ik-run-credb-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ quoteId: "quote-sponsored-1" }),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "quote_not_found");
+    assert.equal(json.error.message, "The specified workflow quote could not be found.");
   }
 
   // Test 3: Expired Quote -> 404 quote_expired

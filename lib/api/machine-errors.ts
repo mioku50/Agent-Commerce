@@ -15,6 +15,7 @@ export type MachineErrorCode =
   | "scope_denied"
   | "workflow_disabled"
   | "quote_expired"
+  | "quote_not_found"
   | "quote_already_used"
   | "idempotency_conflict"
   | "payment_required"

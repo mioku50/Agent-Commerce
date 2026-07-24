@@ -81,6 +81,7 @@ export type HostedPlannerSnapshot = {
   marketSymbol: PythMarketSymbol | null;
   repository: GitHubRepositoryRef | null;
   warnings: string[];
+  metadata?: Record<string, unknown>;
 };
 
 export type HostedFinalReport = {
