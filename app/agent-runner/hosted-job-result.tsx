@@ -30,7 +30,7 @@ import type {
   GitHubDueDiligenceAssessment,
   RiskSeverity,
 } from "@/lib/agent/github-due-diligence";
-import type { GitHubRepositorySnapshot } from "@/lib/providers/github-types";
+import type { GitHubRepositorySnapshot, DataConfidence } from "@/lib/providers/github-types";
 import type { HostedJobView } from "./types";
 
 const DEFAULT_CONSUMER_STAGES = [
@@ -163,6 +163,33 @@ function renderMetricDisplay(
   return String(value);
 }
 
+function renderCommitCountDisplay(
+  value: number | null | undefined,
+  isLowerBound: boolean | null | undefined,
+  isCollected: boolean,
+  fallbackLabel = "Unavailable"
+) {
+  if (!isCollected || value === undefined || value === null) {
+    return <span className="text-muted-foreground font-normal">{fallbackLabel}</span>;
+  }
+  return isLowerBound ? `${value}+` : String(value);
+}
+
+function renderConfidenceBadge(confidence?: DataConfidence) {
+  if (!confidence) return null;
+  const label =
+    confidence === "high"
+      ? "High confidence"
+      : confidence === "medium"
+        ? "Medium confidence"
+        : "Low confidence";
+  return (
+    <Badge variant="outline" className="text-[10px] font-normal border-muted text-muted-foreground">
+      {label}
+    </Badge>
+  );
+}
+
 function ArcVerificationBadge({
   proofs,
   services,
@@ -293,6 +320,11 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
       const resp = service?.response as any;
       return resp?.assessment ?? (resp && "overallStatus" in resp ? resp : null);
     })();
+
+  const publicExecutiveSummary =
+    assessment?.overallSummary ??
+    report?.summary ??
+    "Repository analysis is unavailable.";
 
   return (
     <main className="min-h-screen bg-background">
@@ -454,9 +486,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">1. Executive Summary</h3>
                   <div className="rounded-md bg-secondary/30 p-4 text-sm leading-6">
-                    {sanitizePublicReportText(
-                      report?.summary || assessment?.overallSummary || (isDataAvailable ? "Analyzing repository activity, maintenance, documentation, and releases..." : "Repository analysis data is unavailable.")
-                    )}
+                    {sanitizePublicReportText(publicExecutiveSummary)}
                   </div>
                 </div>
 
@@ -467,7 +497,14 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                     <div className="rounded-md border p-3 sm:col-span-2">
                       <p className="text-xs text-muted-foreground">Purpose Summary</p>
                       <p className="font-semibold mt-1">
-                        {snapshot?.projectPurpose?.summary ?? (isDataAvailable ? snapshot?.repository?.description ?? "No detailed purpose summary available in repository metadata." : "Unavailable")}
+                        {(() => {
+                          const rawSummary =
+                            snapshot?.projectPurpose?.summary ??
+                            (isDataAvailable
+                              ? snapshot?.repository?.description ?? "No detailed purpose summary available in repository metadata."
+                              : "Unavailable");
+                          return sanitizePublicReportText(rawSummary.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+                        })()}
                       </p>
                     </div>
                     <div className="rounded-md border p-3">
@@ -613,7 +650,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                 {/* 4. Development Activity */}
                 <div className="border-t pt-6">
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">4. Development Activity</h3>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 text-sm">
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">Last Commit</p>
                       <p className="font-semibold mt-1">
@@ -627,31 +664,44 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">30-Day Commits</p>
                       <p className="font-semibold mt-1 text-lg">
-                        {renderMetricDisplay(snapshot?.activity?.commitCount30d, isDataAvailable)}
+                        {renderCommitCountDisplay(snapshot?.activity?.commitCount30d, snapshot?.activity?.commitCount30dIsLowerBound, isDataAvailable)}
                       </p>
                     </div>
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">90-Day Commits</p>
                       <p className="font-semibold mt-1 text-lg">
-                        {renderMetricDisplay(snapshot?.activity?.commitCount90d, isDataAvailable)}
+                        {renderCommitCountDisplay(snapshot?.activity?.commitCount90d, snapshot?.activity?.commitCount90dIsLowerBound, isDataAvailable)}
                       </p>
                     </div>
                     <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Sampled Contributors</p>
+                      <p className="text-xs text-muted-foreground">Human Maintainers</p>
                       <p className="font-semibold mt-1 text-lg">
-                        {renderMetricDisplay(snapshot?.contributors?.sampledCount, isDataAvailable)}
+                        {renderMetricDisplay(snapshot?.contributors?.sampledHumanContributorCount ?? snapshot?.contributors?.sampledCount, isDataAvailable)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Automation Accounts</p>
+                      <p className="font-semibold mt-1 text-lg">
+                        {renderMetricDisplay(snapshot?.contributors?.sampledBotContributorCount ?? 0, isDataAvailable)}
                       </p>
                     </div>
                   </div>
                   {snapshot?.contributors?.topContributors?.length ? (
                     <div className="mt-3 rounded-md border bg-secondary/10 p-3 text-xs">
-                      <p className="font-medium text-muted-foreground mb-2">
-                        Top Maintainers (Commit Share · Based on sampled contributor data)
-                      </p>
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                        <p className="font-medium text-muted-foreground">
+                          Lifetime GitHub contribution totals
+                        </p>
+                        {(snapshot.contributors.botContributionShare ?? 0) >= 0.5 ? (
+                          <Badge variant="secondary">
+                            Automation-heavy contribution history
+                          </Badge>
+                        ) : null}
+                      </div>
                       <div className="flex flex-wrap gap-2">
-                        {snapshot.contributors.topContributors.slice(0, 5).map((c) => (
+                        {snapshot.contributors.topContributors.slice(0, 8).map((c) => (
                           <Badge key={c.login} variant="secondary" className="font-mono text-xs">
-                            {c.login} ({c.contributions} commits)
+                            {c.login} ({c.contributions} commits){c.isBot ? " [bot]" : ""}
                           </Badge>
                         ))}
                       </div>
@@ -675,9 +725,12 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                           <div>
                             <div className="flex items-center justify-between gap-2 mb-2">
                               <p className="font-semibold text-sm">{title}</p>
-                              <Badge variant="outline" className={categoryStatusBadge(cat?.status).color}>
-                                {categoryStatusBadge(cat?.status).label}
-                              </Badge>
+                              <div className="flex items-center gap-1.5">
+                                {renderConfidenceBadge(cat?.confidence)}
+                                <Badge variant="outline" className={categoryStatusBadge(cat?.status).color}>
+                                  {categoryStatusBadge(cat?.status).label}
+                                </Badge>
+                              </div>
                             </div>
                             <p className="text-xs leading-5 text-muted-foreground">{cat?.summary ?? "Category evaluation pending"}</p>
                           </div>
@@ -742,9 +795,12 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                     <div className="rounded-md border p-4 text-xs">
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <p className="font-semibold text-sm">Maintenance Status Assessment</p>
-                        <Badge variant="outline" className={categoryStatusBadge(assessment.categories.maintenance.status).color}>
-                          {categoryStatusBadge(assessment.categories.maintenance.status).label}
-                        </Badge>
+                        <div className="flex items-center gap-1.5">
+                          {renderConfidenceBadge(assessment.categories.maintenance.confidence)}
+                          <Badge variant="outline" className={categoryStatusBadge(assessment.categories.maintenance.status).color}>
+                            {categoryStatusBadge(assessment.categories.maintenance.status).label}
+                          </Badge>
+                        </div>
                       </div>
                       <p className="text-muted-foreground leading-5">{assessment.categories.maintenance.summary}</p>
                     </div>

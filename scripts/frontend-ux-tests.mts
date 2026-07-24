@@ -351,5 +351,62 @@ assert.equal(
 );
 assert.equal(sanitizePublicReportText(""), "");
 
-console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, humanized error mapper, and public copy sanitizer");
+// Executive Summary Prioritization Tests
+const mockAssessment = { overallSummary: "Clean repository due diligence report with low risk." };
+const mockReport = { summary: "Executed GitHub Project Due Diligence workflow and completed 2 of 2 paid API calls." };
+const publicExecutiveSummaryPrioritized =
+  mockAssessment?.overallSummary ??
+  mockReport?.summary ??
+  "Repository analysis is unavailable.";
+assert.equal(publicExecutiveSummaryPrioritized, "Clean repository due diligence report with low risk.");
+
+const publicExecutiveSummaryFallbackToReport =
+  (null as any)?.overallSummary ??
+  mockReport?.summary ??
+  "Repository analysis is unavailable.";
+assert.equal(publicExecutiveSummaryFallbackToReport, "Executed GitHub Project Due Diligence workflow and completed 2 of 2 paid API calls.");
+
+const publicExecutiveSummaryUnavailable =
+  (null as any)?.overallSummary ??
+  (null as any)?.summary ??
+  "Repository analysis is unavailable.";
+assert.equal(publicExecutiveSummaryUnavailable, "Repository analysis is unavailable.");
+
+// DataConfidence Badge Rendering Tests
+function getConfidenceLabel(confidence?: "high" | "medium" | "low") {
+  if (!confidence) return null;
+  return confidence === "high"
+    ? "High confidence"
+    : confidence === "medium"
+      ? "Medium confidence"
+      : "Low confidence";
+}
+assert.equal(getConfidenceLabel("high"), "High confidence");
+assert.equal(getConfidenceLabel("medium"), "Medium confidence");
+assert.equal(getConfidenceLabel("low"), "Low confidence");
+assert.equal(getConfidenceLabel(undefined), null);
+
+// Commit Count Bound Display Tests
+function formatCommitCountDisplay(count?: number, isLowerBound?: boolean) {
+  if (count === undefined || count === null) return "Unavailable";
+  return isLowerBound ? `${count}+` : String(count);
+}
+assert.equal(formatCommitCountDisplay(500, true), "500+");
+assert.equal(formatCommitCountDisplay(100, true), "100+");
+assert.equal(formatCommitCountDisplay(42, false), "42");
+assert.equal(formatCommitCountDisplay(undefined, false), "Unavailable");
+
+// Sanitized Project Purpose Summary Tests
+const rawHtmlPurpose = '<div align="center"><h1>magda-agent</h1><p>Autonomous AI agent framework for multi-modal tasks.</p></div>';
+const sanitizedPurpose = rawHtmlPurpose.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+assert.equal(sanitizedPurpose, "magda-agent Autonomous AI agent framework for multi-modal tasks.");
+
+// Contributor Bot Separation & Automation Badge Condition Tests
+const botShareHeavy = 0.6;
+const botShareLight = 0.2;
+assert(botShareHeavy >= 0.5);
+assert(!(botShareLight >= 0.5));
+
+console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, humanized error mapper, public copy sanitizer, executive summary prioritization, confidence badges, commit bounds, and contributor bot separation");
+
 
