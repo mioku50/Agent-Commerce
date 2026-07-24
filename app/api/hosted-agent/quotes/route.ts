@@ -76,6 +76,57 @@ export async function POST(request: NextRequest) {
       budgetUsdc: workflowRequest.budgetUsdc,
     });
     const plan = await previewHostedWorkflow(workflowRequest);
+
+    if (plan.selectedServices.length === 0) {
+      console.error("[hosted-checkout] workflow has no available services", {
+        workflowType: workflowRequest.workflowType,
+        allowedServices: getHostedRunnerConfig()
+          .serviceAllowlist
+          .map((service) => service.slug),
+        skippedServices: plan.skippedServices.map((service) => service.slug),
+      });
+
+      return NextResponse.json(
+        {
+          error:
+            "This report is temporarily unavailable because its required services are not enabled.",
+          reason: "workflow_services_unavailable",
+        },
+        { status: 503 },
+      );
+    }
+
+    const REQUIRED_GITHUB_SERVICES = [
+      "github-repository-intelligence",
+      "github-due-diligence-analysis",
+    ] as const;
+
+    if (workflowRequest.workflowType === "github_due_diligence") {
+      const selected = new Set(
+        plan.selectedServices.map((service) => service.slug),
+      );
+
+      const missing = REQUIRED_GITHUB_SERVICES.filter(
+        (slug) => !selected.has(slug),
+      );
+
+      if (missing.length > 0) {
+        console.error("[hosted-checkout] github workflow configuration incomplete", {
+          missing,
+          selected: [...selected],
+        });
+
+        return NextResponse.json(
+          {
+            error:
+              "GitHub Project Due Diligence is temporarily unavailable because one or more required analysis services are disabled.",
+            reason: "github_workflow_incomplete",
+          },
+          { status: 503 },
+        );
+      }
+    }
+
     const result = await createHostedWorkflowQuote({
       idempotencyHash,
       requestHash,

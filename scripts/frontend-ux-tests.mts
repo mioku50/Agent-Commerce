@@ -310,6 +310,18 @@ assert.deepEqual(humanizeError("github_repository_empty"), {
   technicalCode: "github_repository_empty",
 });
 
+assert.deepEqual(humanizeError("workflow_services_unavailable"), {
+  title: "Services unavailable",
+  message: "This report is temporarily unavailable because its required services are not enabled.",
+  technicalCode: "workflow_services_unavailable",
+});
+
+assert.deepEqual(humanizeError({ reason: "github_workflow_incomplete" }), {
+  title: "Services disabled",
+  message: "GitHub Project Due Diligence is temporarily unavailable because required analysis services are disabled.",
+  technicalCode: "github_workflow_incomplete",
+});
+
 assert.deepEqual(humanizeError({ reason: "github_repository_not_found" }), {
   title: "Repository not found",
   message: "Check the repository URL or confirm that the repository is public.",

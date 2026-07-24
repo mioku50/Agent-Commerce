@@ -125,6 +125,30 @@ export function humanizeError(raw: unknown): HumanizedError {
     };
   }
 
+  if (
+    reasonCode === "workflow_services_unavailable" ||
+    messageStr.includes("workflow_services_unavailable") ||
+    messageStr.includes("required services are not enabled")
+  ) {
+    return {
+      title: "Services unavailable",
+      message: "This report is temporarily unavailable because its required services are not enabled.",
+      technicalCode: "workflow_services_unavailable",
+    };
+  }
+
+  if (
+    reasonCode === "github_workflow_incomplete" ||
+    messageStr.includes("github_workflow_incomplete") ||
+    messageStr.includes("required analysis services are disabled")
+  ) {
+    return {
+      title: "Services disabled",
+      message: "GitHub Project Due Diligence is temporarily unavailable because required analysis services are disabled.",
+      technicalCode: "github_workflow_incomplete",
+    };
+  }
+
   // Wallet already registered
   if (
     reasonCode === "wallet_already_registered" ||
