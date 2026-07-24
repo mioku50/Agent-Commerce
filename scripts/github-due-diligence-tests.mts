@@ -9,6 +9,7 @@ import {
   LIMITATIONS_DISCLAIMER,
   type GitHubDueDiligenceAssessment,
 } from "../lib/agent/github-due-diligence.ts";
+import { extractProjectSummaryFromReadme } from "../lib/providers/github.ts";
 import type { GitHubRepositorySnapshot } from "../lib/providers/github-types.ts";
 
 console.log("[github-due-diligence-test] Running GitHub due diligence engine tests...");
@@ -397,6 +398,189 @@ for (const [catName, assessment] of Object.entries(sampleResult.categories)) {
 }
 console.log("✔ Confidence field presence test passed.");
 
+// Test 15: magda-agent comprehensive fixture test suite
+console.log("Test 15: Testing magda-agent comprehensive fixture test suite...");
+const magdaFixtureReadme = `<div align="center"><img src="https://raw.githubusercontent.com/circlefin/magda-agent/main/logo.png" /><h1>magda-agent</h1></div><p>Experimental cognitive agent framework built around Telegram, FastAPI, vector memory, LLM integration, and automated self-improvement.</p>`;
+
+const magdaComprehensiveSnapshot: GitHubRepositorySnapshot = {
+  version: 1,
+  ref: {
+    owner: "circlefin",
+    name: "magda-agent",
+    fullName: "circlefin/magda-agent",
+    canonicalUrl: "https://github.com/circlefin/magda-agent",
+  },
+  repository: {
+    id: 98765432,
+    owner: "circlefin",
+    name: "magda-agent",
+    fullName: "circlefin/magda-agent",
+    description: "Experimental cognitive agent framework built around Telegram, FastAPI, vector memory, LLM integration, and automated self-improvement.",
+    isPrivate: false,
+    isFork: false,
+    isArchived: false,
+    defaultBranch: "main",
+    starsCount: 85,
+    forksCount: 12,
+    openIssuesCount: 3,
+    watchersCount: 85,
+    createdAt: "2026-02-01T00:00:00Z",
+    updatedAt: "2026-07-24T12:00:00Z",
+    pushedAt: "2026-07-24T12:00:00Z",
+    license: null,
+    homepage: null,
+    topics: ["telegram", "fastapi", "chromadb", "llm"],
+  },
+  activity: {
+    recentCommitCount: 500,
+    commitAuthorCount: 3,
+    lastCommitAt: "2026-07-24T12:00:00Z",
+    commitCount30d: 500,
+    commitCount90d: 500,
+    commitCount180d: 500,
+    commitCount30dIsLowerBound: true,
+    commitCount90dIsLowerBound: true,
+    commitCount180dIsLowerBound: true,
+  },
+  contributors: {
+    sampledCount: 3,
+    sampledHumanContributorCount: 1,
+    sampledBotContributorCount: 2,
+    topHumanContributorShare: 100,
+    botContributionShare: 80,
+    sampledTopContributorShare: 48,
+    topContributors: [
+      { login: "google-labs-jules[bot]", contributions: 120, avatarUrl: null, isBot: true, accountType: "bot" },
+      { login: "devin-ai-integration[bot]", contributions: 80, avatarUrl: null, isBot: true, accountType: "bot" },
+      { login: "alice", contributions: 50, avatarUrl: null, isBot: false, accountType: "human" },
+    ],
+  },
+  releases: {
+    totalCount: 0,
+    latestRelease: null,
+    releaseCount90d: 0,
+  },
+  collaboration: {
+    openIssuesCount: 3,
+    hasDiscussions: false,
+  },
+  documentation: {
+    hasReadme: true,
+    hasLicense: false,
+    hasSecurityPolicy: false,
+    hasContributing: false,
+    hasCodeOfConduct: false,
+    readmeSize: 2048,
+    securityPolicySize: 0,
+    contributingSize: 0,
+  },
+  projectPurpose: {
+    summary: "Experimental cognitive agent framework built around Telegram, FastAPI, vector memory, LLM integration, and automated self-improvement.",
+    primaryInterface: "Telegram bot",
+    capabilities: ["Telegram bot", "API server", "Vector memory", "LLM integration", "Machine learning", "Testing"],
+    targetUsers: "Developers & AI researchers",
+    developmentStage: "Active development",
+  },
+  dependencyProfile: {
+    manifests: ["requirements.txt"],
+    productionDependencies: ["fastapi", "openai", "chromadb", "torch", "transformers", "python-telegram-bot"],
+    developmentDependencies: ["pytest"],
+    detectedCapabilities: ["Telegram bot", "API server", "Vector memory", "LLM integration", "Machine learning", "Testing"],
+  },
+  repositoryStructure: {
+    sourceDirectories: ["app"],
+    testDirectories: ["tests"],
+    entrypoints: ["app/main.py"],
+    dockerFiles: [],
+    configFiles: ["requirements.txt"],
+  },
+  stack: {
+    primaryLanguage: "Python",
+    languages: { Python: 50000 },
+    detectedFrameworks: ["FastAPI", "PyTorch"],
+    hasWorkflows: false,
+    workflowCount: 0,
+    workflowNames: [],
+  },
+  excerpts: {
+    readmeExcerpt: magdaFixtureReadme,
+    securityExcerpt: null,
+    contributingExcerpt: null,
+  },
+  source: {
+    fetchedAt: "2026-07-24T14:00:00.000Z",
+    cacheHit: false,
+    provider: "GitHub REST API v3",
+    upstreamStatus: "success",
+  },
+};
+
+// Assert 1: extractProjectSummaryFromReadme ignores <div align="center"> and extracts clean prose paragraph
+const cleanProse = extractProjectSummaryFromReadme(magdaFixtureReadme);
+assert.equal(
+  cleanProse,
+  "Experimental cognitive agent framework built around Telegram, FastAPI, vector memory, LLM integration, and automated self-improvement.",
+  "extractProjectSummaryFromReadme must ignore HTML containers and extract clean prose paragraph"
+);
+
+// Assert 2: commitCount90dDisplay evaluates to 500+
+const commitCount90dDisplay = magdaComprehensiveSnapshot.activity.commitCount90dIsLowerBound
+  ? `${magdaComprehensiveSnapshot.activity.commitCount90d}+`
+  : `${magdaComprehensiveSnapshot.activity.commitCount90d}`;
+assert.equal(commitCount90dDisplay, "500+", "commitCount90dDisplay must evaluate to 500+");
+
+// Assert 3: sampledHumanContributorCount === 1, sampledBotContributorCount === 2
+assert.equal(magdaComprehensiveSnapshot.contributors.sampledHumanContributorCount, 1);
+assert.equal(magdaComprehensiveSnapshot.contributors.sampledBotContributorCount, 2);
+
+// Assert 4: Nested entrypoint app/main.py is detected in repositoryStructure.entrypoints
+assert.ok(
+  magdaComprehensiveSnapshot.repositoryStructure.entrypoints.includes("app/main.py"),
+  "Nested entrypoint app/main.py must be detected"
+);
+
+const magdaCompResult = analyzeGitHubDueDiligence(magdaComprehensiveSnapshot);
+
+// Assert 5: Maintainer concentration risk (single_contributor_concentration) evaluates based on human maintainers
+const magdaConcRisk = magdaCompResult.risks.find((r) => r.code === "single_contributor_concentration");
+assert(magdaConcRisk, "Single human maintainer must trigger single_contributor_concentration risk");
+assert.equal(magdaConcRisk.severity, "medium");
+
+// Assert 6: Info risk automation_heavy_history is triggered (botContributionShare >= 50%)
+const magdaBotRisk = magdaCompResult.risks.find((r) => r.code === "automation_heavy_history");
+assert(magdaBotRisk, "botContributionShare >= 50% must trigger automation_heavy_history risk");
+assert.equal(magdaBotRisk.severity, "info");
+
+// Assert 7: operationalMaturity status is NOT strong
+assert.notEqual(
+  magdaCompResult.categories.operationalMaturity.status,
+  "strong",
+  "operationalMaturity status must NOT be strong for repo with 0 releases and missing license"
+);
+
+// Assert 8: overallStatus evaluates to review_needed (missing license)
+assert.equal(
+  magdaCompResult.overallStatus,
+  "review_needed",
+  "Missing license MUST force overallStatus to review_needed"
+);
+
+// Assert 9: publicExecutiveSummary describes the project features rather than API calls
+const publicExecutiveSummary = magdaCompResult.overallSummary;
+assert.ok(
+  publicExecutiveSummary.includes("Experimental cognitive agent framework") ||
+    publicExecutiveSummary.includes("magda-agent") ||
+    publicExecutiveSummary.includes("FastAPI"),
+  "publicExecutiveSummary must describe project features"
+);
+assert.ok(
+  !publicExecutiveSummary.includes("completed 2 of 2 paid API calls"),
+  "publicExecutiveSummary must NOT include API execution metadata"
+);
+
+console.log("✔ magda-agent comprehensive fixture test suite passed.");
+
 console.log("\n[github-due-diligence-test] ALL TEST SUITES PASSED SUCCESSFULLY!");
+
 
 

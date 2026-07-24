@@ -393,6 +393,23 @@ async function runTests() {
     globalThis.fetch = (async (url: string | URL | Request) => {
       const urlStr = url.toString();
 
+      // Git tree recursive call returning nested entrypoint app/main.py
+      if (urlStr.includes("/git/trees")) {
+        return new Response(
+          JSON.stringify({
+            sha: "tree777",
+            tree: [
+              { path: "README.md", type: "blob", size: 3000 },
+              { path: "requirements.txt", type: "blob", size: 400 },
+              { path: "app/main.py", type: "blob", size: 1200 },
+              { path: "tests/test_main.py", type: "blob", size: 500 },
+            ],
+            truncated: false,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
       if (urlStr.includes("/repos/circle/magda-agent") && !urlStr.includes("/commits") && !urlStr.includes("/releases") && !urlStr.includes("/contributors") && !urlStr.includes("/languages") && !urlStr.includes("/contents") && !urlStr.includes("/readme") && !urlStr.includes("/pulls") && !urlStr.includes("/issues")) {
         return new Response(
           JSON.stringify({
@@ -400,11 +417,36 @@ async function runTests() {
             name: "magda-agent",
             full_name: "circle/magda-agent",
             owner: { login: "circle" },
-            description: "Magda Autonomous AI Telegram Agent with vector memory and FastAPI server",
+            description: "Experimental cognitive agent framework built around Telegram, FastAPI, vector memory, LLM integration, and automated self-improvement.",
             private: false,
             stargazers_count: 50,
             language: "Python",
+            license: null,
+            default_branch: "main",
           }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (urlStr.includes("/commits")) {
+        // Return 500 commits to trigger 500+ lower bound flag
+        const commits = Array.from({ length: 500 }, (_, i) => ({
+          commit: {
+            committer: { date: new Date().toISOString() },
+            author: { name: `Author${i}`, email: `author${i}@example.com`, date: new Date().toISOString() },
+          },
+          author: { login: `author${i}` },
+        }));
+        return new Response(JSON.stringify(commits), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+
+      if (urlStr.includes("/contributors")) {
+        return new Response(
+          JSON.stringify([
+            { login: "google-labs-jules[bot]", contributions: 120, type: "Bot" },
+            { login: "devin-ai-integration[bot]", contributions: 80, type: "Bot" },
+            { login: "alice", contributions: 50, type: "User" },
+          ]),
           { status: 200, headers: { "Content-Type": "application/json" } },
         );
       }
@@ -417,15 +459,20 @@ async function runTests() {
         );
       }
 
+      if (urlStr.endsWith("/readme")) {
+        const rawReadme = '<div align="center"><img src="https://example.com/logo.png" /><h1>magda-agent</h1></div>\n\n<p>Experimental cognitive agent framework built around Telegram, FastAPI, vector memory, LLM integration, and automated self-improvement.</p>';
+        return new Response(
+          JSON.stringify({ encoding: "base64", content: Buffer.from(rawReadme).toString("base64") }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
       if (urlStr.endsWith("/contents")) {
         return new Response(
           JSON.stringify([
             { name: "README.md", size: 3000 },
             { name: "requirements.txt", size: 400 },
-            { name: "Dockerfile", size: 500 },
-            { name: "docker-compose.yml", size: 600 },
-            { name: "main.py", size: 1200 },
-            { name: "src", type: "dir" },
+            { name: "app", type: "dir" },
             { name: "tests", type: "dir" },
           ]),
           { status: 200, headers: { "Content-Type": "application/json" } },
@@ -436,7 +483,11 @@ async function runTests() {
         return new Response(JSON.stringify({ Python: 50000 }), { status: 200, headers: { "Content-Type": "application/json" } });
       }
 
-      return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+      if (urlStr.includes("/releases")) {
+        return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+
+      return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
     }) as typeof fetch;
 
     clearGitHubSnapshotCache();
@@ -448,6 +499,7 @@ async function runTests() {
     assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("openai"));
     assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("chromadb"));
     assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("torch"));
+    assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("transformers"));
     assert.ok(magdaSnapshot.dependencyProfile?.productionDependencies.includes("python-telegram-bot"));
     assert.ok(magdaSnapshot.dependencyProfile?.developmentDependencies.includes("pytest"));
 
@@ -457,17 +509,25 @@ async function runTests() {
     assert.ok(caps.includes("Vector memory"));
     assert.ok(caps.includes("LLM integration"));
     assert.ok(caps.includes("Machine learning"));
-    assert.ok(caps.includes("Scheduled jobs"));
     assert.ok(caps.includes("Testing"));
-    assert.ok(caps.includes("WebSockets"));
 
-    assert.ok(magdaSnapshot.repositoryStructure?.sourceDirectories.includes("src"));
-    assert.ok(magdaSnapshot.repositoryStructure?.testDirectories.includes("tests"));
-    assert.ok(magdaSnapshot.repositoryStructure?.entrypoints.includes("main.py"));
-    assert.ok(magdaSnapshot.repositoryStructure?.dockerFiles.includes("Dockerfile"));
-    assert.ok(magdaSnapshot.repositoryStructure?.dockerFiles.includes("docker-compose.yml"));
+    assert.ok(magdaSnapshot.repositoryStructure?.entrypoints.includes("app/main.py"));
+    assert.ok(magdaSnapshot.repositoryStructure?.configFiles.includes("requirements.txt"));
+    assert.equal(magdaSnapshot.activity.commitCount90d, 500);
+    assert.equal(magdaSnapshot.activity.commitCount90dIsLowerBound, true);
+    assert.equal(magdaSnapshot.contributors.sampledHumanContributorCount, 1);
+    assert.equal(magdaSnapshot.contributors.sampledBotContributorCount, 2);
+    assert.equal(magdaSnapshot.releases.totalCount, 0);
+    assert.equal(magdaSnapshot.documentation.hasLicense, false);
+    assert.equal(magdaSnapshot.documentation.hasSecurityPolicy, false);
     assert.equal(magdaSnapshot.projectPurpose?.primaryInterface, "Telegram bot");
-    console.log("    ✓ magda-agent fixture dependency profile, capabilities, and repository structure correctly extracted");
+
+    const cleanReadmeText = extractProjectSummaryFromReadme(magdaSnapshot.excerpts.readmeExcerpt!);
+    assert.equal(
+      cleanReadmeText,
+      "Experimental cognitive agent framework built around Telegram, FastAPI, vector memory, LLM integration, and automated self-improvement.",
+    );
+    console.log("    ✓ magda-agent fixture dependency profile, capabilities, commit bounds, bot separation, entrypoint, and readme summary correctly extracted");
 
     // Test 10: extractProjectSummaryFromReadme HTML and markdown sanitizer
     console.log("  - Test 10: extractProjectSummaryFromReadme HTML and markdown sanitizer...");

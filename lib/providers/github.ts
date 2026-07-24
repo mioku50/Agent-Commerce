@@ -389,11 +389,12 @@ async function fetchWindowCommits(
 export function extractProjectSummaryFromReadme(readme: string): string | null {
   if (!readme || typeof readme !== "string") return null;
 
-  // 1. Remove HTML comments, style, script, and HTML tags (<div ...>, <picture ...>, <img>, <a>, <span>, etc.)
+  // 1. Remove HTML comments, style, script, convert block tags to paragraph breaks, and strip remaining tags
   let text = readme
     .replace(/<!--[\s\S]*?-->/g, "")
     .replace(/<style[\s\S]*?<\/style>/gi, "")
     .replace(/<script[\s\S]*?<\/script>/gi, "")
+    .replace(/<\/?(div|p|h[1-6]|section|header|article|blockquote|picture|table|tr|td|li|ul|ol)[^>]*>/gi, "\n\n")
     .replace(/<[^>]+>/g, " ");
 
   // 2. Remove code blocks
