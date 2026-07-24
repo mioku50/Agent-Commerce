@@ -220,30 +220,6 @@ export async function authenticateMachineRequest(
     };
   }
 
-  // Check Daily Call Limit
-  const todayStartIso =
-    new Date().toISOString().slice(0, 10) + "T00:00:00.000Z";
-  const { count: dailyCallCount, error: countError } = await client
-    .from("byoa_workflow_quotes")
-    .select("id", { count: "exact", head: true })
-    .eq("agent_id", agent.id)
-    .gte("created_at", todayStartIso);
-
-  if (
-    !countError &&
-    dailyCallCount !== null &&
-    dailyCallCount >= policy.max_daily_calls
-  ) {
-    return {
-      ok: false,
-      response: createMachineErrorResponse(
-        "spending_limit_exceeded",
-        `Daily API call limit of ${policy.max_daily_calls} calls exceeded for this credential policy.`,
-        429,
-      ),
-    };
-  }
-
   // Touch last_used_at asynchronously
   client
     .from("byoa_agent_credentials")
@@ -264,4 +240,95 @@ export async function authenticateMachineRequest(
       allowedWorkflows,
     },
   };
+}
+
+export async function enforceQuoteCreationPolicy(
+  context: MachineAuthContext,
+): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  const client = getByoaClient();
+  const todayStartIso =
+    new Date().toISOString().slice(0, 10) + "T00:00:00.000Z";
+  const { count: dailyCallCount, error: countError } = await client
+    .from("byoa_workflow_quotes")
+    .select("id", { count: "exact", head: true })
+    .eq("agent_id", context.agentId)
+    .gte("created_at", todayStartIso);
+
+  if (
+    !countError &&
+    dailyCallCount !== null &&
+    dailyCallCount >= context.spendingPolicy.max_daily_calls
+  ) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "spending_limit_exceeded",
+        `Daily API call limit of ${context.spendingPolicy.max_daily_calls} calls exceeded for this credential policy.`,
+        429,
+      ),
+    };
+  }
+
+  return { ok: true };
+}
+
+export async function enforceRunCreationPolicy(
+  context: MachineAuthContext,
+): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  const client = getByoaClient();
+  const todayStartIso =
+    new Date().toISOString().slice(0, 10) + "T00:00:00.000Z";
+  const { count: dailyCallCount, error: countError } = await client
+    .from("byoa_workflow_quotes")
+    .select("id", { count: "exact", head: true })
+    .eq("agent_id", context.agentId)
+    .gte("created_at", todayStartIso);
+
+  if (
+    !countError &&
+    dailyCallCount !== null &&
+    dailyCallCount >= context.spendingPolicy.max_daily_calls
+  ) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "spending_limit_exceeded",
+        `Daily API call limit of ${context.spendingPolicy.max_daily_calls} calls exceeded for this credential policy.`,
+        429,
+      ),
+    };
+  }
+
+  return { ok: true };
+}
+
+const readRateLimitStore = new Map<string, { count: number; windowStart: number }>();
+
+export async function enforceReadRateLimit(
+  context: MachineAuthContext,
+  maxPerMinute = 120,
+): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  const now = Date.now();
+  const key = context.agentId;
+  const entry = readRateLimitStore.get(key);
+
+  if (!entry || now - entry.windowStart > 60000) {
+    readRateLimitStore.set(key, { count: 1, windowStart: now });
+    return { ok: true };
+  }
+
+  if (entry.count >= maxPerMinute) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "rate_limited",
+        "Read rate limit exceeded. Please retry after 1 minute.",
+        429,
+        true,
+      ),
+    };
+  }
+
+  entry.count += 1;
+  return { ok: true };
 }

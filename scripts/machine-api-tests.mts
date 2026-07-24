@@ -18,6 +18,7 @@ import {
   setMachineIdempotencyClientForTesting,
 } from "../lib/api/machine-idempotency.ts";
 import { hashHostedWorkflowInput } from "../lib/agent/hosted-workflows.ts";
+import { handleMachineInternalError } from "../lib/api/machine-errors.ts";
 import { GET as workflowsGET } from "../app/api/agent/v1/workflows/route.ts";
 import { POST as quotesPOST } from "../app/api/agent/v1/quotes/route.ts";
 import { POST as runsPOST } from "../app/api/agent/v1/runs/route.ts";
@@ -669,7 +670,7 @@ async function testWorkflowsEndpoint() {
 console.log("-> Testing POST /api/agent/v1/quotes...");
 
 async function testQuotesEndpoint() {
-  // Test 1: Missing Idempotency-Key Header -> 400 credential_missing
+  // Test 1: Missing Idempotency-Key Header -> 400 idempotency_key_missing
   {
     const req = new NextRequest("http://localhost:3000/api/agent/v1/quotes", {
       method: "POST",
@@ -685,7 +686,7 @@ async function testQuotesEndpoint() {
     const res = await quotesPOST(req);
     assert.equal(res.status, 400);
     const json = await res.json();
-    assert.equal(json.error.code, "credential_missing");
+    assert.equal(json.error.code, "idempotency_key_missing");
     assert.equal(json.error.message, "Missing required Idempotency-Key header.");
   }
 
@@ -793,7 +794,7 @@ async function testQuotesEndpoint() {
 console.log("-> Testing POST /api/agent/v1/runs...");
 
 async function testRunsPostEndpoint() {
-  // Test 1: Missing Idempotency-Key Header -> 400 credential_missing
+  // Test 1: Missing Idempotency-Key Header -> 400 idempotency_key_missing
   {
     const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
       method: "POST",
@@ -806,7 +807,7 @@ async function testRunsPostEndpoint() {
     const res = await runsPOST(req);
     assert.equal(res.status, 400);
     const json = await res.json();
-    assert.equal(json.error.code, "credential_missing");
+    assert.equal(json.error.code, "idempotency_key_missing");
   }
 
   // Test 2: Non-existent Quote -> 404 quote_not_found
@@ -1183,18 +1184,57 @@ async function testReportByIdGetEndpoint() {
 console.log("-> Testing Spending Limit & Rate Policy...");
 
 async function testSpendingLimit() {
-  // Exceed daily call limit
+  // Exceed daily creation call limit
   mockDailyCallCount = 100;
   try {
-    const req = new NextRequest("http://localhost:3000/api/agent/v1/workflows", {
+    // 1. Read operations MUST NOT be blocked by exhausted creation limit
+    const wfReq = new NextRequest("http://localhost:3000/api/agent/v1/workflows", {
       method: "GET",
       headers: { Authorization: `Bearer ${fullCred.token}` },
     });
-    const res = await workflowsGET(req);
-    assert.equal(res.status, 429);
-    const json = await res.json();
-    assert.equal(json.error.code, "spending_limit_exceeded");
-    assert.match(json.error.message, /Daily API call limit/i);
+    const wfRes = await workflowsGET(wfReq);
+    assert.equal(wfRes.status, 200, "GET /workflows must NOT be blocked by daily creation limit");
+
+    const runPollReq = new NextRequest("http://localhost:3000/api/agent/v1/runs/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ runId: "job-existing-1" });
+    const runPollRes = await runByIdGET(runPollReq, { params });
+    assert.equal(runPollRes.status, 200, "Polling GET /runs/[runId] must NOT be blocked by daily creation limit");
+
+    // 2. Mutation / creation operations MUST be blocked by daily limit
+    const quoteReq = new NextRequest("http://localhost:3000/api/agent/v1/quotes", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": `ik-limit-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workflow: "github_due_diligence",
+        input: { repository: "circlefin/agent-commerce" },
+      }),
+    });
+    const quoteRes = await quotesPOST(quoteReq);
+    assert.equal(quoteRes.status, 429);
+    const quoteJson = await quoteRes.json();
+    assert.equal(quoteJson.error.code, "spending_limit_exceeded");
+    assert.match(quoteJson.error.message, /Daily API call limit/i);
+
+    const runReq = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": `ik-limit-run-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ quoteId: "quote-sponsored-1" }),
+    });
+    const runRes = await runsPOST(runReq);
+    assert.equal(runRes.status, 429);
+    const runJson = await runRes.json();
+    assert.equal(runJson.error.code, "spending_limit_exceeded");
   } finally {
     mockDailyCallCount = 0;
   }
@@ -1202,7 +1242,37 @@ async function testSpendingLimit() {
   console.log("✔ Spending Limit & Rate Policy tests passed.");
 }
 
-// --- Section 9: OpenAPI 3.0.3 Spec Validation ---
+// --- Section 9: Production 500 Error Sanitization Test ---
+console.log("-> Testing Production 500 Error Sanitization...");
+
+async function testSanitizedInternalError() {
+  const sensitiveError = new Error("FATAL: postgres password leak at secret_db_host:5432 / var/lib/db.key");
+  const response = handleMachineInternalError(
+    sensitiveError,
+    "/api/agent/v1/quotes",
+    "agent-1",
+    "req_test_123",
+  );
+
+  assert.equal(response.status, 500);
+  assert.equal(response.headers.get("X-Request-Id"), "req_test_123");
+
+  const text = await response.text();
+  const json = JSON.parse(text);
+
+  assert.equal(json.error.code, "internal_error");
+  assert.equal(json.error.message, "The request could not be completed.");
+  assert.equal(json.error.retryable, true);
+  assert.equal(json.error.requestId, "req_test_123");
+
+  assert(!text.includes("postgres"), "Response body must not leak 'postgres'");
+  assert(!text.includes("secret_db_host"), "Response body must not leak host sensitive info");
+  assert(!text.includes("db.key"), "Response body must not leak key path info");
+
+  console.log("✔ Production 500 Error Sanitization tests passed.");
+}
+
+// --- Section 10: OpenAPI 3.0.3 Spec Validation ---
 console.log("-> Testing OpenAPI 3.0.3 Spec Validation...");
 
 async function testOpenApiSchema() {
@@ -1246,6 +1316,7 @@ async function runSuite() {
   await testRunByIdGetEndpoint();
   await testReportByIdGetEndpoint();
   await testSpendingLimit();
+  await testSanitizedInternalError();
   await testOpenApiSchema();
   console.log("✅ All Machine API v1 tests passed successfully!");
 }

@@ -17,13 +17,16 @@ export type MachineErrorCode =
   | "quote_expired"
   | "quote_not_found"
   | "quote_already_used"
+  | "idempotency_key_missing"
   | "idempotency_conflict"
+  | "invalid_request"
   | "payment_required"
   | "payment_invalid"
   | "spending_limit_exceeded"
   | "run_not_found"
   | "report_not_found"
   | "report_not_ready"
+  | "verification_pending"
   | "provider_unavailable"
   | "rate_limited"
   | "internal_error";
@@ -75,6 +78,41 @@ export function createMachineErrorResponse(
     },
     {
       status,
+      headers: {
+        "Content-Type": "application/json",
+        "X-Request-Id": reqId,
+      },
+    },
+  );
+}
+
+export function handleMachineInternalError(
+  err: unknown,
+  route: string,
+  agentId?: string,
+  requestId?: string,
+): NextResponse<MachineErrorResponseBody> {
+  const reqId = requestId || generateRequestId();
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  const stack = err instanceof Error ? err.stack : undefined;
+
+  console.error(
+    `[MachineAPI][500] route=${route} agentId=${agentId || "unknown"} requestId=${reqId}:`,
+    errorMessage,
+    stack ? `\nStack: ${stack}` : "",
+  );
+
+  return NextResponse.json(
+    {
+      error: {
+        code: "internal_error",
+        message: "The request could not be completed.",
+        retryable: true,
+        requestId: reqId,
+      },
+    },
+    {
+      status: 500,
       headers: {
         "Content-Type": "application/json",
         "X-Request-Id": reqId,

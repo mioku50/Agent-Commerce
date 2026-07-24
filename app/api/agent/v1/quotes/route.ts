@@ -5,8 +5,14 @@
 
 import { NextRequest, NextResponse } from "next/server.js";
 import { type Address } from "viem";
-import { authenticateMachineRequest } from "../../../../../lib/api/machine-auth.ts";
-import { createMachineErrorResponse } from "../../../../../lib/api/machine-errors.ts";
+import {
+  authenticateMachineRequest,
+  enforceQuoteCreationPolicy,
+} from "../../../../../lib/api/machine-auth.ts";
+import {
+  createMachineErrorResponse,
+  handleMachineInternalError,
+} from "../../../../../lib/api/machine-errors.ts";
 import {
   resolveMachineIdempotency,
   saveMachineIdempotency,
@@ -45,13 +51,18 @@ export async function POST(request: NextRequest) {
   }
   const { context } = authResult;
 
+  const policyResult = await enforceQuoteCreationPolicy(context);
+  if (!policyResult.ok) {
+    return policyResult.response;
+  }
+
   const idempotencyKey =
     request.headers.get("idempotency-key") ||
     request.headers.get("Idempotency-Key");
 
   if (!idempotencyKey || !idempotencyKey.trim()) {
     return createMachineErrorResponse(
-      "credential_missing",
+      "idempotency_key_missing",
       "Missing required Idempotency-Key header.",
       400,
     );
@@ -287,11 +298,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    console.error("[quotes/route] Internal Error:", error);
-    return createMachineErrorResponse(
-      "internal_error",
-      error instanceof Error ? error.message : "Failed to create quote.",
-      500,
+    return handleMachineInternalError(
+      error,
+      "/api/agent/v1/quotes",
+      context.agentId,
     );
   }
 }

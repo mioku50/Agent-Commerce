@@ -4,8 +4,14 @@
  */
 
 import { after, NextRequest, NextResponse } from "next/server.js";
-import { authenticateMachineRequest } from "../../../../../lib/api/machine-auth.ts";
-import { createMachineErrorResponse } from "../../../../../lib/api/machine-errors.ts";
+import {
+  authenticateMachineRequest,
+  enforceRunCreationPolicy,
+} from "../../../../../lib/api/machine-auth.ts";
+import {
+  createMachineErrorResponse,
+  handleMachineInternalError,
+} from "../../../../../lib/api/machine-errors.ts";
 import {
   resolveMachineIdempotency,
   saveMachineIdempotency,
@@ -37,13 +43,18 @@ export async function POST(request: NextRequest) {
   }
   const { context } = authResult;
 
+  const policyResult = await enforceRunCreationPolicy(context);
+  if (!policyResult.ok) {
+    return policyResult.response;
+  }
+
   const idempotencyKey =
     request.headers.get("idempotency-key") ||
     request.headers.get("Idempotency-Key");
 
   if (!idempotencyKey || !idempotencyKey.trim()) {
     return createMachineErrorResponse(
-      "credential_missing",
+      "idempotency_key_missing",
       "Missing required Idempotency-Key header.",
       400,
     );
@@ -376,6 +387,10 @@ export async function POST(request: NextRequest) {
     ) {
       return createMachineErrorResponse("payment_invalid", msg, 400);
     }
-    return createMachineErrorResponse("internal_error", msg, 500);
+    return handleMachineInternalError(
+      error,
+      "/api/agent/v1/runs",
+      context.agentId,
+    );
   }
 }
