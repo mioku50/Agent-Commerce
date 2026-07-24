@@ -104,11 +104,17 @@ export type HostedLaunchResult = {
 
 let hostedClient: SupabaseClient | null = null;
 
+export function setHostedClientForTesting(client: SupabaseClient | null) {
+  hostedClient = client;
+}
+
 function getHostedClient() {
-  const config = getServerSupabaseConfig();
-  hostedClient ??= createClient(config.url, config.key, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  if (!hostedClient) {
+    const config = getServerSupabaseConfig();
+    hostedClient = createClient(config.url, config.key, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+  }
   return hostedClient;
 }
 

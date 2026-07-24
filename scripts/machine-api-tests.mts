@@ -13,8 +13,11 @@ import {
   saveMachineIdempotency,
   clearMachineIdempotencyStore,
 } from "../lib/api/machine-idempotency.ts";
+import { hashHostedWorkflowInput } from "../lib/agent/hosted-workflows.ts";
 import { GET as workflowsGET } from "../app/api/agent/v1/workflows/route.ts";
 import { POST as quotesPOST } from "../app/api/agent/v1/quotes/route.ts";
+import { POST as runsPOST } from "../app/api/agent/v1/runs/route.ts";
+import { GET as runByIdGET } from "../app/api/agent/v1/runs/[runId]/route.ts";
 
 console.log("[machine-api-tests] Running Machine API v1 tests...");
 
@@ -143,9 +146,173 @@ const mockPolicy = {
 };
 
 const mockQuotesStore = new Map<string, any>();
+const mockJobsStore = new Map<string, any>();
+
+// Seed Fixture Quotes
+const fixtureSponsoredQuote = {
+  id: "quote-sponsored-1",
+  idempotency_hash: "idempotency_hash_sponsored_1",
+  request_hash: "request_hash_sponsored_1",
+  requester_fingerprint: "fingerprint_1",
+  requester_wallet: mockAgent.owner_wallet,
+  workflow_type: "github_due_diligence",
+  task: "Run GitHub due diligence on circlefin/agent-commerce",
+  input_preview: "circlefin/agent-commerce",
+  input_hash: hashHostedWorkflowInput("https://github.com/circlefin/agent-commerce"),
+  budget_usdc: "0.002",
+  planner_snapshot: {
+    workflowType: "github_due_diligence",
+    repository: {
+      owner: "circlefin",
+      name: "agent-commerce",
+      fullName: "circlefin/agent-commerce",
+      canonicalUrl: "https://github.com/circlefin/agent-commerce",
+    },
+    selectedServices: [
+      { slug: "github_repo_info", priceUsdc: "0.001" },
+      { slug: "github_activity", priceUsdc: "0.001" },
+    ],
+  },
+  selected_services: [
+    { slug: "github_repo_info", priceUsdc: "0.001" },
+    { slug: "github_activity", priceUsdc: "0.001" },
+  ],
+  payment_mode: "sponsored",
+  amount_due_usdc: "0",
+  status: "quoted",
+  expires_at: "2099-01-01T00:00:00.000Z",
+  created_at: "2026-01-01T00:00:00.000Z",
+};
+
+const fixturePaidQuote = {
+  ...fixtureSponsoredQuote,
+  id: "quote-paid-1",
+  idempotency_hash: "idempotency_hash_paid_1",
+  request_hash: "request_hash_paid_1",
+  payment_mode: "paid",
+  amount_due_usdc: "0.002",
+};
+
+const fixtureExpiredQuote = {
+  ...fixtureSponsoredQuote,
+  id: "quote-expired-1",
+  idempotency_hash: "idempotency_hash_expired_1",
+  request_hash: "request_hash_expired_1",
+  status: "expired",
+  expires_at: "2020-01-01T00:00:00.000Z",
+};
+
+const fixtureConsumedQuote = {
+  ...fixtureSponsoredQuote,
+  id: "quote-consumed-1",
+  idempotency_hash: "idempotency_hash_consumed_1",
+  request_hash: "request_hash_consumed_1",
+  status: "consumed",
+  job_id: "job-existing-1",
+};
+
+mockQuotesStore.set("quote-sponsored-1", fixtureSponsoredQuote);
+mockQuotesStore.set("quote-paid-1", fixturePaidQuote);
+mockQuotesStore.set("quote-expired-1", fixtureExpiredQuote);
+mockQuotesStore.set("quote-consumed-1", fixtureConsumedQuote);
+mockQuotesStore.set("idempotency_hash_sponsored_1", fixtureSponsoredQuote);
+mockQuotesStore.set("idempotency_hash_paid_1", fixturePaidQuote);
+mockQuotesStore.set("idempotency_hash_expired_1", fixtureExpiredQuote);
+mockQuotesStore.set("idempotency_hash_consumed_1", fixtureConsumedQuote);
+
+// Seed Fixture Jobs
+const fixtureCompletedJob = {
+  id: "job-existing-1",
+  byoa_agent_id: "agent-1",
+  requester_wallet: mockAgent.owner_wallet,
+  workflow_type: "github_due_diligence",
+  task: "Run GitHub due diligence",
+  input_preview: "circlefin/agent-commerce",
+  input_hash: hashHostedWorkflowInput("https://github.com/circlefin/agent-commerce"),
+  budget_usdc: "0.002",
+  status: "completed",
+  progress_stage: "completed",
+  spent_usdc: "0.002",
+  selected_services: [
+    { slug: "github_repo_info", priceUsdc: "0.001" },
+    { slug: "github_activity", priceUsdc: "0.001" },
+  ],
+  receipt_ids: ["rcpt-1", "rcpt-2"],
+  proof_transaction_hashes: ["0xproof1", "0xproof2"],
+  structured_result: {
+    summary: "High quality repository with clear structure.",
+    completedWithWarnings: false,
+  },
+  created_at: "2026-01-01T00:00:00.000Z",
+  completed_at: "2026-01-01T00:01:00.000Z",
+};
+
+const fixtureOtherAgentJob = {
+  ...fixtureCompletedJob,
+  id: "job-other-agent",
+  byoa_agent_id: "agent-other-99",
+  requester_wallet: getAddress("0x9999999999999999999999999999999999999999"),
+};
+
+mockJobsStore.set("job-existing-1", fixtureCompletedJob);
+mockJobsStore.set("job-other-agent", fixtureOtherAgentJob);
 
 function createMockSupabaseClient(): any {
   return {
+    rpc(fnName: string, args: any) {
+      if (fnName === "launch_hosted_workflow_checkout_v1") {
+        const quote = mockQuotesStore.get(args.p_quote_id);
+        if (!quote) {
+          return Promise.resolve({
+            data: [{ job_id: null, user_payment_id: null, created: false, reason: "quote_not_found", retry_after_seconds: 0 }],
+            error: null,
+          });
+        }
+        if (quote.status === "expired" || Date.parse(quote.expires_at) <= Date.now()) {
+          return Promise.resolve({
+            data: [{ job_id: null, user_payment_id: null, created: false, reason: "quote_expired", retry_after_seconds: 0 }],
+            error: null,
+          });
+        }
+        if (quote.status === "consumed" || quote.job_id != null) {
+          return Promise.resolve({
+            data: [{ job_id: quote.job_id, user_payment_id: "pay-existing", created: false, reason: "idempotent", retry_after_seconds: 0 }],
+            error: null,
+          });
+        }
+
+        const newJobId = `job-new-${Date.now()}`;
+        const newJob = {
+          id: newJobId,
+          byoa_agent_id: "agent-1",
+          requester_wallet: quote.requester_wallet,
+          workflow_type: quote.workflow_type,
+          task: quote.task,
+          input_preview: quote.input_preview,
+          input_hash: quote.input_hash,
+          budget_usdc: quote.budget_usdc,
+          planner_snapshot: quote.planner_snapshot,
+          selected_services: quote.selected_services,
+          status: "queued",
+          progress_stage: "queued",
+          spent_usdc: "0",
+          created_at: new Date().toISOString(),
+          workflow_quote_id: quote.id,
+          payment_mode: quote.payment_mode,
+        };
+
+        mockJobsStore.set(newJobId, newJob);
+        quote.status = "consumed";
+        quote.job_id = newJobId;
+
+        return Promise.resolve({
+          data: [{ job_id: newJobId, user_payment_id: `pay-${newJobId}`, created: true, reason: "created", retry_after_seconds: 0 }],
+          error: null,
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    },
+
     from(tableName: string) {
       let filterEqField: string | null = null;
       let filterEqVal: any = null;
@@ -191,14 +358,30 @@ function createMockSupabaseClient(): any {
             const row = mockQuotesStore.get(filterEqVal);
             return { data: row || null, error: null };
           }
+          if (tableName === "hosted_agent_jobs") {
+            const row = mockJobsStore.get(filterEqVal);
+            return { data: row || null, error: null };
+          }
           return { data: null, error: null };
         },
         async single() {
           return chain.maybeSingle();
         },
-        update() {
+        update(updateVal: any) {
+          if (tableName === "hosted_agent_jobs" && filterEqVal) {
+            const existing = mockJobsStore.get(filterEqVal);
+            if (existing) {
+              mockJobsStore.set(filterEqVal, { ...existing, ...updateVal });
+            }
+          }
           return {
-            eq() {
+            eq(f: string, v: any) {
+              if (tableName === "hosted_agent_jobs" && v) {
+                const existing = mockJobsStore.get(v);
+                if (existing) {
+                  mockJobsStore.set(v, { ...existing, ...updateVal });
+                }
+              }
               return Promise.resolve({ data: null, error: null });
             },
           };
@@ -212,6 +395,7 @@ function createMockSupabaseClient(): any {
               created_at: new Date().toISOString(),
             };
             mockQuotesStore.set(row.idempotency_hash, storedRow);
+            mockQuotesStore.set(id, storedRow);
             const res = { data: storedRow, error: null };
             return {
               ...res,
@@ -243,10 +427,12 @@ function createMockSupabaseClient(): any {
 }
 
 import { setCheckoutClientForTesting } from "../lib/commerce/workflow-checkout.ts";
+import { setHostedClientForTesting } from "../lib/agent/hosted-jobs.ts";
 
 const mockClient = createMockSupabaseClient();
 setByoaClientForTesting(mockClient);
 setCheckoutClientForTesting(mockClient);
+setHostedClientForTesting(mockClient);
 
 // --- Section 3: Endpoint Tests for GET /api/agent/v1/workflows ---
 console.log("-> Testing GET /api/agent/v1/workflows...");
@@ -387,9 +573,6 @@ async function testQuotesEndpoint() {
     });
     const res = await quotesPOST(req);
     const json = await res.json();
-    if (![200, 201].includes(res.status)) {
-      console.error("Quote POST returned:", res.status, json);
-    }
     assert([200, 201].includes(res.status), `Expected status 200/201, got ${res.status}`);
 
     assert(json.quoteId, "Response must include quoteId");
@@ -445,9 +628,221 @@ async function testQuotesEndpoint() {
   console.log("✔ POST /api/agent/v1/quotes tests passed.");
 }
 
+// --- Section 5: Endpoint Tests for POST /api/agent/v1/runs ---
+console.log("-> Testing POST /api/agent/v1/runs...");
+
+async function testRunsPostEndpoint() {
+  // Test 1: Missing Idempotency-Key Header -> 400 credential_missing
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ quoteId: "quote-sponsored-1" }),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.error.code, "credential_missing");
+  }
+
+  // Test 2: Non-existent Quote -> 404 quote_expired
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": `ik-run-nonexist-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ quoteId: "quote-non-existent-999" }),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "quote_expired");
+  }
+
+  // Test 3: Expired Quote -> 404 quote_expired
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": `ik-run-exp-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ quoteId: "quote-expired-1" }),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "quote_expired");
+  }
+
+  // Test 4: Quote Already Consumed -> 409 quote_already_used
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": `ik-run-cons-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ quoteId: "quote-consumed-1" }),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 409);
+    const json = await res.json();
+    assert.equal(json.error.code, "quote_already_used");
+  }
+
+  // Test 5: Paid Quote without paymentAuthorization -> 402 payment_required
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": `ik-run-nopay-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ quoteId: "quote-paid-1" }),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 402);
+    const json = await res.json();
+    assert.equal(json.error.code, "payment_required");
+  }
+
+  // Test 6: Paid Quote with invalid paymentAuthorization format -> 400 payment_invalid
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": `ik-run-badpay-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        quoteId: "quote-paid-1",
+        paymentAuthorization: { type: "arc_transaction", payload: "invalid-hash-format" },
+      }),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.error.code, "payment_invalid");
+  }
+
+  // Test 7: Successful Sponsored Run Launch -> 201
+  let createdRunId = "";
+  const runIK = `ik-run-spons-${Date.now()}`;
+  const runBody = { quoteId: "quote-sponsored-1" };
+
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": runIK,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(runBody),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 201);
+    const json = await res.json();
+    assert(json.runId, "Response must include runId");
+    createdRunId = json.runId;
+    assert.equal(json.status, "queued");
+    assert.equal(json.pollAfterMs, 2000);
+  }
+
+  // Test 8: Idempotency Deduplication (Identical run request returns cached response)
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": runIK,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(runBody),
+    });
+    const res = await runsPOST(req);
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.runId, createdRunId);
+    assert.equal(json.status, "queued");
+  }
+
+  console.log("✔ POST /api/agent/v1/runs tests passed.");
+}
+
+// --- Section 6: Endpoint Tests for GET /api/agent/v1/runs/[runId] ---
+console.log("-> Testing GET /api/agent/v1/runs/[runId]...");
+
+async function testRunByIdGetEndpoint() {
+  // Test 1: Missing / Non-existent runId -> 404 run_not_found
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs/job-non-existent-99", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ runId: "job-non-existent-99" });
+    const res = await runByIdGET(req, { params });
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "run_not_found");
+  }
+
+  // Test 2: Polling Status for Completed Run Owned by Credential -> 200
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ runId: "job-existing-1" });
+    const res = await runByIdGET(req, { params });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.runId, "job-existing-1");
+    assert.equal(json.status, "completed");
+    assert.equal(json.progress, 1.0);
+    assert.equal(json.stage, "completed");
+    assert.equal(json.pollAfterMs, 0);
+    assert.equal(json.reportId, "job-existing-1");
+    assert.deepEqual(json.verification, {
+      status: "verified",
+      verifiedSteps: 2,
+      requiredSteps: 2,
+    });
+  }
+
+  // Test 3: Cross-Credential Isolation (Reading another agent's run returns 404 run_not_found)
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs/job-other-agent", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ runId: "job-other-agent" });
+    const res = await runByIdGET(req, { params });
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "run_not_found");
+    assert.match(json.error.message, /not owned by this credential/i);
+  }
+
+  console.log("✔ GET /api/agent/v1/runs/[runId] tests passed.");
+}
+
 async function runSuite() {
   await testWorkflowsEndpoint();
   await testQuotesEndpoint();
+  await testRunsPostEndpoint();
+  await testRunByIdGetEndpoint();
   console.log("✅ All Machine API v1 tests passed successfully!");
 }
 
