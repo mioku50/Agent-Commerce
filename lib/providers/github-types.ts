@@ -124,3 +124,20 @@ export interface GitHubRepositorySnapshot {
   excerpts: GitHubExcerpts;
   source: GitHubSourceMetadata;
 }
+
+export function isGitHubRepositorySnapshot(value: unknown): value is GitHubRepositorySnapshot {
+  if (!value || typeof value !== "object") return false;
+  const item = value as Record<string, unknown>;
+  const ref = item.ref as Record<string, unknown> | undefined;
+  const repo = item.repository as Record<string, unknown> | undefined;
+  const src = item.source as Record<string, unknown> | undefined;
+  return (
+    item.version === 1 &&
+    Boolean(ref && typeof ref.owner === "string" && typeof ref.name === "string") &&
+    Boolean(repo && typeof repo.fullName === "string" && typeof repo.defaultBranch === "string") &&
+    Boolean(item.activity && typeof item.activity === "object") &&
+    Boolean(item.documentation && typeof item.documentation === "object") &&
+    Boolean(item.stack && typeof item.stack === "object") &&
+    Boolean(src && typeof src.provider === "string")
+  );
+}

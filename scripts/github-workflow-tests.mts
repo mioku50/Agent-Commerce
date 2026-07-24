@@ -14,7 +14,7 @@ import {
 import { getHostedWorkflowTemplate } from "../lib/agent/workflow-templates.ts";
 import { serviceRegistry, getServiceBySlug } from "../lib/services/registry.ts";
 import { hostedServiceAllowlist, hostedIdempotencyRequestHash } from "../lib/agent/hosted-policy.ts";
-import { requestBodyForService } from "../lib/agent/execution.ts";
+import { requestBodyForService, WorkflowDependencyError } from "../lib/agent/execution.ts";
 import { POST as createQuotePost } from "../app/api/hosted-agent/quotes/route.ts";
 
 async function runTests() {
@@ -93,31 +93,47 @@ async function runTests() {
   assert.deepEqual(intelBody, { owner: "circlefin", repository: "agent-commerce" });
 
   const dummySnapshot = {
+    version: 1,
     ref: req1.repository,
-    repository: { fullName: "circlefin/agent-commerce", stars: 100 },
-    activity: { recentCommitsCount: 10 },
+    repository: { owner: "circlefin", name: "agent-commerce", fullName: "circlefin/agent-commerce", defaultBranch: "main", stars: 100 },
+    activity: { recentCommitCount: 10 },
+    documentation: { hasReadme: true },
+    stack: { primaryLanguage: "TypeScript" },
+    source: { provider: "GitHub REST API v3" },
   };
 
   const dueDiligenceService = getServiceBySlug("github-due-diligence-analysis");
   assert.ok(dueDiligenceService);
-  const paidPreviews = [
-    {
-      service: "GitHub Repository Intelligence",
-      response: dummySnapshot,
-    },
-  ];
+  const runtimeMap = new Map<string, unknown>([["github-repository-intelligence", dummySnapshot]]);
   const dueDiligenceBody = requestBodyForService(
     dueDiligenceService,
     req1.task,
     req1.inputText,
-    paidPreviews,
+    [],
     null,
     req1.repository,
+    runtimeMap,
   );
   assert.deepEqual(dueDiligenceBody, {
     repository: req1.repository,
     snapshot: dummySnapshot,
   });
+
+  assert.throws(
+    () =>
+      requestBodyForService(
+        dueDiligenceService,
+        req1.task,
+        req1.inputText,
+        [],
+        null,
+        req1.repository,
+        new Map(),
+      ),
+    (err: unknown) =>
+      err instanceof WorkflowDependencyError && err.code === "github_snapshot_unavailable",
+    "Must throw WorkflowDependencyError when snapshot is unavailable",
+  );
   console.log("✓ Execution chaining passes owner/repo to step 1 and extracted snapshot to step 2");
 
   // Test 6: Request hashing & Idempotency protection

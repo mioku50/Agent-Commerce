@@ -61,6 +61,9 @@ import {
   parseGitHubRepositoryInput,
   type GitHubRepositoryRef,
 } from "../providers/github-repository-ref.ts";
+import {
+  isGitHubRepositorySnapshot,
+} from "../providers/github-types.ts";
 
 type ServiceDiscoveryResponse = {
   services?: ApiService[];
@@ -380,6 +383,7 @@ export function requestBodyForService(
   paidPreviews: unknown[],
   marketSymbol?: PythMarketSymbol | null,
   repository?: GitHubRepositoryRef | null,
+  runtimeServiceOutputs?: ReadonlyMap<string, unknown>,
 ) {
   if (service.method !== "POST") return undefined;
 
@@ -398,22 +402,33 @@ export function requestBodyForService(
   }
 
   if (service.slug === "github-due-diligence-analysis") {
-    let snapshot: unknown = null;
-    for (const preview of paidPreviews) {
-      if (preview && typeof preview === "object") {
-        const item = preview as Record<string, unknown>;
-        const resp = (item.response ?? item) as Record<string, unknown>;
-        if (resp && typeof resp === "object") {
-          if ("ref" in resp && "repository" in resp) {
-            snapshot = resp;
-            break;
-          }
-          if ("snapshot" in resp && typeof resp.snapshot === "object" && resp.snapshot) {
-            snapshot = resp.snapshot;
-            break;
+    let snapshot: unknown = undefined;
+    if (runtimeServiceOutputs && runtimeServiceOutputs.has("github-repository-intelligence")) {
+      snapshot = runtimeServiceOutputs.get("github-repository-intelligence");
+    } else {
+      for (const preview of paidPreviews) {
+        if (preview && typeof preview === "object") {
+          const item = preview as Record<string, unknown>;
+          const resp = (item.response ?? item) as Record<string, unknown>;
+          if (resp && typeof resp === "object") {
+            if ("ref" in resp && "repository" in resp) {
+              snapshot = resp;
+              break;
+            }
+            if ("snapshot" in resp && typeof resp.snapshot === "object" && resp.snapshot) {
+              snapshot = resp.snapshot;
+              break;
+            }
           }
         }
       }
+    }
+
+    if (!isGitHubRepositorySnapshot(snapshot)) {
+      throw new WorkflowDependencyError(
+        "github_snapshot_unavailable",
+        "GitHub repository intelligence did not produce a valid snapshot.",
+      );
     }
     return { repository, snapshot };
   }
@@ -482,6 +497,16 @@ function runSummary(input: {
   spent: number;
 }) {
   return `Selected ${input.selected}, paid ${input.paid}, skipped ${input.skipped}, failed ${input.failed}. Spent ${formatUsdc(input.spent)} USDC.`;
+}
+
+export class WorkflowDependencyError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+  ) {
+    super(message);
+    this.name = "WorkflowDependencyError";
+  }
 }
 
 class InsufficientGatewayBalanceError extends Error {
@@ -1098,17 +1123,44 @@ export async function executeBuyerAgent(
     };
   }
 
-  async function executePaidStep(decision: ExecutableDecision, paidPreviews: unknown[]) {
+  async function executePaidStep(
+    decision: ExecutableDecision,
+    paidPreviews: unknown[],
+    runtimeServiceOutputs: Map<string, unknown>,
+  ) {
     const { service, step, stepIndex } = decision;
     const url = serviceUrl(baseUrl, service);
-    const body = requestBodyForService(
-      service,
-      task,
-      options.requestInputText,
-      paidPreviews,
-      options.marketSymbol,
-      options.repository,
-    );
+    let body: unknown;
+    try {
+      body = requestBodyForService(
+        service,
+        task,
+        options.requestInputText,
+        paidPreviews,
+        options.marketSymbol,
+        options.repository,
+        runtimeServiceOutputs,
+      );
+    } catch (error) {
+      if (error instanceof WorkflowDependencyError) {
+        updateLocalStep(runLog, stepIndex, {
+          status: "failed",
+          error: error.code,
+        });
+        await writeRunLog(runFilePath, runLog);
+        await safeUpdateStep(
+          step?.id ?? null,
+          {
+            status: "failed",
+            error: error.code,
+            raw: safeRaw({ dependencyError: error.message }),
+          },
+          `persist dependency failed step ${stepIndex}`,
+        );
+        throw error;
+      }
+      throw error;
+    }
 
     updateLocalStep(runLog, stepIndex, { status: "selected" });
     await writeRunLog(runFilePath, runLog);
@@ -1191,6 +1243,8 @@ export async function executeBuyerAgent(
       service: service.name,
       response: responsePreview,
     });
+
+    runtimeServiceOutputs.set(service.slug, result.data);
 
     updateLocalStep(runLog, stepIndex, {
       status: "paid",
@@ -1366,9 +1420,12 @@ export async function executeBuyerAgent(
     await writeRunLog(runFilePath, runLog);
 
     const paidPreviews: unknown[] = [];
+    const runtimeServiceOutputs = new Map<string, unknown>();
     for (const decision of selected) {
       try {
-        serviceResults.push(await executePaidStep(decision, paidPreviews));
+        serviceResults.push(
+          await executePaidStep(decision, paidPreviews, runtimeServiceOutputs),
+        );
       } catch (error) {
         serviceResults.push({
           serviceId: decision.service.id,
@@ -1379,7 +1436,7 @@ export async function executeBuyerAgent(
           stepId: decision.step?.id ?? null,
           paymentEventId: null,
           response: null,
-          error: toErrorMessage(error),
+          error: error instanceof WorkflowDependencyError ? error.code : toErrorMessage(error),
         });
         if (!options.continueOnServiceFailure) throw error;
       }
