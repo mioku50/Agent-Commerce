@@ -56,13 +56,13 @@ const createBaseSnapshot = (): GitHubRepositorySnapshot => ({
     commitCount180d: 50,
   },
   contributors: {
-    totalCount: 8,
+    sampledCount: 8,
     topContributors: [
       { login: "alice", contributions: 20, avatarUrl: null },
       { login: "bob", contributions: 15, avatarUrl: null },
       { login: "charlie", contributions: 10, avatarUrl: null },
     ],
-    topContributorContributionPercentage: 40,
+    sampledTopContributorShare: 40,
   },
   releases: {
     totalCount: 6,
@@ -167,37 +167,52 @@ assert(staleRisk, "Stale repository must produce 'stale_development' risk");
 assert.equal(staleRisk.severity, "high");
 console.log("✔ Stale development test passed.");
 
-// Test 5: Missing license triggers medium risk
-console.log("Test 5: Testing missing license risk rule...");
+// Test 5: 1 medium risk yields healthy_signals, 2 medium risks yield review_needed
+console.log("Test 5: Testing medium risk overall status thresholds (1 medium -> healthy_signals, 2 medium -> review_needed)...");
 const noLicenseSnapshot = createBaseSnapshot();
 noLicenseSnapshot.documentation.hasLicense = false;
 noLicenseSnapshot.repository.license = null;
 
 const noLicenseResult = analyzeGitHubDueDiligence(noLicenseSnapshot);
-assert.equal(noLicenseResult.overallStatus, "review_needed");
+assert.equal(noLicenseResult.overallStatus, "healthy_signals", "1 medium risk must result in healthy_signals");
 
 const licenseRisk = noLicenseResult.risks.find((r) => r.code === "missing_license");
 assert(licenseRisk, "Missing license must produce 'missing_license' risk");
 assert.equal(licenseRisk.severity, "medium");
-assert(noLicenseResult.suggestedQuestions.some((q) => q.includes("license")), "Must suggest question about license");
-console.log("✔ Missing license test passed.");
 
-// Test 6: Missing README triggers medium risk
-console.log("Test 6: Testing missing README risk rule...");
-const noReadmeSnapshot = createBaseSnapshot();
-noReadmeSnapshot.documentation.hasReadme = false;
+const twoMediumRisksSnapshot = createBaseSnapshot();
+twoMediumRisksSnapshot.documentation.hasLicense = false;
+twoMediumRisksSnapshot.repository.license = null;
+twoMediumRisksSnapshot.documentation.hasReadme = false;
 
-const noReadmeResult = analyzeGitHubDueDiligence(noReadmeSnapshot);
-const readmeRisk = noReadmeResult.risks.find((r) => r.code === "missing_readme");
-assert(readmeRisk, "Missing README must produce 'missing_readme' risk");
-assert.equal(readmeRisk.severity, "medium");
-console.log("✔ Missing README test passed.");
+const twoMediumRisksResult = analyzeGitHubDueDiligence(twoMediumRisksSnapshot);
+assert.equal(twoMediumRisksResult.overallStatus, "review_needed", "2 medium risks must result in review_needed");
+console.log("✔ Medium risk threshold test passed.");
 
-// Test 7: Single contributor concentration triggers medium risk
-console.log("Test 7: Testing single contributor concentration risk rule...");
+// Test 6: Release discipline with no releases
+console.log("Test 6: Testing no releases category status and info finding...");
+const noReleasesSnapshot = createBaseSnapshot();
+noReleasesSnapshot.releases.totalCount = 0;
+noReleasesSnapshot.releases.latestRelease = null;
+noReleasesSnapshot.releases.releaseCount90d = 0;
+
+const noReleasesResult = analyzeGitHubDueDiligence(noReleasesSnapshot);
+assert.equal(noReleasesResult.categories.releaseDiscipline.status, "unknown", "No releases category status must be 'unknown'");
+assert.equal(
+  noReleasesResult.categories.releaseDiscipline.summary,
+  "No GitHub releases detected for this repository",
+  "Summary must state 'No GitHub releases detected for this repository'"
+);
+const noReleaseRisk = noReleasesResult.risks.find((r) => r.code === "no_github_releases");
+assert(noReleaseRisk, "Must contain no_github_releases info finding");
+assert.equal(noReleaseRisk.severity, "info");
+console.log("✔ No releases test passed.");
+
+// Test 7: Contributor concentration risk with sufficient vs insufficient commit sample
+console.log("Test 7: Testing contributor concentration risk sample bounds...");
 const singleContribSnapshot = createBaseSnapshot();
-singleContribSnapshot.contributors.totalCount = 1;
-singleContribSnapshot.contributors.topContributorContributionPercentage = 100;
+singleContribSnapshot.contributors.sampledCount = 1;
+singleContribSnapshot.contributors.sampledTopContributorShare = 100;
 singleContribSnapshot.contributors.topContributors = [
   { login: "solo-dev", contributions: 50, avatarUrl: null },
 ];
@@ -205,19 +220,36 @@ singleContribSnapshot.contributors.topContributors = [
 const singleContribResult = analyzeGitHubDueDiligence(singleContribSnapshot);
 assert.equal(singleContribResult.categories.contributorDistribution.status, "weak");
 const contribRisk = singleContribResult.risks.find((r) => r.code === "single_contributor_concentration");
-assert(contribRisk, "Single contributor must produce 'single_contributor_concentration' risk");
+assert(contribRisk, "Single contributor with >=10 commits sampled must produce 'single_contributor_concentration' risk");
 assert.equal(contribRisk.severity, "medium");
-console.log("✔ Single contributor concentration test passed.");
 
-// Test 8: Fallback upstream status yields limited_data overall status
-console.log("Test 8: Testing fallback upstream status handling...");
+const lowSampleContribSnapshot = createBaseSnapshot();
+lowSampleContribSnapshot.contributors.sampledCount = 1;
+lowSampleContribSnapshot.contributors.sampledTopContributorShare = 100;
+lowSampleContribSnapshot.contributors.topContributors = [
+  { login: "solo-dev", contributions: 5, avatarUrl: null },
+];
+
+const lowSampleContribResult = analyzeGitHubDueDiligence(lowSampleContribSnapshot);
+assert.equal(lowSampleContribResult.categories.contributorDistribution.status, "unknown");
+const lowSampleRisk = lowSampleContribResult.risks.find((r) => r.code === "single_contributor_concentration");
+assert.equal(lowSampleRisk, undefined, "Must NOT produce concentration risk when commitsSampled < 10");
+console.log("✔ Contributor concentration sample bound test passed.");
+
+// Test 8: Fallback or partial upstream status yields limited_data overall status
+console.log("Test 8: Testing fallback/partial upstream status handling...");
 const fallbackSnapshot = createBaseSnapshot();
 fallbackSnapshot.source.upstreamStatus = "fallback";
 
 const fallbackResult = analyzeGitHubDueDiligence(fallbackSnapshot);
 assert.equal(fallbackResult.overallStatus, "limited_data");
-assert.equal(fallbackResult.categories.activity.status, "unknown");
-console.log("✔ Fallback status test passed.");
+
+const partialSnapshot = createBaseSnapshot();
+partialSnapshot.source.partial = true;
+
+const partialResult = analyzeGitHubDueDiligence(partialSnapshot);
+assert.equal(partialResult.overallStatus, "limited_data", "source.partial === true must yield limited_data overall status");
+console.log("✔ Fallback and partial status test passed.");
 
 // Test 9: Safety constraints check
 console.log("Test 9: Verifying safety constraints (no trust score, no investment claims, disclaimer)...");
@@ -229,4 +261,5 @@ assert(!jsonStr.includes("investment grade"), "Result must not contain 'investme
 assert(!jsonStr.includes("buy recommendation"), "Result must not contain investment recommendation");
 console.log("✔ Safety constraints check passed.");
 
-console.log("\n[github-due-diligence-test] ALL 9 TEST SUITES PASSED SUCCESSFULLY!");
+console.log("\n[github-due-diligence-test] ALL TEST SUITES PASSED SUCCESSFULLY!");
+

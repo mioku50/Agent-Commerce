@@ -48,9 +48,9 @@ export interface GitHubContributorItem {
 }
 
 export interface GitHubContributorsMetrics {
-  totalCount: number;
+  sampledCount: number;
   topContributors: GitHubContributorItem[];
-  topContributorContributionPercentage: number;
+  sampledTopContributorShare: number;
 }
 
 export interface GitHubReleaseItem {

@@ -461,7 +461,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                     </div>
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">Sampled Contributors</p>
-                      <p className="font-semibold mt-1 text-lg">{snapshot?.contributors?.totalCount ?? 0}</p>
+                      <p className="font-semibold mt-1 text-lg">{snapshot?.contributors?.sampledCount ?? 0}</p>
                     </div>
                   </div>
                   {snapshot?.contributors?.topContributors?.length ? (

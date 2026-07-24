@@ -195,8 +195,8 @@ async function runTests() {
     assert.equal(snapshot1.repository.starsCount, 42);
     assert.equal(snapshot1.activity.recentCommitCount, 2);
     assert.equal(snapshot1.activity.commitAuthorCount, 2);
-    assert.equal(snapshot1.contributors.totalCount, 2);
-    assert.equal(snapshot1.contributors.topContributorContributionPercentage, 80);
+    assert.equal(snapshot1.contributors.sampledCount, 2);
+    assert.equal(snapshot1.contributors.sampledTopContributorShare, 80);
     assert.equal(snapshot1.releases.totalCount, 1);
     assert.equal(snapshot1.releases.latestRelease?.tagName, "v1.0.0");
     assert.equal(snapshot1.documentation.hasReadme, true);

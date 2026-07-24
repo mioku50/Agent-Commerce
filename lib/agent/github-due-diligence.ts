@@ -209,8 +209,8 @@ export function analyzeGitHubDueDiligence(
     releaseStatus = "moderate";
     releaseSummary = `Tagged releases exist (${relTotal} total), but no recent releases in past 90 days.`;
   } else {
-    releaseStatus = "weak";
-    releaseSummary = "No tagged GitHub releases found. Codebase relies on default branch or raw tags.";
+    releaseStatus = "unknown";
+    releaseSummary = "No GitHub releases detected for this repository";
   }
 
   // Contributor Distribution
@@ -218,31 +218,36 @@ export function analyzeGitHubDueDiligence(
   let contribSummary = "";
   const contribEvidence: string[] = [];
 
-  const totalContribs = snapshot.contributors?.totalCount ?? 0;
-  const topPct = snapshot.contributors?.topContributorContributionPercentage ?? 0;
-  const topLogins = (snapshot.contributors?.topContributors ?? [])
+  const sampledCount = snapshot.contributors?.sampledCount ?? 0;
+  const sampledTopContributorShare = snapshot.contributors?.sampledTopContributorShare ?? 0;
+  const topContributors = snapshot.contributors?.topContributors ?? [];
+  const commitsSampled = topContributors.reduce((acc, c) => acc + (c.contributions ?? 0), 0);
+  const topLogins = topContributors
     .slice(0, 3)
     .map((c) => `${c.login} (${c.contributions} commits)`)
     .join(", ");
 
-  contribEvidence.push(`Total detected contributors: ${totalContribs}.`);
-  contribEvidence.push(`Top contributor concentration: ${topPct}%.`);
+  contribEvidence.push(`Sampled contributors: ${sampledCount}.`);
+  contribEvidence.push(`Commits sampled: ${commitsSampled}.`);
+  contribEvidence.push(`Top contributor share: ${sampledTopContributorShare}%.`);
   if (topLogins) {
     contribEvidence.push(`Top contributors: ${topLogins}.`);
   }
 
-  if (totalContribs >= 5 && topPct < 60) {
+  if (commitsSampled >= 10 && sampledCount >= 5 && sampledTopContributorShare < 60) {
     contribStatus = "strong";
-    contribSummary = `Well-distributed contributor base with ${totalContribs} contributors (top maintainer: ${topPct}%).`;
-  } else if (totalContribs >= 2 && topPct < 85) {
+    contribSummary = `Well-distributed contributor base with ${sampledCount} sampled contributors (top maintainer: ${sampledTopContributorShare}%).`;
+  } else if (commitsSampled >= 10 && sampledCount >= 2 && sampledTopContributorShare < 80) {
     contribStatus = "moderate";
-    contribSummary = `Multiple contributors (${totalContribs}), with primary maintainer accounting for ${topPct}% of commits.`;
-  } else if (totalContribs === 1 || topPct >= 85) {
+    contribSummary = `Multiple contributors (${sampledCount}), with primary maintainer accounting for ${sampledTopContributorShare}% of sampled commits.`;
+  } else if (commitsSampled >= 10 && sampledTopContributorShare >= 80) {
     contribStatus = "weak";
-    contribSummary = `High maintainer concentration: single key contributor accounts for ${topPct}% of commits.`;
+    contribSummary = `High maintainer concentration: single key contributor accounts for ${sampledTopContributorShare}% of sampled commits.`;
   } else {
     contribStatus = "unknown";
-    contribSummary = "Contributor data unavailable or unlisted.";
+    contribSummary = commitsSampled < 10
+      ? `Insufficient commit sample (${commitsSampled} commits sampled) to determine contributor concentration.`
+      : "Contributor data unavailable or unlisted.";
   }
 
   // Automation
@@ -345,12 +350,12 @@ export function analyzeGitHubDueDiligence(
   }
 
   // R6: single_contributor_concentration (medium)
-  if (totalContribs === 1 || topPct >= 85) {
+  if (commitsSampled >= 10 && sampledTopContributorShare >= 80) {
     risks.push({
       code: "single_contributor_concentration",
       title: "Single Contributor Concentration",
       severity: "medium",
-      description: `The majority of repository commits (${topPct}%) originate from a single contributor.`,
+      description: `The majority of sampled repository commits (${sampledTopContributorShare}%) originate from a single contributor.`,
       impact: "High bus-factor risk if the primary maintainer steps away or becomes unavailable.",
     });
   }
@@ -404,18 +409,23 @@ export function analyzeGitHubDueDiligence(
   let overallStatus: DueDiligenceOverallStatus = "healthy_signals";
   let overallSummary = "";
 
-  if (isFallback) {
+  const highRisks = risks.filter((r) => r.severity === "high");
+  const mediumRisks = risks.filter((r) => r.severity === "medium");
+
+  const isPartialOrIncomplete =
+    isFallback ||
+    snapshot.source?.partial === true ||
+    !snapshot.repository?.fullName;
+
+  if (isPartialOrIncomplete) {
     overallStatus = "limited_data";
     overallSummary =
       "Limited repository metadata could be retrieved from GitHub REST API v3; exercise caution.";
-  } else if (risks.some((r) => r.severity === "high")) {
+  } else if (highRisks.length >= 1) {
     overallStatus = "high_attention";
     overallSummary =
       "Significant risk factors detected (e.g. archived status or prolonged inactivity) requiring careful review before integration.";
-  } else if (
-    risks.some((r) => r.severity === "medium") ||
-    risks.filter((r) => r.severity === "low").length >= 3
-  ) {
+  } else if (mediumRisks.length >= 2) {
     overallStatus = "review_needed";
     overallSummary =
       "The repository shows active elements but contains notable risk factors requiring review before integration.";
@@ -451,9 +461,9 @@ export function analyzeGitHubDueDiligence(
     );
   }
 
-  if (totalContribs >= 5 && topPct < 60) {
+  if (sampledCount >= 5 && sampledTopContributorShare < 60) {
     strengths.push(
-      `Healthy contributor community with ${totalContribs} distinct contributors.`,
+      `Healthy contributor community with ${sampledCount} distinct contributors.`,
     );
   }
 
@@ -471,17 +481,11 @@ export function analyzeGitHubDueDiligence(
     strengths.push("Public README documentation present in repository root.");
   }
 
-  if (snapshot.repository?.starsCount && snapshot.repository.starsCount >= 50) {
-    strengths.push(
-      `Recognized community adoption with ${snapshot.repository.starsCount} stargazers and ${snapshot.repository.forksCount} forks.`,
-    );
-  }
-
   // --- 5. Suggested Questions Before Relying on Project ---
 
   const suggestedQuestions: string[] = [];
 
-  if (totalContribs === 1 || topPct >= 85) {
+  if (sampledCount === 1 || sampledTopContributorShare >= 80) {
     suggestedQuestions.push(
       "What is the maintainer team size and policy for maintainer handoff or co-maintenance?",
     );

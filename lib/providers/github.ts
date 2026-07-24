@@ -409,9 +409,9 @@ export async function fetchGitHubRepositorySnapshot(
 
   // Process Contributors
   let contributors: GitHubContributorsMetrics = {
-    totalCount: 0,
+    sampledCount: 0,
     topContributors: [],
-    topContributorContributionPercentage: 0,
+    sampledTopContributorShare: 0,
   };
 
   if (contributorsResult.status === "fulfilled" && Array.isArray(contributorsResult.value)) {
@@ -426,9 +426,9 @@ export async function fetchGitHubRepositorySnapshot(
     const topPct = sumTop > 0 && top[0] ? Math.round((top[0].contributions / sumTop) * 1000) / 10 : 0;
 
     contributors = {
-      totalCount: rawContribs.length,
+      sampledCount: rawContribs.length,
       topContributors: top,
-      topContributorContributionPercentage: topPct,
+      sampledTopContributorShare: topPct,
     };
   } else {
     warnings.push("contributors_unavailable");
