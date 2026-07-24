@@ -4,6 +4,8 @@
  */
 
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { NextRequest } from "next/server.js";
 import { getAddress } from "viem";
 import { createApiCredential, hashApiCredential } from "../lib/byoa/auth.ts";
@@ -268,6 +270,8 @@ mockJobsStore.set("job-existing-1", fixtureCompletedJob);
 mockJobsStore.set("job-other-agent", fixtureOtherAgentJob);
 mockJobsStore.set("job-running-1", fixtureRunningJob);
 
+let mockDailyCallCount = 0;
+
 function createMockSupabaseClient(): any {
   return {
     rpc(fnName: string, args: any) {
@@ -332,7 +336,7 @@ function createMockSupabaseClient(): any {
         select(fields?: string, opts?: any) {
           if (opts?.count === "exact" && opts?.head === true) {
             return {
-              count: 0,
+              count: mockDailyCallCount,
               error: null,
               eq() { return this; },
               gte() { return this; },
@@ -933,15 +937,75 @@ async function testReportByIdGetEndpoint() {
   console.log("✔ GET /api/agent/v1/reports/[reportId] tests passed.");
 }
 
+// --- Section 8: Spending Limit & Rate Policy Test ---
+console.log("-> Testing Spending Limit & Rate Policy...");
+
+async function testSpendingLimit() {
+  // Exceed daily call limit
+  mockDailyCallCount = 100;
+  try {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/workflows", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const res = await workflowsGET(req);
+    assert.equal(res.status, 429);
+    const json = await res.json();
+    assert.equal(json.error.code, "spending_limit_exceeded");
+    assert.match(json.error.message, /Daily API call limit/i);
+  } finally {
+    mockDailyCallCount = 0;
+  }
+
+  console.log("✔ Spending Limit & Rate Policy tests passed.");
+}
+
+// --- Section 9: OpenAPI 3.0.3 Spec Validation ---
+console.log("-> Testing OpenAPI 3.0.3 Spec Validation...");
+
+async function testOpenApiSchema() {
+  const specPath = path.join(process.cwd(), "public", "openapi", "agent-commerce-v1.json");
+  assert(fs.existsSync(specPath), "OpenAPI spec file public/openapi/agent-commerce-v1.json missing");
+
+  const raw = fs.readFileSync(specPath, "utf8");
+  const spec = JSON.parse(raw);
+
+  assert.equal(spec.openapi, "3.0.3", "OpenAPI version must be 3.0.3");
+  assert.equal(typeof spec.info.title, "string", "Spec info.title missing");
+  assert.equal(typeof spec.info.version, "string", "Spec info.version missing");
+
+  const requiredPaths = [
+    "/api/agent/v1/workflows",
+    "/api/agent/v1/quotes",
+    "/api/agent/v1/runs",
+    "/api/agent/v1/runs/{runId}",
+    "/api/agent/v1/reports/{reportId}",
+  ];
+
+  for (const pathKey of requiredPaths) {
+    assert(spec.paths[pathKey], `OpenAPI spec missing path ${pathKey}`);
+  }
+
+  assert(spec.components?.schemas?.WorkflowTemplate, "Missing WorkflowTemplate schema");
+  assert(spec.components?.schemas?.WorkflowQuoteResponse, "Missing WorkflowQuoteResponse schema");
+  assert(spec.components?.schemas?.RunLaunchResponse, "Missing RunLaunchResponse schema");
+  assert(spec.components?.schemas?.RunStatusResponse, "Missing RunStatusResponse schema");
+  assert(spec.components?.schemas?.StructuredReportResponse, "Missing StructuredReportResponse schema");
+  assert(spec.components?.schemas?.MachineError, "Missing MachineError schema");
+
+  console.log("✔ OpenAPI 3.0.3 Spec validation tests passed.");
+}
+
 async function runSuite() {
   await testWorkflowsEndpoint();
   await testQuotesEndpoint();
   await testRunsPostEndpoint();
   await testRunByIdGetEndpoint();
   await testReportByIdGetEndpoint();
+  await testSpendingLimit();
+  await testOpenApiSchema();
   console.log("✅ All Machine API v1 tests passed successfully!");
 }
-
 
 runSuite().catch((err) => {
   console.error("❌ Machine API test failure:", err);

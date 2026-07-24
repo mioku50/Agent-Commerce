@@ -35,6 +35,7 @@
     "github:analysis-test": "node --experimental-transform-types --no-warnings scripts/github-due-diligence-tests.mts",
     "github:provider-test": "node --experimental-transform-types --no-warnings scripts/github-provider-tests.mts",
     "github:workflow-test": "node --experimental-transform-types --no-warnings scripts/github-workflow-tests.mts",
+    "machine:api-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/machine-api-tests.mts",
     "seller:ssrf-test": "node --experimental-transform-types --no-warnings scripts/ssrf-protection-tests.mts",
     "seller:external-402-test": "node --experimental-transform-types --no-warnings scripts/external-fulfillment-tests.mts",
     "seller:proxy-test": "node --experimental-transform-types --no-warnings scripts/external-proxy-tests.mts",
