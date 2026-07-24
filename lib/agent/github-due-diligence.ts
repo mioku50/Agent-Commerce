@@ -25,7 +25,8 @@ export type GitHubDueDiligenceRiskCode =
   | "missing_security_policy"
   | "no_ci_detected"
   | "repository_is_fork"
-  | "no_github_releases";
+  | "no_github_releases"
+  | "automation_heavy_history";
 
 export interface GitHubDueDiligenceRisk {
   code: GitHubDueDiligenceRiskCode | string;
@@ -224,34 +225,53 @@ export function analyzeGitHubDueDiligence(
   const contribEvidence: string[] = [];
 
   const sampledCount = snapshot.contributors?.sampledCount ?? 0;
-  const sampledTopContributorShare = snapshot.contributors?.sampledTopContributorShare ?? 0;
   const topContributors = snapshot.contributors?.topContributors ?? [];
-  const commitsSampled = topContributors.reduce((acc, c) => acc + (c.contributions ?? 0), 0);
-  const topLogins = topContributors
+  const humanContributors = topContributors.filter((c) => !c.isBot && c.accountType !== "bot");
+  const botContributors = topContributors.filter((c) => c.isBot || c.accountType === "bot");
+
+  const sampledHumanCount = snapshot.contributors?.sampledHumanContributorCount ?? (humanContributors.length > 0 ? humanContributors.length : sampledCount);
+  const sampledBotCount = snapshot.contributors?.sampledBotContributorCount ?? botContributors.length;
+
+  const humanCommitsSampled = humanContributors.reduce((acc, c) => acc + (c.contributions ?? 0), 0);
+  const totalCommitsSampled = topContributors.reduce((acc, c) => acc + (c.contributions ?? 0), 0);
+
+  const topHuman = humanContributors[0];
+  const topHumanShare = humanCommitsSampled > 0 && topHuman
+    ? Math.round((topHuman.contributions / humanCommitsSampled) * 1000) / 10
+    : snapshot.contributors?.topHumanContributorShare ?? snapshot.contributors?.sampledTopContributorShare ?? 0;
+
+  const botShare = totalCommitsSampled > 0 && botContributors.length > 0
+    ? Math.round((botContributors.reduce((acc, c) => acc + (c.contributions ?? 0), 0) / totalCommitsSampled) * 1000) / 10
+    : snapshot.contributors?.botContributionShare ?? 0;
+
+  const topHumanLogins = humanContributors
     .slice(0, 3)
     .map((c) => `${c.login} (${c.contributions} commits)`)
     .join(", ");
 
-  contribEvidence.push(`Sampled contributors: ${sampledCount}.`);
-  contribEvidence.push(`Commits sampled: ${commitsSampled}.`);
-  contribEvidence.push(`Top contributor share: ${sampledTopContributorShare}%.`);
-  if (topLogins) {
-    contribEvidence.push(`Top contributors: ${topLogins}.`);
+  contribEvidence.push(`Sampled contributors: ${sampledCount} (${sampledHumanCount} human, ${sampledBotCount} bot accounts).`);
+  contribEvidence.push(`Lifetime GitHub contribution totals sampled: ${totalCommitsSampled} commits (${humanCommitsSampled} human commits).`);
+  contribEvidence.push(`Top human maintainer share: ${topHumanShare}% of human commits.`);
+  if (botShare > 0) {
+    contribEvidence.push(`Bot contribution share: ${botShare}% of sampled commits.`);
+  }
+  if (topHumanLogins) {
+    contribEvidence.push(`Top human maintainers: ${topHumanLogins}.`);
   }
 
-  if (commitsSampled >= 10 && sampledCount >= 5 && sampledTopContributorShare < 60) {
+  if (humanCommitsSampled >= 10 && sampledHumanCount >= 5 && topHumanShare < 60) {
     contribStatus = "strong";
-    contribSummary = `Well-distributed contributor base with ${sampledCount} sampled contributors (top maintainer: ${sampledTopContributorShare}%).`;
-  } else if (commitsSampled >= 10 && sampledCount >= 2 && sampledTopContributorShare < 80) {
+    contribSummary = `Well-distributed contributor base with ${sampledHumanCount} sampled human maintainers (top maintainer: ${topHumanShare}% of human commits).`;
+  } else if (humanCommitsSampled >= 10 && sampledHumanCount >= 2 && topHumanShare < 80) {
     contribStatus = "moderate";
-    contribSummary = `Multiple contributors (${sampledCount}), with primary maintainer accounting for ${sampledTopContributorShare}% of sampled commits.`;
-  } else if (commitsSampled >= 10 && sampledTopContributorShare >= 80) {
+    contribSummary = `Multiple human maintainers (${sampledHumanCount}), with primary maintainer accounting for ${topHumanShare}% of sampled human commits.`;
+  } else if (humanCommitsSampled >= 10 && topHumanShare >= 80) {
     contribStatus = "weak";
-    contribSummary = `High maintainer concentration: single key contributor accounts for ${sampledTopContributorShare}% of sampled commits.`;
+    contribSummary = `High maintainer concentration: single key human contributor accounts for ${topHumanShare}% of sampled human commits.`;
   } else {
     contribStatus = "unknown";
-    contribSummary = commitsSampled < 10
-      ? `Insufficient commit sample (${commitsSampled} commits sampled) to determine contributor concentration.`
+    contribSummary = humanCommitsSampled < 10
+      ? `Insufficient commit sample (${humanCommitsSampled} human commits sampled) to determine contributor concentration.`
       : "Contributor data unavailable or unlisted.";
   }
 
@@ -470,13 +490,24 @@ export function analyzeGitHubDueDiligence(
   }
 
   // R6: single_contributor_concentration (medium)
-  if (commitsSampled >= 10 && sampledTopContributorShare >= 80) {
+  if (humanCommitsSampled >= 10 && topHumanShare >= 80) {
     risks.push({
       code: "single_contributor_concentration",
       title: "Single Contributor Concentration",
       severity: "medium",
-      description: `The majority of sampled repository commits (${sampledTopContributorShare}%) originate from a single contributor.`,
+      description: `The majority of sampled human repository commits (${topHumanShare}%) originate from a single contributor.`,
       impact: "High bus-factor risk if the primary maintainer steps away or becomes unavailable.",
+    });
+  }
+
+  // R11: automation_heavy_history (info)
+  if (botShare >= 50) {
+    risks.push({
+      code: "automation_heavy_history",
+      title: "Automation-Heavy Contribution History",
+      severity: "info",
+      description: "Automation-heavy contribution history: A significant portion of repository contributions originate from automated bot accounts.",
+      impact: "Automated tooling accounts for a substantial portion of repository activity.",
     });
   }
 
@@ -591,9 +622,9 @@ export function analyzeGitHubDueDiligence(
     );
   }
 
-  if (sampledCount >= 5 && sampledTopContributorShare < 60) {
+  if (sampledHumanCount >= 5 && topHumanShare < 60) {
     strengths.push(
-      `Healthy contributor community with ${sampledCount} distinct contributors.`,
+      `Healthy contributor community with ${sampledHumanCount} distinct human maintainers.`,
     );
   }
 
@@ -615,7 +646,7 @@ export function analyzeGitHubDueDiligence(
 
   const suggestedQuestions: string[] = [];
 
-  if (sampledCount === 1 || sampledTopContributorShare >= 80) {
+  if (sampledHumanCount === 1 || topHumanShare >= 80) {
     suggestedQuestions.push(
       "What is the maintainer team size and policy for maintainer handoff or co-maintenance?",
     );

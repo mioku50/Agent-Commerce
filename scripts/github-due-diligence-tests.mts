@@ -54,15 +54,22 @@ const createBaseSnapshot = (): GitHubRepositorySnapshot => ({
     commitCount30d: 15,
     commitCount90d: 35,
     commitCount180d: 50,
+    commitCount30dIsLowerBound: false,
+    commitCount90dIsLowerBound: false,
+    commitCount180dIsLowerBound: false,
   },
   contributors: {
     sampledCount: 8,
     topContributors: [
-      { login: "alice", contributions: 20, avatarUrl: null },
-      { login: "bob", contributions: 15, avatarUrl: null },
-      { login: "charlie", contributions: 10, avatarUrl: null },
+      { login: "alice", contributions: 20, avatarUrl: null, isBot: false, accountType: "human" },
+      { login: "bob", contributions: 15, avatarUrl: null, isBot: false, accountType: "human" },
+      { login: "charlie", contributions: 10, avatarUrl: null, isBot: false, accountType: "human" },
     ],
     sampledTopContributorShare: 40,
+    sampledHumanContributorCount: 8,
+    sampledBotContributorCount: 0,
+    topHumanContributorShare: 44.4,
+    botContributionShare: 0,
   },
   releases: {
     totalCount: 6,
@@ -297,6 +304,34 @@ assert.equal(magdaResult.categories.operationalMaturity.status, "strong");
 assert.ok(magdaResult.overallSummary.includes("Magda Autonomous AI Telegram Agent"));
 assert.ok(magdaResult.overallSummary.includes("Target stack"));
 console.log("✔ Rich P1.4 categories and executive summary synthesis test passed.");
+
+// Test 11: Bot contributor separation & automation_heavy_history risk
+console.log("Test 11: Testing bot contributor separation and automation_heavy_history risk...");
+const botHeavySnapshot = createBaseSnapshot();
+botHeavySnapshot.contributors = {
+  sampledCount: 3,
+  sampledHumanContributorCount: 1,
+  sampledBotContributorCount: 2,
+  topHumanContributorShare: 100,
+  botContributionShare: 75,
+  sampledTopContributorShare: 50,
+  topContributors: [
+    { login: "google-labs-jules[bot]", contributions: 100, avatarUrl: null, isBot: true, accountType: "bot" },
+    { login: "devin-ai-integration[bot]", contributions: 50, avatarUrl: null, isBot: true, accountType: "bot" },
+    { login: "alice", contributions: 50, avatarUrl: null, isBot: false, accountType: "human" },
+  ],
+};
+
+const botHeavyResult = analyzeGitHubDueDiligence(botHeavySnapshot);
+const botRisk = botHeavyResult.risks.find((r) => r.code === "automation_heavy_history");
+assert(botRisk, "botContributionShare >= 50% must trigger 'automation_heavy_history' risk");
+assert.equal(botRisk.severity, "info");
+assert.ok(botRisk.description.includes("Automation-heavy contribution history"));
+
+const concentrationRisk = botHeavyResult.risks.find((r) => r.code === "single_contributor_concentration");
+assert(concentrationRisk, "1 human maintainer with 100% human share must trigger 'single_contributor_concentration' risk despite bots");
+assert.equal(botHeavyResult.categories.contributorDistribution.status, "weak");
+console.log("✔ Bot contributor separation and automation_heavy_history test passed.");
 
 console.log("\n[github-due-diligence-test] ALL TEST SUITES PASSED SUCCESSFULLY!");
 

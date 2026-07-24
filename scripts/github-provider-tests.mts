@@ -9,6 +9,7 @@ import {
   fetchGitHubRepositorySnapshot,
   clearGitHubSnapshotCache,
   extractProjectSummaryFromReadme,
+  isBotContributor,
 } from "../lib/providers/github.ts";
 import { ProviderError } from "../lib/providers/errors.ts";
 
@@ -501,6 +502,88 @@ pip install magda
     assert.ok(!cleanSummary?.includes("img.shields.io"));
     assert.ok(!cleanSummary?.includes("#"));
     console.log("    ✓ extractProjectSummaryFromReadme strips HTML containers, badges, and headers cleanly");
+
+    // Test 11: 500+ commit lower bound pagination cap
+    console.log("  - Test 11: 500+ commit lower bound cap...");
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("/git/trees")) {
+        return new Response(JSON.stringify({ tree: [], truncated: false }), { status: 200 });
+      }
+      if (urlStr.includes("/commits")) {
+        const commits = Array.from({ length: 100 }, (_, i) => ({
+          commit: {
+            committer: { date: new Date().toISOString() },
+            author: { name: `Dev${i}`, email: `dev${i}@example.com`, date: new Date().toISOString() },
+          },
+          author: { login: `dev${i}` },
+        }));
+        return new Response(JSON.stringify(commits), { status: 200, headers: { "Content-Type": "application/json" } });
+      }
+      if (urlStr.includes("/repos/circle/cap-repo") && !urlStr.includes("/releases") && !urlStr.includes("/contributors")) {
+        return new Response(
+          JSON.stringify({ id: 1010, name: "cap-repo", full_name: "circle/cap-repo", owner: { login: "circle" }, private: false, default_branch: "main" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+
+    clearGitHubSnapshotCache();
+    const capRef = parseGitHubRepositoryInput("circle/cap-repo");
+    const capSnapshot = await fetchGitHubRepositorySnapshot(capRef);
+
+    assert.equal(capSnapshot.activity.commitCount30d, 500);
+    assert.equal(capSnapshot.activity.commitCount30dIsLowerBound, true);
+    assert.equal(capSnapshot.activity.commitCount90d, 500);
+    assert.equal(capSnapshot.activity.commitCount90dIsLowerBound, true);
+    assert.equal(capSnapshot.activity.commitCount180d, 500);
+    assert.equal(capSnapshot.activity.commitCount180dIsLowerBound, true);
+    console.log("    ✓ 500 pagination cap sets commitCount30dIsLowerBound: true");
+
+    // Test 12: Bot contributor detection & separation
+    console.log("  - Test 12: Bot contributor separation (google-labs-jules[bot], devin-ai-integration[bot])...");
+    assert.equal(isBotContributor("google-labs-jules[bot]"), true);
+    assert.equal(isBotContributor("devin-ai-integration[bot]"), true);
+    assert.equal(isBotContributor("dependabot[bot]"), true);
+    assert.equal(isBotContributor("renovate"), true);
+    assert.equal(isBotContributor("alice"), false);
+
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+      if (urlStr.includes("/contributors")) {
+        return new Response(
+          JSON.stringify([
+            { login: "google-labs-jules[bot]", contributions: 100, type: "Bot" },
+            { login: "devin-ai-integration[bot]", contributions: 50, type: "Bot" },
+            { login: "alice", contributions: 50, type: "User" },
+          ]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      if (urlStr.includes("/repos/circle/bot-repo") && !urlStr.includes("/commits") && !urlStr.includes("/releases")) {
+        return new Response(
+          JSON.stringify({ id: 2020, name: "bot-repo", full_name: "circle/bot-repo", owner: { login: "circle" }, private: false, default_branch: "main" }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+      return new Response(JSON.stringify([]), { status: 200, headers: { "Content-Type": "application/json" } });
+    }) as typeof fetch;
+
+    clearGitHubSnapshotCache();
+    const botRef = parseGitHubRepositoryInput("circle/bot-repo");
+    const botSnapshot = await fetchGitHubRepositorySnapshot(botRef);
+
+    assert.equal(botSnapshot.contributors.sampledCount, 3);
+    assert.equal(botSnapshot.contributors.sampledHumanContributorCount, 1);
+    assert.equal(botSnapshot.contributors.sampledBotContributorCount, 2);
+    assert.equal(botSnapshot.contributors.topHumanContributorShare, 100);
+    assert.equal(botSnapshot.contributors.botContributionShare, 75);
+    assert.equal(botSnapshot.contributors.topContributors[0].isBot, true);
+    assert.equal(botSnapshot.contributors.topContributors[0].accountType, "bot");
+    assert.equal(botSnapshot.contributors.topContributors[2].isBot, false);
+    assert.equal(botSnapshot.contributors.topContributors[2].accountType, "human");
+    console.log("    ✓ Bot accounts separated from human maintainers with topHumanContributorShare and botContributionShare calculated");
 
   } finally {
     globalThis.fetch = originalFetch;

@@ -39,18 +39,27 @@ export interface GitHubActivityMetrics {
   commitCount30d: number;
   commitCount90d: number;
   commitCount180d: number;
+  commitCount30dIsLowerBound: boolean;
+  commitCount90dIsLowerBound: boolean;
+  commitCount180dIsLowerBound: boolean;
 }
 
 export interface GitHubContributorItem {
   login: string;
   contributions: number;
   avatarUrl: string | null;
+  isBot: boolean;
+  accountType: "human" | "bot" | "unknown";
 }
 
 export interface GitHubContributorsMetrics {
   sampledCount: number;
   topContributors: GitHubContributorItem[];
   sampledTopContributorShare: number;
+  sampledHumanContributorCount: number;
+  sampledBotContributorCount: number;
+  topHumanContributorShare: number;
+  botContributionShare: number;
 }
 
 export interface GitHubReleaseItem {

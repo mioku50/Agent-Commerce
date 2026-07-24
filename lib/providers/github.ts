@@ -9,6 +9,7 @@ import type {
   GitHubRepositorySnapshot,
   GitHubRepositoryMetadata,
   GitHubActivityMetrics,
+  GitHubContributorItem,
   GitHubContributorsMetrics,
   GitHubReleasesMetrics,
   GitHubCollaborationMetrics,
@@ -308,6 +309,81 @@ function parseGoMod(content: string): { prod: string[]; dev: string[] } {
   }
 
   return { prod: Array.from(prod), dev: Array.from(dev) };
+}
+
+export function isBotContributor(login: string, type?: string): boolean {
+  if (!login) return false;
+  const lower = login.toLowerCase();
+  if (type === "Bot" || type === "bot") return true;
+  if (lower.endsWith("[bot]")) return true;
+  const knownBotPatterns = [
+    "dependabot",
+    "renovate",
+    "github-actions",
+    "jules",
+    "devin",
+    "copilot",
+    "codecov",
+    "snyk",
+    "greenkeeper",
+    "semantic-release",
+    "stale",
+    "allcontributors",
+  ];
+  return knownBotPatterns.some((pattern) => lower.includes(pattern));
+}
+
+async function fetchWindowCommits(
+  owner: string,
+  name: string,
+  sinceIso: string,
+  maxPages = 5,
+): Promise<{ count: number; isLowerBound: boolean; authors: Set<string>; lastCommitAt: string | null }> {
+  let count = 0;
+  let isLowerBound = false;
+  const authors = new Set<string>();
+  let lastCommitAt: string | null = null;
+  const windowTime = new Date(sinceIso).getTime();
+
+  for (let page = 1; page <= maxPages; page++) {
+    const endpoint = `/repos/${owner}/${name}/commits?since=${encodeURIComponent(sinceIso)}&per_page=100&page=${page}`;
+    const pageCommits = await githubFetch<Array<Record<string, any>>>(endpoint, { timeoutMs: 6000 });
+    if (!Array.isArray(pageCommits) || pageCommits.length === 0) break;
+
+    for (const c of pageCommits) {
+      const commitDateStr = c.commit?.committer?.date || c.commit?.author?.date;
+      if (commitDateStr) {
+        const time = new Date(commitDateStr).getTime();
+        if (!isNaN(time) && time >= windowTime) {
+          count++;
+          if (!lastCommitAt) lastCommitAt = commitDateStr;
+          const authorLogin = c.author?.login || c.commit?.author?.email || c.commit?.author?.name;
+          if (authorLogin) authors.add(authorLogin);
+        }
+      } else {
+        count++;
+        const authorLogin = c.author?.login || c.commit?.author?.email || c.commit?.author?.name;
+        if (authorLogin) authors.add(authorLogin);
+      }
+    }
+
+    if (pageCommits.length < 100) break;
+    if (page === maxPages) {
+      isLowerBound = true;
+    }
+  }
+
+  if (count >= maxPages * 100) {
+    isLowerBound = true;
+    count = maxPages * 100;
+  }
+
+  return {
+    count,
+    isLowerBound,
+    authors,
+    lastCommitAt,
+  };
 }
 
 export function extractProjectSummaryFromReadme(readme: string): string | null {
@@ -711,9 +787,15 @@ export async function fetchGitHubRepositorySnapshot(
     topics: Array.isArray(repoData.topics) ? repoData.topics.map(String) : [],
   };
 
+  const d30Iso = new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const d90Iso = new Date(now - 90 * 24 * 60 * 60 * 1000).toISOString();
+  const d180Iso = new Date(now - 180 * 24 * 60 * 60 * 1000).toISOString();
+
   // Parallel sub-fetches
   const [
-    commitsResult,
+    commits30dResult,
+    commits90dResult,
+    commits180dResult,
     releasesResult,
     contributorsResult,
     languagesResult,
@@ -732,10 +814,9 @@ export async function fetchGitHubRepositorySnapshot(
     goModExcerptResult,
     gitTreeResult,
   ] = await Promise.allSettled([
-    githubFetch<Array<Record<string, any>>>(
-      `/repos/${ref.owner}/${ref.name}/commits?per_page=100`,
-      { timeoutMs: 6000 },
-    ),
+    fetchWindowCommits(ref.owner, ref.name, d30Iso),
+    fetchWindowCommits(ref.owner, ref.name, d90Iso),
+    fetchWindowCommits(ref.owner, ref.name, d180Iso),
     githubFetch<Array<Record<string, any>>>(
       `/repos/${ref.owner}/${ref.name}/releases?per_page=20`,
       { timeoutMs: 6000 },
@@ -802,42 +883,38 @@ export async function fetchGitHubRepositorySnapshot(
     commitCount30d: 0,
     commitCount90d: 0,
     commitCount180d: 0,
+    commitCount30dIsLowerBound: false,
+    commitCount90dIsLowerBound: false,
+    commitCount180dIsLowerBound: false,
   };
 
-  if (commitsResult.status === "fulfilled" && Array.isArray(commitsResult.value)) {
-    const commits = commitsResult.value;
-    const authors = new Set<string>();
-    let count30d = 0;
-    let count90d = 0;
-    let count180d = 0;
-    const d30 = now - 30 * 24 * 60 * 60 * 1000;
-    const d90 = now - 90 * 24 * 60 * 60 * 1000;
-    const d180 = now - 180 * 24 * 60 * 60 * 1000;
+  const c30Ok = commits30dResult.status === "fulfilled";
+  const c90Ok = commits90dResult.status === "fulfilled";
+  const c180Ok = commits180dResult.status === "fulfilled";
 
-    let lastCommitDate: string | null = null;
+  if (c30Ok || c90Ok || c180Ok) {
+    const c30 = c30Ok ? commits30dResult.value : { count: 0, isLowerBound: false, authors: new Set<string>(), lastCommitAt: null };
+    const c90 = c90Ok ? commits90dResult.value : { count: 0, isLowerBound: false, authors: new Set<string>(), lastCommitAt: null };
+    const c180 = c180Ok ? commits180dResult.value : { count: 0, isLowerBound: false, authors: new Set<string>(), lastCommitAt: null };
 
-    for (let i = 0; i < commits.length; i++) {
-      const c = commits[i];
-      const authorLogin = c.author?.login || c.commit?.author?.email || c.commit?.author?.name;
-      if (authorLogin) authors.add(authorLogin);
+    const allAuthors = new Set<string>([
+      ...c30.authors,
+      ...c90.authors,
+      ...c180.authors,
+    ]);
 
-      const commitDateStr = c.commit?.committer?.date || c.commit?.author?.date;
-      if (commitDateStr) {
-        if (!lastCommitDate) lastCommitDate = commitDateStr;
-        const time = new Date(commitDateStr).getTime();
-        if (time >= d30) count30d++;
-        if (time >= d90) count90d++;
-        if (time >= d180) count180d++;
-      }
-    }
+    const lastCommit = c30.lastCommitAt || c90.lastCommitAt || c180.lastCommitAt || repository.pushedAt;
 
     activity = {
-      recentCommitCount: commits.length,
-      commitAuthorCount: authors.size,
-      lastCommitAt: lastCommitDate || repository.pushedAt,
-      commitCount30d: count30d,
-      commitCount90d: count90d,
-      commitCount180d: count180d,
+      recentCommitCount: c30.count,
+      commitAuthorCount: allAuthors.size,
+      lastCommitAt: lastCommit,
+      commitCount30d: c30.count,
+      commitCount90d: c90.count,
+      commitCount180d: c180.count,
+      commitCount30dIsLowerBound: c30.isLowerBound,
+      commitCount90dIsLowerBound: c90.isLowerBound,
+      commitCount180dIsLowerBound: c180.isLowerBound,
     };
   } else {
     warnings.push("commits_unavailable");
@@ -886,23 +963,49 @@ export async function fetchGitHubRepositorySnapshot(
     sampledCount: 0,
     topContributors: [],
     sampledTopContributorShare: 0,
+    sampledHumanContributorCount: 0,
+    sampledBotContributorCount: 0,
+    topHumanContributorShare: 0,
+    botContributionShare: 0,
   };
 
   if (contributorsResult.status === "fulfilled" && Array.isArray(contributorsResult.value)) {
     const rawContribs = contributorsResult.value;
-    const top = rawContribs.slice(0, 10).map((c) => ({
-      login: String(c.login || "unknown"),
-      contributions: Number(c.contributions ?? 0),
-      avatarUrl: c.avatar_url ? String(c.avatar_url) : null,
-    }));
+    const mapped: GitHubContributorItem[] = rawContribs.map((c) => {
+      const login = String(c.login || "unknown");
+      const isBot = isBotContributor(login, c.type ? String(c.type) : undefined);
+      const accountType: "human" | "bot" | "unknown" = login === "unknown" ? "unknown" : isBot ? "bot" : "human";
+      return {
+        login,
+        contributions: Number(c.contributions ?? 0),
+        avatarUrl: c.avatar_url ? String(c.avatar_url) : null,
+        isBot,
+        accountType,
+      };
+    });
 
-    const sumTop = top.reduce((acc, curr) => acc + curr.contributions, 0);
+    const top = mapped.slice(0, 10);
+    const sumTop = mapped.reduce((acc, curr) => acc + curr.contributions, 0);
     const topPct = sumTop > 0 && top[0] ? Math.round((top[0].contributions / sumTop) * 1000) / 10 : 0;
 
+    const humanContribs = mapped.filter((c) => !c.isBot);
+    const botContribs = mapped.filter((c) => c.isBot);
+
+    const sumHuman = humanContribs.reduce((acc, curr) => acc + curr.contributions, 0);
+    const sumBot = botContribs.reduce((acc, curr) => acc + curr.contributions, 0);
+
+    const topHuman = humanContribs[0];
+    const topHumanPct = sumHuman > 0 && topHuman ? Math.round((topHuman.contributions / sumHuman) * 1000) / 10 : 0;
+    const botPct = sumTop > 0 ? Math.round((sumBot / sumTop) * 1000) / 10 : 0;
+
     contributors = {
-      sampledCount: rawContribs.length,
+      sampledCount: mapped.length,
       topContributors: top,
       sampledTopContributorShare: topPct,
+      sampledHumanContributorCount: humanContribs.length,
+      sampledBotContributorCount: botContribs.length,
+      topHumanContributorShare: topHumanPct,
+      botContributionShare: botPct,
     };
   } else {
     warnings.push("contributors_unavailable");
