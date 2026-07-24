@@ -53,6 +53,18 @@ export function humanizeError(raw: unknown): HumanizedError {
 
   // GitHub error mappings
   if (
+    reasonCode === "github_snapshot_unavailable" ||
+    messageStr.includes("github_snapshot_unavailable") ||
+    messageStr.includes("GitHub repository intelligence did not produce a valid snapshot")
+  ) {
+    return {
+      title: "Repository analysis unavailable",
+      message: "GitHub data was collected, but could not be passed to the analysis step. No charge was made for the failed analysis service.",
+      technicalCode: "github_snapshot_unavailable",
+    };
+  }
+
+  if (
     reasonCode === "invalid_github_repository" ||
     messageStr.includes("invalid_github_repository") ||
     messageStr.includes("Invalid GitHub repository")

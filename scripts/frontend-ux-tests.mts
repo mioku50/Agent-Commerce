@@ -274,6 +274,12 @@ assert.deepEqual(humanizeError({ reason: "wallet_mismatch" }), {
   technicalCode: "wallet_mismatch",
 });
 
+assert.deepEqual(humanizeError("github_snapshot_unavailable"), {
+  title: "Repository analysis unavailable",
+  message: "GitHub data was collected, but could not be passed to the analysis step. No charge was made for the failed analysis service.",
+  technicalCode: "github_snapshot_unavailable",
+});
+
 assert.deepEqual(humanizeError("invalid_github_repository"), {
   title: "Invalid GitHub repository",
   message: "Enter a public repository in the format owner/repository.",

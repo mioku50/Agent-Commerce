@@ -121,7 +121,121 @@ function fallbackReasonLabel(
   return "Deterministic report selected";
 }
 
-function ArcVerificationBadge({ proofs }: { proofs: HostedJobView["proofs"] }) {
+export type EvidenceState = "present" | "missing" | "unavailable";
+
+function getEvidenceState(value: boolean | undefined | null, isCollected: boolean): EvidenceState {
+  if (!isCollected || value === undefined || value === null) return "unavailable";
+  return value ? "present" : "missing";
+}
+
+function renderEvidenceBadge(
+  state: EvidenceState,
+  presentLabel = "Present",
+  missingLabel = "Missing",
+  unavailableLabel = "Unavailable"
+) {
+  if (state === "present") {
+    return (
+      <span className="flex items-center gap-1 font-semibold text-emerald-500">
+        <Check className="size-4" /> {presentLabel}
+      </span>
+    );
+  }
+  if (state === "missing") {
+    return (
+      <span className="flex items-center gap-1 font-semibold text-amber-500">
+        {missingLabel}
+      </span>
+    );
+  }
+  return (
+    <span className="flex items-center gap-1 font-medium text-muted-foreground">
+      {unavailableLabel}
+    </span>
+  );
+}
+
+function renderMetricDisplay(
+  value: number | string | null | undefined,
+  isCollected: boolean,
+  fallbackLabel = "Unavailable"
+) {
+  if (!isCollected || value === undefined || value === null) {
+    return <span className="text-muted-foreground font-normal">{fallbackLabel}</span>;
+  }
+  return String(value);
+}
+
+function ArcVerificationBadge({
+  proofs,
+  services,
+  isGithubWorkflow,
+  jobStatus,
+}: {
+  proofs: HostedJobView["proofs"];
+  services?: HostedJobView["services"];
+  isGithubWorkflow?: boolean;
+  jobStatus?: string;
+}) {
+  if (isGithubWorkflow && services) {
+    const intelService = services.find((s) => s.serviceSlug === "github-repository-intelligence");
+    const analysisService = services.find((s) => s.serviceSlug === "github-due-diligence-analysis");
+
+    const intelPaid = intelService?.status === "paid";
+    const analysisPaid = analysisService?.status === "paid";
+
+    const intelVerified = intelPaid && proofs.some((p) => p.receiptId === intelService?.receiptId && p.status === "verified");
+    const analysisVerified = analysisPaid && proofs.some((p) => p.receiptId === analysisService?.receiptId && p.status === "verified");
+
+    const verifiedCount = (intelVerified ? 1 : 0) + (analysisVerified ? 1 : 0);
+    const paidCount = (intelPaid ? 1 : 0) + (analysisPaid ? 1 : 0);
+
+    const step2Failed = analysisService?.status === "failed" || (intelPaid && jobStatus === "failed" && !analysisPaid);
+
+    if (verifiedCount === 2) {
+      return (
+        <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/10">
+          <BadgeCheck className="size-3.5" />
+          Verified on Arc
+        </Badge>
+      );
+    }
+
+    if (verifiedCount === 1 && !step2Failed) {
+      return (
+        <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-500 bg-amber-500/10">
+          <BadgeCheck className="size-3.5" />
+          Partially verified · 1 of 2 steps
+        </Badge>
+      );
+    }
+
+    if (step2Failed) {
+      return (
+        <Badge variant="outline" className="gap-1 border-muted bg-muted/50 text-muted-foreground">
+          Verification incomplete
+        </Badge>
+      );
+    }
+
+    const hasPendingProofs = proofs.some((p) => p.status === "pending" || (p.status as string) === "submitted");
+    if (hasPendingProofs || paidCount > verifiedCount || jobStatus === "running" || jobStatus === "queued") {
+      return (
+        <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-500 bg-amber-500/10">
+          <LoaderCircle className="size-3.5 animate-spin" />
+          Verification pending
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge variant="outline" className="gap-1 border-muted bg-muted/50 text-muted-foreground">
+        Verification incomplete
+      </Badge>
+    );
+  }
+
+  // Fallback for non-GitHub workflows
   if (proofs.length > 0 && proofs.every((proof) => proof.status === "verified")) {
     return (
       <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/10">
@@ -215,6 +329,8 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
       return resp?.snapshot ?? (resp && "repository" in resp ? resp : null);
     })();
 
+  const isDataAvailable = Boolean(snapshot);
+
   const canonicalUrl =
     repoRef?.canonicalUrl ||
     snapshot?.ref?.canonicalUrl ||
@@ -259,7 +375,12 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   {overallStatusBadge(assessment.overallStatus).label}
                 </Badge>
               ) : null}
-              <ArcVerificationBadge proofs={view.proofs} />
+              <ArcVerificationBadge
+                proofs={view.proofs}
+                services={view.services}
+                isGithubWorkflow={isGithubWorkflow}
+                jobStatus={view.job.status}
+              />
               <Button asChild variant="outline">
                 <Link href="/agent-runner">
                   <RotateCcw className="size-4" />
@@ -346,7 +467,12 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                           {overallStatusBadge(assessment.overallStatus).label}
                         </Badge>
                       ) : null}
-                      <ArcVerificationBadge proofs={view.proofs} />
+                      <ArcVerificationBadge
+                        proofs={view.proofs}
+                        services={view.services}
+                        isGithubWorkflow={isGithubWorkflow}
+                        jobStatus={view.job.status}
+                      />
                     </div>
                     <h2 className="text-2xl font-bold tracking-tight">GitHub Project Due Diligence</h2>
                     <p className="mt-1 text-sm text-muted-foreground">
@@ -374,113 +500,199 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   </div>
                 </div>
 
+                {/* 12 P1.4 GitHub Report Sections */}
+
                 {/* 1. Executive Summary */}
                 <div>
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">1. Executive Summary</h3>
                   <div className="rounded-md bg-secondary/30 p-4 text-sm leading-6">
-                    {sanitizePublicReportText(report?.summary || assessment?.overallSummary || "Analyzing repository activity, maintenance, documentation, and releases...")}
+                    {sanitizePublicReportText(
+                      report?.summary || assessment?.overallSummary || (isDataAvailable ? "Analyzing repository activity, maintenance, documentation, and releases..." : "Repository analysis data is unavailable.")
+                    )}
                   </div>
                 </div>
 
-                {/* 2. Project Overview */}
+                {/* 2. What This Project Does */}
                 <div className="border-t pt-6">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">2. Project Overview</h3>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
-                    <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Primary Language</p>
-                      <p className="font-semibold mt-1">{snapshot?.stack?.primaryLanguage ?? "Unspecified"}</p>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">2. What This Project Does</h3>
+                  <div className="grid gap-3 sm:grid-cols-2 text-sm mb-4">
+                    <div className="rounded-md border p-3 sm:col-span-2">
+                      <p className="text-xs text-muted-foreground">Purpose Summary</p>
+                      <p className="font-semibold mt-1">
+                        {snapshot?.projectPurpose?.summary ?? (isDataAvailable ? snapshot?.repository?.description ?? "No detailed purpose summary available in repository metadata." : "Unavailable")}
+                      </p>
                     </div>
                     <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Open Source License</p>
-                      <p className="font-semibold mt-1">{snapshot?.repository?.license?.name ?? "No license detected"}</p>
+                      <p className="text-xs text-muted-foreground">Primary Interface</p>
+                      <p className="font-semibold mt-1">
+                        {snapshot?.projectPurpose?.primaryInterface ?? (isDataAvailable ? "Unspecified interface" : "Unavailable")}
+                      </p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Development Stage</p>
+                      <p className="font-semibold mt-1">
+                        {snapshot?.projectPurpose?.developmentStage ?? (isDataAvailable ? "Active project" : "Unavailable")}
+                      </p>
+                    </div>
+                    <div className="rounded-md border p-3 sm:col-span-2">
+                      <p className="text-xs text-muted-foreground">Target Users</p>
+                      <p className="font-semibold mt-1">
+                        {snapshot?.projectPurpose?.targetUsers ?? (isDataAvailable ? "General developers & open-source community" : "Unavailable")}
+                      </p>
+                    </div>
+                  </div>
+                  {snapshot?.projectPurpose?.capabilities?.length ? (
+                    <div className="rounded-md border bg-secondary/10 p-3 text-xs">
+                      <p className="font-medium text-muted-foreground mb-2">Key Project Capabilities</p>
+                      <div className="flex flex-wrap gap-2">
+                        {snapshot.projectPurpose.capabilities.map((cap, i) => (
+                          <Badge key={i} variant="secondary">
+                            {cap}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* 3. Architecture & Technology */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">3. Architecture & Technology</h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm mb-3">
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Primary Language</p>
+                      <p className="font-semibold mt-1">
+                        {renderMetricDisplay(snapshot?.stack?.primaryLanguage, isDataAvailable)}
+                      </p>
                     </div>
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">Default Branch</p>
-                      <p className="font-semibold mt-1 font-mono">{snapshot?.repository?.defaultBranch ?? "main"}</p>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Repository Age</p>
-                      <p className="font-semibold mt-1">
-                        {snapshot?.repository?.createdAt ? formatDate(snapshot.repository.createdAt) : "Unknown"}
+                      <p className="font-semibold mt-1 font-mono">
+                        {renderMetricDisplay(snapshot?.repository?.defaultBranch, isDataAvailable)}
                       </p>
                     </div>
                     <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Status</p>
+                      <p className="text-xs text-muted-foreground">Open Source License</p>
                       <p className="font-semibold mt-1">
-                        {snapshot?.repository?.isArchived ? "Archived (Read-Only)" : "Active"}
-                      </p>
-                    </div>
-                    <div className="rounded-md border p-3">
-                      <p className="text-xs text-muted-foreground">Type</p>
-                      <p className="font-semibold mt-1">
-                        {snapshot?.repository?.isFork ? "Forked Repository" : "Standalone Repository"}
+                        {isDataAvailable
+                          ? snapshot?.repository?.license?.name ?? "No license detected"
+                          : "Unavailable"}
                       </p>
                     </div>
                   </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 text-xs mb-3">
+                    {snapshot?.stack?.languages && Object.keys(snapshot.stack.languages).length > 0 ? (
+                      <div className="rounded-md border p-3">
+                        <p className="font-medium text-muted-foreground mb-2">Languages Breakdown</p>
+                        <div className="flex flex-wrap gap-2">
+                          {Object.entries(snapshot.stack.languages).slice(0, 6).map(([lang]) => (
+                            <Badge key={lang} variant="secondary">
+                              {lang}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ) : isDataAvailable ? (
+                      <div className="rounded-md border p-3">
+                        <p className="font-medium text-muted-foreground mb-1">Languages Breakdown</p>
+                        <p className="text-muted-foreground">No language stats returned</p>
+                      </div>
+                    ) : null}
+
+                    {snapshot?.dependencyProfile?.manifests?.length ? (
+                      <div className="rounded-md border p-3">
+                        <p className="font-medium text-muted-foreground mb-2">Dependency Manifests</p>
+                        <div className="flex flex-wrap gap-2 font-mono">
+                          {snapshot.dependencyProfile.manifests.map((m) => (
+                            <Badge key={m} variant="outline">
+                              {m}
+                            </Badge>
+                          ))}
+                        </div>
+                      </div>
+                    ) : isDataAvailable ? (
+                      <div className="rounded-md border p-3">
+                        <p className="font-medium text-muted-foreground mb-1">Dependency Manifests</p>
+                        <p className="text-muted-foreground">No dependency manifests detected</p>
+                      </div>
+                    ) : null}
+                  </div>
+
+                  {snapshot?.dependencyProfile?.detectedCapabilities?.length ? (
+                    <div className="rounded-md border bg-secondary/10 p-3 text-xs mb-3">
+                      <p className="font-medium text-muted-foreground mb-2">Detected Capabilities & Systems</p>
+                      <div className="flex flex-wrap gap-2">
+                        {snapshot.dependencyProfile.detectedCapabilities.map((cap) => (
+                          <Badge key={cap} variant="default" className="font-medium">
+                            {cap}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  {snapshot?.repositoryStructure ? (
+                    <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                      {snapshot.repositoryStructure.sourceDirectories?.length ? (
+                        <div className="rounded-md border p-3">
+                          <p className="font-medium text-muted-foreground mb-1">Source Directories</p>
+                          <p className="font-mono text-muted-foreground">{snapshot.repositoryStructure.sourceDirectories.join(", ")}</p>
+                        </div>
+                      ) : null}
+                      {snapshot.repositoryStructure.testDirectories?.length ? (
+                        <div className="rounded-md border p-3">
+                          <p className="font-medium text-muted-foreground mb-1">Test Directories</p>
+                          <p className="font-mono text-muted-foreground">{snapshot.repositoryStructure.testDirectories.join(", ")}</p>
+                        </div>
+                      ) : null}
+                      {snapshot.repositoryStructure.entrypoints?.length ? (
+                        <div className="rounded-md border p-3">
+                          <p className="font-medium text-muted-foreground mb-1">Entrypoints</p>
+                          <p className="font-mono text-muted-foreground">{snapshot.repositoryStructure.entrypoints.join(", ")}</p>
+                        </div>
+                      ) : null}
+                      {snapshot.repositoryStructure.dockerFiles?.length ? (
+                        <div className="rounded-md border p-3">
+                          <p className="font-medium text-muted-foreground mb-1">Containerization</p>
+                          <p className="font-mono text-muted-foreground">{snapshot.repositoryStructure.dockerFiles.join(", ")}</p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
 
-                {/* 3. Health Signals */}
-                {assessment ? (
-                  <div className="border-t pt-6">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">3. Health Signals</h3>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {[
-                        { key: "activity", title: "Development Activity", cat: assessment.categories.activity },
-                        { key: "maintenance", title: "Maintenance", cat: assessment.categories.maintenance },
-                        { key: "documentation", title: "Documentation", cat: assessment.categories.documentation },
-                        { key: "releaseDiscipline", title: "Release Discipline", cat: assessment.categories.releaseDiscipline },
-                        { key: "contributorDistribution", title: "Contributor Distribution", cat: assessment.categories.contributorDistribution },
-                        { key: "automation", title: "Automation & CI", cat: assessment.categories.automation },
-                      ].map(({ key, title, cat }) => (
-                        <div key={key} className="rounded-md border p-4 flex flex-col justify-between">
-                          <div>
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <p className="font-semibold text-sm">{title}</p>
-                              <Badge variant="outline" className={categoryStatusBadge(cat?.status).color}>
-                                {categoryStatusBadge(cat?.status).label}
-                              </Badge>
-                            </div>
-                            <p className="text-xs leading-5 text-muted-foreground">{cat?.summary}</p>
-                          </div>
-                          {key === "contributorDistribution" ? (
-                            <p className="mt-2 text-[11px] font-medium text-muted-foreground">
-                              Based on sampled contributor data
-                            </p>
-                          ) : null}
-                          {cat?.evidence?.length ? (
-                            <div className="mt-3 border-t pt-2 text-[11px] text-muted-foreground/80 grid gap-1">
-                              {cat.evidence.map((ev, i) => (
-                                <span key={i}>• {ev}</span>
-                              ))}
-                            </div>
-                          ) : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
-
-                {/* 4. Recent Activity */}
+                {/* 4. Development Activity */}
                 <div className="border-t pt-6">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">4. Recent Activity Breakdown</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">4. Development Activity</h3>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">Last Commit</p>
                       <p className="font-semibold mt-1">
-                        {snapshot?.activity?.lastCommitAt ? formatDate(snapshot.activity.lastCommitAt) : "No commit record"}
+                        {snapshot?.activity?.lastCommitAt
+                          ? formatDate(snapshot.activity.lastCommitAt)
+                          : isDataAvailable
+                            ? "No commit record"
+                            : "Unavailable"}
                       </p>
                     </div>
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">30-Day Commits</p>
-                      <p className="font-semibold mt-1 text-lg">{snapshot?.activity?.commitCount30d ?? 0}</p>
+                      <p className="font-semibold mt-1 text-lg">
+                        {renderMetricDisplay(snapshot?.activity?.commitCount30d, isDataAvailable)}
+                      </p>
                     </div>
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">90-Day Commits</p>
-                      <p className="font-semibold mt-1 text-lg">{snapshot?.activity?.commitCount90d ?? 0}</p>
+                      <p className="font-semibold mt-1 text-lg">
+                        {renderMetricDisplay(snapshot?.activity?.commitCount90d, isDataAvailable)}
+                      </p>
                     </div>
                     <div className="rounded-md border p-3">
                       <p className="text-xs text-muted-foreground">Sampled Contributors</p>
-                      <p className="font-semibold mt-1 text-lg">{snapshot?.contributors?.sampledCount ?? 0}</p>
+                      <p className="font-semibold mt-1 text-lg">
+                        {renderMetricDisplay(snapshot?.contributors?.sampledCount, isDataAvailable)}
+                      </p>
                     </div>
                   </div>
                   {snapshot?.contributors?.topContributors?.length ? (
@@ -499,86 +711,105 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   ) : null}
                 </div>
 
-                {/* 5. Releases & Documentation Checklist */}
-                <div className="border-t pt-6">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">5. Releases & Documentation Checklist</h3>
-                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-xs">
-                    {[
-                      { label: "README Documentation", present: snapshot?.documentation?.hasReadme },
-                      { label: "Open Source License", present: snapshot?.documentation?.hasLicense },
-                      { label: "Security Policy (SECURITY.md)", present: snapshot?.documentation?.hasSecurityPolicy },
-                      { label: "Contributing Guide (CONTRIBUTING.md)", present: snapshot?.documentation?.hasContributing },
-                      { label: "Code of Conduct (CODE_OF_CONDUCT.md)", present: snapshot?.documentation?.hasCodeOfConduct },
-                      { label: "Automated CI Workflows", present: snapshot?.stack?.hasWorkflows },
-                    ].map(({ label, present }) => (
-                      <div key={label} className="flex items-center justify-between rounded-md border p-3">
-                        <span>{label}</span>
-                        {present ? (
-                          <span className="flex items-center gap-1 font-semibold text-emerald-500">
-                            <Check className="size-4" /> Present
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 font-semibold text-amber-500">
-                            Missing
-                          </span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  {snapshot?.releases ? (
-                    <div className="mt-3 rounded-md border p-3 text-xs flex flex-wrap items-center justify-between gap-2">
-                      <span>Tagged Releases: <strong>{snapshot.releases.totalCount}</strong> total ({snapshot.releases.releaseCount90d} in last 90 days)</span>
-                      {snapshot.releases.latestRelease ? (
-                        <span className="font-mono">Latest Tag: {snapshot.releases.latestRelease.tagName} ({snapshot.releases.latestRelease.publishedAt ? formatDate(snapshot.releases.latestRelease.publishedAt) : "published"})</span>
-                      ) : (
-                        <span className="text-muted-foreground">No GitHub release tags published</span>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-
-                {/* 6. Technology Stack & Ecosystems */}
-                {snapshot?.stack ? (
+                {/* 5. Engineering Quality */}
+                {assessment ? (
                   <div className="border-t pt-6">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">6. Technology Stack & Ecosystems</h3>
-                    <div className="grid gap-3 sm:grid-cols-2 text-xs">
-                      {snapshot.stack.languages && Object.keys(snapshot.stack.languages).length > 0 ? (
-                        <div className="rounded-md border p-3">
-                          <p className="font-medium text-muted-foreground mb-2">Languages Breakdown</p>
-                          <div className="flex flex-wrap gap-2">
-                            {Object.entries(snapshot.stack.languages).slice(0, 6).map(([lang]) => (
-                              <Badge key={lang} variant="secondary">
-                                {lang}
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">5. Engineering Quality</h3>
+                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                      {[
+                        { key: "testing", title: "Testing & Test Suite", cat: assessment.categories.testing },
+                        { key: "dependencyHygiene", title: "Dependency Hygiene", cat: assessment.categories.dependencyHygiene },
+                        { key: "documentationDepth", title: "Documentation Depth", cat: assessment.categories.documentationDepth },
+                        { key: "deploymentReadiness", title: "Deployment Readiness", cat: assessment.categories.deploymentReadiness },
+                        { key: "operationalMaturity", title: "Operational Maturity", cat: assessment.categories.operationalMaturity },
+                      ].map(({ key, title, cat }) => (
+                        <div key={key} className="rounded-md border p-4 flex flex-col justify-between">
+                          <div>
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <p className="font-semibold text-sm">{title}</p>
+                              <Badge variant="outline" className={categoryStatusBadge(cat?.status).color}>
+                                {categoryStatusBadge(cat?.status).label}
                               </Badge>
-                            ))}
+                            </div>
+                            <p className="text-xs leading-5 text-muted-foreground">{cat?.summary ?? "Category evaluation pending"}</p>
                           </div>
+                          {cat?.evidence?.length ? (
+                            <div className="mt-3 border-t pt-2 text-[11px] text-muted-foreground/80 grid gap-1">
+                              {cat.evidence.map((ev, i) => (
+                                <span key={i}>• {ev}</span>
+                              ))}
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-                      {snapshot.stack.detectedFrameworks?.length ? (
-                        <div className="rounded-md border p-3">
-                          <p className="font-medium text-muted-foreground mb-2">Detected Frameworks & Ecosystems</p>
-                          <div className="flex flex-wrap gap-2 font-mono">
-                            {snapshot.stack.detectedFrameworks.map((m) => (
-                              <Badge key={m} variant="outline">
-                                {m}
-                              </Badge>
-                            ))}
-                          </div>
-                        </div>
-                      ) : null}
+                      ))}
                     </div>
                   </div>
                 ) : null}
 
-                {/* 7. Strengths & Severity-Coded Risks */}
+                {/* 6. Documentation & Governance */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">6. Documentation & Governance</h3>
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+                    {[
+                      { label: "README Documentation", state: getEvidenceState(snapshot?.documentation?.hasReadme, isDataAvailable) },
+                      { label: "Open Source License", state: getEvidenceState(snapshot?.documentation?.hasLicense, isDataAvailable) },
+                      { label: "Security Policy (SECURITY.md)", state: getEvidenceState(snapshot?.documentation?.hasSecurityPolicy, isDataAvailable) },
+                      { label: "Contributing Guide (CONTRIBUTING.md)", state: getEvidenceState(snapshot?.documentation?.hasContributing, isDataAvailable) },
+                      { label: "Code of Conduct (CODE_OF_CONDUCT.md)", state: getEvidenceState(snapshot?.documentation?.hasCodeOfConduct, isDataAvailable) },
+                      { label: "CODEOWNERS Governance", state: getEvidenceState(snapshot?.documentation?.hasCodeowners, isDataAvailable) },
+                      { label: "Automated CI Workflows", state: getEvidenceState(snapshot?.stack?.hasWorkflows, isDataAvailable) },
+                    ].map(({ label, state }) => (
+                      <div key={label} className="flex items-center justify-between rounded-md border p-3">
+                        <span>{label}</span>
+                        {renderEvidenceBadge(state)}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 7. Releases & Maintenance */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">7. Releases & Maintenance</h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs mb-3">
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Total Tagged Releases</p>
+                      <p className="font-semibold mt-1 text-sm">
+                        {renderMetricDisplay(snapshot?.releases?.totalCount, isDataAvailable)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">90-Day Release Count</p>
+                      <p className="font-semibold mt-1 text-sm">
+                        {renderMetricDisplay(snapshot?.releases?.releaseCount90d, isDataAvailable)}
+                      </p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Latest Release Tag</p>
+                      <p className="font-semibold mt-1 text-sm font-mono">
+                        {snapshot?.releases?.latestRelease?.tagName ?? (isDataAvailable ? "No release tag" : "Unavailable")}
+                      </p>
+                    </div>
+                  </div>
+                  {assessment?.categories?.maintenance ? (
+                    <div className="rounded-md border p-4 text-xs">
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <p className="font-semibold text-sm">Maintenance Status Assessment</p>
+                        <Badge variant="outline" className={categoryStatusBadge(assessment.categories.maintenance.status).color}>
+                          {categoryStatusBadge(assessment.categories.maintenance.status).label}
+                        </Badge>
+                      </div>
+                      <p className="text-muted-foreground leading-5">{assessment.categories.maintenance.summary}</p>
+                    </div>
+                  ) : null}
+                </div>
+
+                {/* 8. Evidence-Backed Strengths */}
                 {assessment ? (
                   <div className="border-t pt-6">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">7. Strengths & Severity-Coded Risks</h3>
-                    
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">8. Evidence-Backed Strengths</h3>
                     {assessment.strengths?.length ? (
-                      <div className="mb-4 rounded-md border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs">
-                        <p className="font-semibold text-emerald-400 mb-2">Evidence-Backed Strengths</p>
-                        <ul className="grid gap-1.5 text-muted-foreground">
+                      <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs">
+                        <ul className="grid gap-2 text-muted-foreground">
                           {assessment.strengths.map((s, i) => (
                             <li key={i} className="flex items-start gap-2">
                               <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
@@ -587,8 +818,16 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                           ))}
                         </ul>
                       </div>
-                    ) : null}
+                    ) : (
+                      <p className="text-xs text-muted-foreground">No specific evidence-backed strengths highlighted for this repository state.</p>
+                    )}
+                  </div>
+                ) : null}
 
+                {/* 9. Risks & Review Items */}
+                {assessment ? (
+                  <div className="border-t pt-6">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">9. Risks & Review Items</h3>
                     {assessment.risks?.length ? (
                       <div className="grid gap-3 text-xs">
                         {assessment.risks.map((risk, i) => {
@@ -613,10 +852,10 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   </div>
                 ) : null}
 
-                {/* 8. Questions Before You Rely on This Project */}
+                {/* 10. Questions Before Adoption */}
                 {assessment?.suggestedQuestions?.length ? (
                   <div className="border-t pt-6">
-                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">8. Questions Before You Rely on This Project</h3>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">10. Questions Before Adoption</h3>
                     <div className="rounded-md border p-4 text-xs">
                       <ul className="grid gap-2 text-muted-foreground">
                         {assessment.suggestedQuestions.map((q, i) => (
@@ -630,9 +869,48 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   </div>
                 ) : null}
 
-                {/* 9. Evidence & Limitations Disclaimer */}
+                {/* 11. Evidence & Data Freshness */}
                 <div className="border-t pt-6">
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">9. Evidence & Limitations Disclaimer</h3>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">11. Evidence & Data Freshness</h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Data Provider</p>
+                      <p className="font-semibold mt-1">
+                        {snapshot?.source?.provider ?? (isDataAvailable ? "GitHub REST API v3" : "Unavailable")}
+                      </p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Cache Mode</p>
+                      <p className="font-semibold mt-1">
+                        {isDataAvailable
+                          ? snapshot?.source?.cacheHit
+                            ? `Cached (${snapshot.source.cacheAgeSeconds ?? 0}s ago)`
+                            : "Live fetch"
+                          : "Unavailable"}
+                      </p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Fetched At</p>
+                      <p className="font-semibold mt-1">
+                        {snapshot?.source?.fetchedAt
+                          ? formatDate(snapshot.source.fetchedAt)
+                          : isDataAvailable
+                            ? "Recent"
+                            : "Unavailable"}
+                      </p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Upstream Status</p>
+                      <p className="font-semibold mt-1">
+                        {isDataAvailable ? snapshot?.source?.upstreamStatus ?? "success" : "Unavailable"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 12. Limitations */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">12. Limitations</h3>
                   <div className="rounded-md border border-amber-400/20 bg-amber-400/5 p-4 text-xs leading-5 text-amber-200/90">
                     <p>{assessment?.limitationsDisclaimer || "This report analyzes public GitHub metadata. It is not a security audit or investment recommendation."}</p>
                     {assessment?.analyzedAt ? (
