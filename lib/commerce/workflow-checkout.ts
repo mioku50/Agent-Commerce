@@ -300,6 +300,13 @@ export async function createHostedWorkflowQuote(input: {
     .select("*")
     .single();
   if (inserted.error) {
+    console.error("[hosted-checkout] quote insert failed", {
+      code: inserted.error.code,
+      message: inserted.error.message,
+      details: inserted.error.details,
+      hint: inserted.error.hint,
+      workflowType: input.request.workflowType,
+    });
     const replay = await client
       .from("hosted_workflow_quotes")
       .select("*")

@@ -101,6 +101,108 @@ async function insertQuote(
   return { id: data.id as string, idempotencyHash, requestHash };
 }
 
+async function insertGitHubQuote(
+  client: SupabaseClient,
+  input: {
+    marker: string;
+    name: string;
+    wallet: string;
+    treasury: string;
+    paymentMode: "sponsored" | "paid";
+  },
+) {
+  const sourceInput = "https://github.com/mioku50/magda-agent";
+  const idempotencyHash = digest(`${input.marker}:${input.name}:github:idempotency`);
+  const requestHash = digest(`${input.marker}:${input.name}:github:request`);
+  const snapshot = {
+    version: 4,
+    workflowType: "github_due_diligence",
+    workflowLabel: "GitHub Project Due Diligence",
+    effectiveTask: "Analyze mioku50/magda-agent using live GitHub repository intelligence.",
+    selectedServices: [
+      {
+        slug: "github-repository-intelligence",
+        name: "GitHub Repository Intelligence",
+        endpoint: "/api/provider/github/repository-intelligence",
+        method: "POST",
+        priceUsdc: 0.0015,
+        reasoning: "Collect live public GitHub data.",
+        presentation: {
+          providerType: "live_provider",
+          providerName: "GitHub API",
+          providerStatus: "live",
+          assetSymbol: null,
+          dataFreshness: "5-minute cache",
+          billingLabel: "GitHub repository intelligence",
+        },
+      },
+      {
+        slug: "github-due-diligence-analysis",
+        name: "GitHub Due Diligence Analysis",
+        endpoint: "/api/premium/github/due-diligence",
+        method: "POST",
+        priceUsdc: 0.0005,
+        reasoning: "Apply deterministic repository analysis.",
+        presentation: {
+          providerType: "internal_deterministic",
+          providerName: null,
+          providerStatus: "deterministic",
+          assetSymbol: null,
+          dataFreshness: null,
+          billingLabel: "Deterministic analysis",
+        },
+      },
+    ],
+    skippedServices: [],
+    estimatedSpendUsdc: 0.002,
+    remainingBudgetUsdc: 0.003,
+    maxPaidCalls: 3,
+    budgetCapUsdc: 0.005,
+    aggregationMode: "deterministic_execution_optional_llm",
+    aggregationLabel: "Deterministic execution with optional AI synthesis",
+    inputPreview: sourceInput,
+    inputSha256: digest(sourceInput),
+    marketSymbol: null,
+    repository: {
+      owner: "mioku50",
+      name: "magda-agent",
+      fullName: "mioku50/magda-agent",
+      canonicalUrl: sourceInput,
+    },
+    warnings: [],
+  };
+
+  const { data, error } = await client
+    .from("hosted_workflow_quotes")
+    .insert({
+      idempotency_hash: idempotencyHash,
+      request_hash: requestHash,
+      requester_fingerprint: digest(`${input.marker}:${input.name}:github:fingerprint`),
+      requester_wallet: input.wallet,
+      workflow_type: "github_due_diligence",
+      task: "Analyze the selected public GitHub repository using live repository data and deterministic due diligence rules.",
+      input_preview: sourceInput,
+      input_hash: digest(sourceInput),
+      budget_usdc: 0.005,
+      planner_snapshot: snapshot,
+      selected_services: snapshot.selectedServices,
+      estimated_provider_cost_usdc: 0.002,
+      platform_fee_usdc: 0,
+      list_price_usdc: 0.002,
+      payment_mode: input.paymentMode,
+      amount_due_usdc: input.paymentMode === "paid" ? 0.002 : 0,
+      treasury_address: input.treasury,
+      chain_id: 5_042_002,
+      asset: "native_usdc",
+      expires_at: new Date(Date.now() + 10 * 60_000).toISOString(),
+    })
+    .select("id")
+    .single();
+
+  assert(!error && data, `Unable to insert GitHub quote: ${error?.message}`);
+  return { id: data.id as string, idempotencyHash, requestHash };
+}
+
 async function launch(
   client: SupabaseClient,
   quote: { id: string; idempotencyHash: string; requestHash: string },
@@ -301,14 +403,17 @@ async function main() {
       .select("id")
       .in("id", paymentIds);
     assert(!publicPaymentError && (publicPayments ?? []).length === 0, "User payments leaked through public RLS.");
-    const { data: publicQuotes, error: publicQuoteError } = await publicClient
-      .from("hosted_workflow_quotes")
-      .select("id")
-      .in("id", quoteIds);
-    assert(!publicQuoteError && (publicQuotes ?? []).length === 0, "Checkout quotes leaked through public RLS.");
+    const githubQuote = await insertGitHubQuote(server, {
+      marker,
+      name: "github",
+      wallet: testAddress(marker, "github-wallet"),
+      treasury,
+      paymentMode: "sponsored",
+    });
+    quoteIds.push(githubQuote.id);
 
     console.log(
-      "[hosted-checkout-db-test] passed: sponsored quota, one quote/payment/job, paid accounting, terminal replay, credit-on-no-start, transaction idempotency, and public RLS",
+      "[hosted-checkout-db-test] passed: sponsored quota, github_due_diligence quote constraint, one quote/payment/job, paid accounting, terminal replay, credit-on-no-start, transaction idempotency, and public RLS",
     );
   } finally {
     if (jobIds.length) await server.from("hosted_agent_jobs").delete().in("id", jobIds);
