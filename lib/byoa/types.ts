@@ -9,6 +9,11 @@ export const BYOA_SCOPES = [
   "workflows:execute",
   "results:read",
   "manifest:read",
+  "workflows:read",
+  "runs:create",
+  "runs:read",
+  "reports:read",
+  "*",
 ] as const;
 
 export type ByoaScope = (typeof BYOA_SCOPES)[number];

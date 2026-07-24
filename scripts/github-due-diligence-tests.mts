@@ -583,6 +583,10 @@ assert.ok(
   !publicExecutiveSummary.includes("completed 2 of 2 paid API calls"),
   "publicExecutiveSummary must NOT include API execution metadata"
 );
+assert.ok(
+  publicExecutiveSummary.includes("standard repository structure and CI automation"),
+  "Governance summary text for repository without governance files must state 'standard repository structure and CI automation'"
+);
 
 console.log("✔ magda-agent comprehensive fixture test suite passed.");
 

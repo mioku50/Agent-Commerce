@@ -666,7 +666,9 @@ export function analyzeGitHubDueDiligence(
   const govSignal =
     docStatus === "strong"
       ? "comprehensive governance documentation"
-      : "standard repository governance";
+      : hasSec || hasLicense
+      ? "standard repository governance"
+      : "standard repository structure and CI automation";
 
   const stackSummary = `The project is primarily written in ${primaryLang}${frameworksText}${containerText}. ${testingSignal}`;
 
