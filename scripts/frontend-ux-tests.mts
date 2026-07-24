@@ -35,6 +35,13 @@ import { hostedWorkflowTemplates } from "../lib/agent/workflow-templates.ts";
 for (const template of hostedWorkflowTemplates) {
   assert(typeof template.benefitLabel === "string" && template.benefitLabel.length > 0);
   assert(template.benefitLabel.includes("Arc verification"));
+  const formattedPrice = `From ${template.estimatedSpendUsdc.toFixed(4)} USDC`;
+  assert(typeof template.estimatedSpendUsdc === "number" && template.estimatedSpendUsdc > 0);
+  if (template.value === "github_due_diligence") {
+    assert.equal(formattedPrice, "From 0.0020 USDC");
+  } else {
+    assert.equal(formattedPrice, "From 0.0013 USDC");
+  }
 }
 
 

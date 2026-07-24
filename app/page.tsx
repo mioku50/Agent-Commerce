@@ -127,9 +127,9 @@ export default async function Home() {
                     {template.benefitLabel}
                   </p>
                 </div>
-                <span className="font-mono text-xs text-muted-foreground md:text-right">
-                  From 0.002 USDC
-                </span>
+                <p className="text-sm font-semibold text-primary">
+                  From {template.estimatedSpendUsdc.toFixed(4)} USDC
+                </p>
               </Link>
             ))}
             <Button asChild variant="outline">
