@@ -125,30 +125,37 @@ async function githubFetch<T>(
 async function githubFetchContentExcerpt(
   owner: string,
   name: string,
-  path: string,
+  pathOrPaths: string | string[],
 ): Promise<string | null> {
-  try {
-    const endpoint = `/repos/${owner}/${name}/contents/${path}`;
-    const data = await githubFetch<{
-      content?: string;
-      encoding?: string;
-      size?: number;
-    }>(endpoint, { timeoutMs: 5000 });
+  const paths = Array.isArray(pathOrPaths) ? pathOrPaths : [pathOrPaths];
+  for (const path of paths) {
+    try {
+      const endpoint = `/repos/${owner}/${name}/contents/${path}`;
+      const data = await githubFetch<{
+        content?: string;
+        encoding?: string;
+        size?: number;
+      }>(endpoint, { timeoutMs: 5000 });
 
-    if (!data || !data.content) return null;
-    let rawText = "";
-    if (data.encoding === "base64") {
-      const cleanBase64 = data.content.replace(/\s/g, "");
-      rawText = Buffer.from(cleanBase64, "base64").toString("utf-8");
-    } else {
-      rawText = String(data.content);
+      if (!data || !data.content) continue;
+      let rawText = "";
+      if (data.encoding === "base64") {
+        const cleanBase64 = data.content.replace(/\s/g, "");
+        rawText = Buffer.from(cleanBase64, "base64").toString("utf-8");
+      } else {
+        rawText = String(data.content);
+      }
+
+      const bounded = rawText.slice(0, MAX_EXCERPT_BYTES);
+      return redactHostedWorkflowText(bounded);
+    } catch (err) {
+      if (err instanceof ProviderError && err.httpStatus === 404) {
+        continue;
+      }
+      throw err;
     }
-
-    const bounded = rawText.slice(0, MAX_EXCERPT_BYTES);
-    return redactHostedWorkflowText(bounded);
-  } catch {
-    return null;
   }
+  return null;
 }
 
 async function githubFetchReadmeExcerpt(
@@ -173,8 +180,11 @@ async function githubFetchReadmeExcerpt(
 
     const bounded = rawText.slice(0, MAX_EXCERPT_BYTES);
     return redactHostedWorkflowText(bounded);
-  } catch {
-    return null;
+  } catch (err) {
+    if (err instanceof ProviderError && err.httpStatus === 404) {
+      return null;
+    }
+    throw err;
   }
 }
 
@@ -187,12 +197,16 @@ export async function fetchGitHubRepositorySnapshot(
   const now = Date.now();
 
   if (!options?.forceFresh && cached && now < cached.expiresAt) {
+    const fetchedAtTime = new Date(cached.snapshot.source.fetchedAt).getTime();
+    const cacheAgeSeconds = Math.max(0, Math.floor((now - fetchedAtTime) / 1000));
+
     return {
       ...cached.snapshot,
       source: {
         ...cached.snapshot.source,
-        fetchedAt: new Date(now).toISOString(),
         cacheHit: true,
+        cacheStatus: "cached",
+        cacheAgeSeconds,
       },
     };
   }
@@ -245,7 +259,10 @@ export async function fetchGitHubRepositorySnapshot(
     contributorsResult,
     languagesResult,
     contentsResult,
+    dotGithubContentsResult,
     workflowsResult,
+    pullsResult,
+    issuesResult,
     readmeExcerptResult,
     securityExcerptResult,
     contributingExcerptResult,
@@ -271,15 +288,37 @@ export async function fetchGitHubRepositorySnapshot(
       { timeoutMs: 6000 },
     ),
     githubFetch<Array<Record<string, any>>>(
+      `/repos/${ref.owner}/${ref.name}/contents/.github`,
+      { timeoutMs: 6000 },
+    ).catch((err) => {
+      if (err instanceof ProviderError && err.httpStatus === 404) {
+        return [];
+      }
+      throw err;
+    }),
+    githubFetch<Array<Record<string, any>>>(
       `/repos/${ref.owner}/${ref.name}/contents/.github/workflows`,
+      { timeoutMs: 6000 },
+    ).catch((err) => {
+      if (err instanceof ProviderError && err.httpStatus === 404) {
+        return [];
+      }
+      throw err;
+    }),
+    githubFetch<Array<Record<string, any>>>(
+      `/repos/${ref.owner}/${ref.name}/pulls?state=open&per_page=1`,
+      { timeoutMs: 6000 },
+    ),
+    githubFetch<Array<Record<string, any>>>(
+      `/repos/${ref.owner}/${ref.name}/issues?state=open&per_page=1`,
       { timeoutMs: 6000 },
     ),
     githubFetchReadmeExcerpt(ref.owner, ref.name),
-    githubFetchContentExcerpt(ref.owner, ref.name, "SECURITY.md"),
-    githubFetchContentExcerpt(ref.owner, ref.name, "CONTRIBUTING.md"),
+    githubFetchContentExcerpt(ref.owner, ref.name, ["SECURITY.md", ".github/SECURITY.md"]),
+    githubFetchContentExcerpt(ref.owner, ref.name, ["CONTRIBUTING.md", ".github/CONTRIBUTING.md"]),
   ]);
 
-  let partialFailures = 0;
+  const warnings: string[] = [];
 
   // Process Commits
   let activity: GitHubActivityMetrics = {
@@ -327,7 +366,7 @@ export async function fetchGitHubRepositorySnapshot(
       commitCount180d: count180d,
     };
   } else {
-    partialFailures++;
+    warnings.push("commits_unavailable");
   }
 
   // Process Releases
@@ -365,7 +404,7 @@ export async function fetchGitHubRepositorySnapshot(
       releaseCount90d: count90d,
     };
   } else {
-    partialFailures++;
+    warnings.push("releases_unavailable");
   }
 
   // Process Contributors
@@ -392,7 +431,7 @@ export async function fetchGitHubRepositorySnapshot(
       topContributorContributionPercentage: topPct,
     };
   } else {
-    partialFailures++;
+    warnings.push("contributors_unavailable");
   }
 
   // Process Languages & Contents
@@ -407,31 +446,49 @@ export async function fetchGitHubRepositorySnapshot(
       primaryLanguage = entries[0][0];
     }
   } else {
-    partialFailures++;
+    warnings.push("languages_unavailable");
   }
 
   const rootFiles = contentsResult.status === "fulfilled" && Array.isArray(contentsResult.value)
     ? contentsResult.value
     : [];
 
+  const dotGithubFiles = dotGithubContentsResult.status === "fulfilled" && Array.isArray(dotGithubContentsResult.value)
+    ? dotGithubContentsResult.value
+    : [];
+
+  if (contentsResult.status !== "fulfilled") {
+    warnings.push("contents_unavailable");
+  }
+
   const fileMap = new Map<string, { size: number }>();
   for (const f of rootFiles) {
     if (f.name) fileMap.set(String(f.name).toLowerCase(), { size: Number(f.size ?? 0) });
   }
+  for (const f of dotGithubFiles) {
+    if (f.name) {
+      fileMap.set(`.github/${String(f.name).toLowerCase()}`, { size: Number(f.size ?? 0) });
+      if (!fileMap.has(String(f.name).toLowerCase())) {
+        fileMap.set(String(f.name).toLowerCase(), { size: Number(f.size ?? 0) });
+      }
+    }
+  }
 
   // Documentation metrics
-  const readmeFile = Array.from(fileMap.keys()).find((k) => /^readme(?:\.(?:md|txt|rst))?$/i.test(k));
-  const licenseFile = Array.from(fileMap.keys()).find((k) => /^license(?:\.(?:md|txt))?$/i.test(k));
-  const securityFile = Array.from(fileMap.keys()).find((k) => /^security(?:\.md)?$/i.test(k));
-  const contributingFile = Array.from(fileMap.keys()).find((k) => /^contributing(?:\.md)?$/i.test(k));
-  const cocFile = Array.from(fileMap.keys()).find((k) => /^code_of_conduct(?:\.md)?$/i.test(k));
+  const readmeFile = Array.from(fileMap.keys()).find((k) => /^readme(?:\.(?:md|txt|rst))?$/i.test(k) || /^\.github\/readme(?:\.(?:md|txt|rst))?$/i.test(k));
+  const licenseFile = Array.from(fileMap.keys()).find((k) => /^license(?:\.(?:md|txt))?$/i.test(k) || /^\.github\/license(?:\.(?:md|txt))?$/i.test(k));
+  const securityFile = Array.from(fileMap.keys()).find((k) => /^security(?:\.md)?$/i.test(k) || /^\.github\/security(?:\.md)?$/i.test(k));
+  const contributingFile = Array.from(fileMap.keys()).find((k) => /^contributing(?:\.md)?$/i.test(k) || /^\.github\/contributing(?:\.md)?$/i.test(k));
+  const cocFile = Array.from(fileMap.keys()).find((k) => /^code_of_conduct(?:\.md)?$/i.test(k) || /^\.github\/code_of_conduct(?:\.md)?$/i.test(k));
+  const codeownersFile = Array.from(fileMap.keys()).find((k) => /^codeowners$/i.test(k) || /^\.github\/codeowners$/i.test(k));
 
   const documentation: GitHubDocumentationMetrics = {
     hasReadme: Boolean(readmeFile),
     hasLicense: Boolean(repository.license || licenseFile),
-    hasSecurityPolicy: Boolean(securityFile),
-    hasContributing: Boolean(contributingFile),
+    hasSecurityPolicy: Boolean(securityFile || (securityExcerptResult.status === "fulfilled" && Boolean(securityExcerptResult.value))),
+    hasContributing: Boolean(contributingFile || (contributingExcerptResult.status === "fulfilled" && Boolean(contributingExcerptResult.value))),
     hasCodeOfConduct: Boolean(cocFile),
+    hasCodeowners: Boolean(codeownersFile),
     readmeSize: readmeFile ? fileMap.get(readmeFile)?.size ?? null : null,
     securityPolicySize: securityFile ? fileMap.get(securityFile)?.size ?? null : null,
     contributingSize: contributingFile ? fileMap.get(contributingFile)?.size ?? null : null,
@@ -478,6 +535,24 @@ export async function fetchGitHubRepositorySnapshot(
     workflowNames = rawWorkflows
       .map((w) => String(w.name || ""))
       .filter((n) => n.endsWith(".yml") || n.endsWith(".yaml"));
+  } else {
+    warnings.push("workflows_unavailable");
+  }
+
+  if (pullsResult.status !== "fulfilled") {
+    warnings.push("pull_requests_unavailable");
+  }
+  if (issuesResult.status !== "fulfilled") {
+    warnings.push("issues_unavailable");
+  }
+  if (readmeExcerptResult.status !== "fulfilled") {
+    warnings.push("readme_unavailable");
+  }
+  if (securityExcerptResult.status !== "fulfilled") {
+    warnings.push("security_policy_unavailable");
+  }
+  if (contributingExcerptResult.status !== "fulfilled") {
+    warnings.push("contributing_guide_unavailable");
   }
 
   const stack: GitHubStackMetrics = {
@@ -497,12 +572,18 @@ export async function fetchGitHubRepositorySnapshot(
   };
 
   // Collaboration
+  const openPullRequestsCount = pullsResult.status === "fulfilled" && Array.isArray(pullsResult.value)
+    ? pullsResult.value.length
+    : undefined;
+
   const collaboration: GitHubCollaborationMetrics = {
     openIssuesCount: repository.openIssuesCount,
+    openPullRequestsCount,
     hasDiscussions: Boolean(repoData.has_discussions),
   };
 
-  const upstreamStatus = partialFailures === 0 ? "success" : "partial_success";
+  const partial = warnings.length > 0;
+  const upstreamStatus = partial ? "partial_success" : "success";
 
   const snapshot: GitHubRepositorySnapshot = {
     version: 1,
@@ -518,8 +599,12 @@ export async function fetchGitHubRepositorySnapshot(
     source: {
       fetchedAt: new Date(now).toISOString(),
       cacheHit: false,
+      cacheStatus: "live",
+      cacheAgeSeconds: 0,
       provider: "GitHub REST API v3",
       upstreamStatus,
+      warnings,
+      partial,
     },
   };
 

@@ -163,6 +163,22 @@ async function runTests() {
         );
       }
 
+      // Pulls
+      if (urlStr.includes("/pulls")) {
+        return new Response(
+          JSON.stringify([{ id: 1, number: 101, title: "Initial PR" }]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      // Issues
+      if (urlStr.includes("/issues")) {
+        return new Response(
+          JSON.stringify([{ id: 2, number: 5, title: "Bug report" }]),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
       return new Response(JSON.stringify({ message: "Not Found" }), { status: 404 });
     }) as typeof fetch;
 
@@ -191,19 +207,30 @@ async function runTests() {
     assert.ok(snapshot1.stack.detectedFrameworks.includes("Node.js"));
     assert.equal(snapshot1.stack.workflowCount, 2);
     assert.equal(snapshot1.source.cacheHit, false);
+    assert.equal(snapshot1.source.cacheStatus, "live");
+    assert.equal(snapshot1.source.cacheAgeSeconds, 0);
     assert.equal(snapshot1.source.provider, "GitHub REST API v3");
     console.log("    ✓ Snapshot structure matches expected schema");
 
-    // Test 2: In-memory cache behavior
-    console.log("  - Test 2: Cache behavior...");
+    // Test 2: In-memory cache behavior & timestamp preservation
+    console.log("  - Test 2: Cache behavior & timestamp preservation...");
+    const originalFetchedAt = snapshot1.source.fetchedAt;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
     const snapshot2 = await fetchGitHubRepositorySnapshot(ref);
     assert.equal(snapshot2.source.cacheHit, true);
-    console.log("    ✓ Second fetch returned cacheHit: true");
+    assert.equal(snapshot2.source.cacheStatus, "cached");
+    assert.equal(snapshot2.source.fetchedAt, originalFetchedAt);
+    assert.ok(typeof snapshot2.source.cacheAgeSeconds === "number");
+    assert.ok(snapshot2.source.cacheAgeSeconds >= 0);
+    console.log("    ✓ Cache hit preserves original fetchedAt timestamp and computes cacheAgeSeconds");
 
     clearGitHubSnapshotCache();
     const snapshot3 = await fetchGitHubRepositorySnapshot(ref);
     assert.equal(snapshot3.source.cacheHit, false);
-    console.log("    ✓ Cache clear resets cacheHit: false");
+    assert.equal(snapshot3.source.cacheStatus, "live");
+    assert.equal(snapshot3.source.cacheAgeSeconds, 0);
+    console.log("    ✓ Cache clear resets cacheHit: false and cacheStatus: live");
 
     // Test 3: Secret redaction in excerpts and release body
     console.log("  - Test 3: Secret redaction in excerpts...");
@@ -284,6 +311,45 @@ async function runTests() {
       },
     );
     console.log("    ✓ Private repository throws github_repository_inaccessible ProviderError (403)");
+
+    // Test 8: Optional sub-fetch failures & warning tracking
+    console.log("  - Test 8: Optional sub-fetch warnings and partial status...");
+    globalThis.fetch = (async (url: string | URL | Request) => {
+      const urlStr = url.toString();
+
+      // Main repository metadata succeeds
+      if (urlStr.includes("/repos/circle/partial-repo") && !urlStr.includes("/commits") && !urlStr.includes("/releases") && !urlStr.includes("/contributors") && !urlStr.includes("/languages") && !urlStr.includes("/contents") && !urlStr.includes("/readme") && !urlStr.includes("/pulls") && !urlStr.includes("/issues")) {
+        return new Response(
+          JSON.stringify({
+            id: 888,
+            name: "partial-repo",
+            full_name: "circle/partial-repo",
+            owner: { login: "circle" },
+            private: false,
+            stargazers_count: 10,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      // Simulate failure for sub-fetches
+      return new Response(
+        JSON.stringify({ message: "Internal Server Error" }),
+        { status: 500 },
+      );
+    }) as typeof fetch;
+
+    clearGitHubSnapshotCache();
+    const partialRef = parseGitHubRepositoryInput("circle/partial-repo");
+    const partialSnapshot = await fetchGitHubRepositorySnapshot(partialRef);
+
+    assert.equal(partialSnapshot.source.partial, true);
+    assert.equal(partialSnapshot.source.upstreamStatus, "partial_success");
+    assert.ok(Array.isArray(partialSnapshot.source.warnings));
+    assert.ok(partialSnapshot.source.warnings.includes("commits_unavailable"));
+    assert.ok(partialSnapshot.source.warnings.includes("workflows_unavailable"));
+    assert.ok(partialSnapshot.source.warnings.includes("pull_requests_unavailable"));
+    console.log("    ✓ Sub-fetch failures populate source.warnings and set source.partial = true");
 
   } finally {
     globalThis.fetch = originalFetch;

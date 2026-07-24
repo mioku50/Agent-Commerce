@@ -69,6 +69,7 @@ export interface GitHubReleasesMetrics {
 
 export interface GitHubCollaborationMetrics {
   openIssuesCount: number;
+  openPullRequestsCount?: number;
   hasDiscussions: boolean;
 }
 
@@ -78,6 +79,7 @@ export interface GitHubDocumentationMetrics {
   hasSecurityPolicy: boolean;
   hasContributing: boolean;
   hasCodeOfConduct: boolean;
+  hasCodeowners?: boolean;
   readmeSize: number | null;
   securityPolicySize: number | null;
   contributingSize: number | null;
@@ -101,8 +103,12 @@ export interface GitHubExcerpts {
 export interface GitHubSourceMetadata {
   fetchedAt: string;
   cacheHit: boolean;
+  cacheStatus?: "live" | "cached";
+  cacheAgeSeconds?: number;
   provider: "GitHub REST API v3";
   upstreamStatus: "success" | "partial_success" | "fallback";
+  warnings?: string[];
+  partial?: boolean;
 }
 
 export interface GitHubRepositorySnapshot {
