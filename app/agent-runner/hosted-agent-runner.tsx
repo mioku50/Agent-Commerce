@@ -26,6 +26,7 @@ import {
   getHostedWorkflowTemplate,
   hostedWorkflowTemplates,
 } from "@/lib/agent/workflow-templates";
+import { parseGitHubRepositoryInput } from "@/lib/providers/github-repository-ref";
 import type {
   HostedPlannerSnapshot,
   HostedWorkflowQuote,
@@ -40,18 +41,20 @@ export function HostedAgentRunner({
   initialHistory: _initialHistory,
   initialWorkflowType,
   initialMarketSymbol,
+  initialRepository,
 }: {
   diagnostic: HostedRunnerDiagnostic;
   initialHistory?: RecentHostedJob[];
   initialWorkflowType: HostedWorkflowType;
   initialMarketSymbol: PythMarketSymbol;
+  initialRepository?: string;
 }) {
   const router = useRouter();
   const wallet = useArcWallet();
   const initial = getHostedWorkflowTemplate(initialWorkflowType) ?? hostedWorkflowTemplates[0];
   const [workflowType, setWorkflowType] = useState<HostedWorkflowType>(initial.value);
   const [task, setTask] = useState(initial.task);
-  const [inputText, setInputText] = useState("");
+  const [inputText, setInputText] = useState(initialRepository ?? "");
   const [marketSymbol, setMarketSymbol] = useState<PythMarketSymbol>(initialMarketSymbol);
   const budget = "0.005";
   const [plan, setPlan] = useState<HostedPlannerSnapshot | null>(null);
@@ -63,7 +66,27 @@ export function HostedAgentRunner({
   const idempotencyKey = useRef<string | null>(null);
   const paymentTransactionHash = useRef<string | null>(null);
   const sponsoredSignature = useRef<string | null>(null);
-  const inputHelper = hostedInputPreviewHelper(inputText);
+
+  let repositoryRef: ReturnType<typeof parseGitHubRepositoryInput> | null = null;
+  if (workflowType === "github_due_diligence" && inputText.trim()) {
+    try {
+      repositoryRef = parseGitHubRepositoryInput(inputText);
+    } catch {
+      repositoryRef = null;
+    }
+  }
+
+  const isInputValid = workflowType === "github_due_diligence"
+    ? Boolean(repositoryRef)
+    : inputText.trim().length >= 20;
+
+  const inputHelper = workflowType === "github_due_diligence"
+    ? !inputText.trim()
+      ? "Enter a public GitHub repository URL (e.g. github.com/owner/repository)."
+      : !repositoryRef
+      ? "Enter a valid public GitHub repository in owner/repository format."
+      : null
+    : hostedInputPreviewHelper(inputText);
 
   function invalidatePlan() {
     setPlan(null);
@@ -226,27 +249,69 @@ export function HostedAgentRunner({
               </select>
               <p className="text-xs text-muted-foreground">{getHostedWorkflowTemplate(workflowType)?.description}</p>
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="hosted-input">Input text</Label>
-              <textarea
-                id="hosted-input"
-                aria-describedby="hosted-input-description hosted-input-helper external-llm-processing-notice"
-                value={inputText}
-                onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }}
-                placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder}
-                minLength={20}
-                maxLength={5000}
-                required
-                className="min-h-36 max-w-full rounded-md border bg-background px-3 py-2 text-sm"
-              />
-              <p id="hosted-input-description" className="text-xs text-muted-foreground">
-                {inputText.length}/5000 · Required. Credentials and private keys are rejected. Sensitive details are automatically redacted.
-              </p>
-              <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
-                <p className="font-semibold">AI processing</p>
-                <p className="mt-1">Your input may be processed by an external AI provider to prepare the report. Do not submit private keys, passwords, API keys, or other secrets.</p>
+            {workflowType === "github_due_diligence" ? (
+              <div className="grid gap-2">
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="hosted-input">Repository URL</Label>
+                  {repositoryRef ? (
+                    <Badge variant="secondary" className="font-mono text-xs">
+                      {repositoryRef.fullName}
+                    </Badge>
+                  ) : null}
+                </div>
+                <input
+                  type="text"
+                  id="hosted-input"
+                  aria-describedby="hosted-input-description hosted-input-helper external-llm-processing-notice"
+                  value={inputText}
+                  onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }}
+                  placeholder="https://github.com/owner/repository"
+                  required
+                  className="h-10 w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+                <div id="hosted-input-description" className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                  <span>Public GitHub repositories only.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const demoRepo = process.env.NEXT_PUBLIC_GITHUB_DEMO_REPOSITORY || "https://github.com/circlefin/developer-controlled-wallets-web-sdk";
+                      setInputText(demoRepo);
+                      invalidatePlan();
+                    }}
+                    className="font-medium text-primary hover:underline cursor-pointer"
+                  >
+                    Try Example
+                  </button>
+                </div>
+                {repositoryRef ? (
+                  <div className="text-xs text-muted-foreground">
+                    Normalized: <code className="font-mono">github.com/{repositoryRef.fullName}</code>
+                  </div>
+                ) : null}
               </div>
-            </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label htmlFor="hosted-input">Input text</Label>
+                <textarea
+                  id="hosted-input"
+                  aria-describedby="hosted-input-description hosted-input-helper external-llm-processing-notice"
+                  value={inputText}
+                  onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }}
+                  placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder}
+                  minLength={20}
+                  maxLength={5000}
+                  required
+                  className="min-h-36 max-w-full rounded-md border bg-background px-3 py-2 text-sm"
+                />
+                <p id="hosted-input-description" className="text-xs text-muted-foreground">
+                  {inputText.length}/5000 · Required. Credentials and private keys are rejected. Sensitive details are automatically redacted.
+                </p>
+                <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
+                  <p className="font-semibold">AI processing</p>
+                  <p className="mt-1">Your input may be processed by an external AI provider to prepare the report. Do not submit private keys, passwords, API keys, or other secrets.</p>
+                </div>
+              </div>
+            )}
             {workflowType === "market_context" ? (
               <div className="grid gap-2">
                 <Label htmlFor="market-symbol">Market asset</Label>
@@ -334,7 +399,7 @@ export function HostedAgentRunner({
               size="lg"
               variant={plan ? "outline" : "default"}
               onClick={() => void preview()}
-              disabled={previewing || launching || !diagnostic.configured || !diagnostic.checkout.configured || !wallet.address || inputText.trim().length < 20}
+              disabled={previewing || launching || !diagnostic.configured || !diagnostic.checkout.configured || !wallet.address || !isInputValid}
             >
               {previewing ? <LoaderCircle className="animate-spin" /> : <Calculator />}
               {previewing ? "Preparing Price…" : quote ? "Refresh Price" : "See Final Price"}
@@ -363,22 +428,49 @@ export function HostedAgentRunner({
                   <div className="rounded-md border bg-secondary/20 p-4">
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Includes</p>
                     <ul className="grid gap-2 text-sm text-muted-foreground">
-                      <li className="flex items-center gap-2">
-                        <Check className="size-4 text-emerald-500" />
-                        <span>Live market data / compute</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="size-4 text-emerald-500" />
-                        <span>Text analysis</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="size-4 text-emerald-500" />
-                        <span>Shareable report</span>
-                      </li>
-                      <li className="flex items-center gap-2">
-                        <Check className="size-4 text-emerald-500" />
-                        <span>Arc verification</span>
-                      </li>
+                      {workflowType === "github_due_diligence" ? (
+                        <>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Live repository data</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Activity and contributor analysis</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Documentation and release review</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Shareable report</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Arc verification</span>
+                          </li>
+                        </>
+                      ) : (
+                        <>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Live market data / compute</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Text analysis</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Shareable report</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Arc verification</span>
+                          </li>
+                        </>
+                      )}
                     </ul>
                   </div>
 

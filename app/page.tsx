@@ -44,27 +44,37 @@ export default async function Home() {
       <section className="border-b bg-secondary/20">
         <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-12 sm:px-6 xl:grid-cols-[1.12fr_0.88fr] xl:items-center">
           <div className="min-w-0">
-            <Badge className="mb-4">Verified agent workflows · Arc Testnet</Badge>
+            <Badge className="mb-4">GitHub Project Intelligence · Arc Testnet</Badge>
             <h1 className="max-w-4xl text-4xl font-bold leading-[1.05] tracking-normal text-foreground sm:text-6xl">
-              Create a verified agent report
+              Understand any GitHub project before you build on it
             </h1>
             <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground">
-              Choose a workflow, provide your input, confirm the total price, and receive a shareable report.
+              Paste a public repository and receive an evidence-backed report on activity, maintenance, documentation, releases, and project risks.
             </p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-              <Button asChild size="lg">
-                <Link href="/agent-runner">
+            <form action="/agent-runner" method="GET" className="mt-7 flex flex-col sm:flex-row gap-3 max-w-2xl">
+              <input type="hidden" name="workflow" value="github_due_diligence" />
+              <div className="relative flex-1">
+                <input
+                  type="text"
+                  name="repository"
+                  placeholder="https://github.com/owner/repository"
+                  required
+                  className="h-11 w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                />
+              </div>
+              <div className="flex gap-3">
+                <Button type="submit" size="lg">
                   <Bot />
-                  Create Report
-                </Link>
-              </Button>
-              <Button asChild size="lg" variant="outline">
-                <Link href="/results">
-                  <FileText />
-                  View Reports
-                </Link>
-              </Button>
-            </div>
+                  Analyze Repository
+                </Button>
+                <Button asChild size="lg" variant="outline">
+                  <Link href="/results">
+                    <FileText />
+                    View Reports
+                  </Link>
+                </Button>
+              </div>
+            </form>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
