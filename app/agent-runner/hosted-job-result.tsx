@@ -31,6 +31,7 @@ import type {
   RiskSeverity,
 } from "@/lib/agent/github-due-diligence";
 import type { GitHubRepositorySnapshot, DataConfidence } from "@/lib/providers/github-types";
+import { buildGitHubPublicReport } from "@/lib/reports/github-public-report";
 import type { HostedJobView } from "./types";
 
 const DEFAULT_CONSUMER_STAGES = [
@@ -325,6 +326,39 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
     assessment?.overallSummary ??
     report?.summary ??
     "Repository analysis is unavailable.";
+
+  const publicReport = buildGitHubPublicReport({
+    jobId: view.job.id,
+    workflow: view.job.workflowType,
+    status: view.job.status,
+    repository: repoRef
+      ? {
+          fullName: repoRef.fullName || view.job.inputPreview,
+          canonicalUrl:
+            repoRef.canonicalUrl ||
+            canonicalUrl ||
+            `https://github.com/${repoRef.fullName || view.job.inputPreview}`,
+        }
+      : null,
+    snapshot,
+    assessment,
+    proofs: view.proofs.map((p) => ({
+      receiptId: p.receiptId,
+      txHash: p.transactionHash || p.receiptId,
+      status: p.status,
+      explorerUrl: p.transactionUrl,
+      blockNumber: p.blockNumber,
+      contractAddress: p.contractAddress,
+    })),
+    receipts: view.services.map((s) => ({
+      receiptId: s.receiptId || s.serviceSlug,
+      serviceSlug: s.serviceSlug,
+      serviceName: s.serviceName,
+      priceUsdc: s.priceUsdc,
+      status: s.status,
+    })),
+    generatedAt: view.job.completedAt || view.job.createdAt,
+  });
 
   const isCompleted = view.job.status === "completed";
   const durationMs = isCompleted && view.job.completedAt && (view.job.startedAt || view.job.createdAt)

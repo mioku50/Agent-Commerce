@@ -1074,13 +1074,56 @@ async function testReportByIdGetEndpoint() {
     assert.equal(json.repository.fullName, "circlefin/agent-commerce");
     assert.equal(json.repository.canonicalUrl, "https://github.com/circlefin/agent-commerce");
     assert.equal(typeof json.executiveSummary, "string");
-    assert.equal(typeof json.projectPurpose, "string");
-    assert(json.technology && typeof json.technology === "object");
-    assert(json.activity && typeof json.activity === "object");
+
+    // Verify all 15 evidence sections are present
+    const sections = [
+      "projectPurpose",
+      "architectureAndTechnology",
+      "developmentActivity",
+      "contributors",
+      "automationAccounts",
+      "engineeringQuality",
+      "documentationAndGovernance",
+      "releasesAndMaintenance",
+      "strengths",
+      "risks",
+      "questionsBeforeAdoption",
+      "evidenceAndFreshness",
+      "limitations",
+      "categoryConfidence",
+      "verification",
+    ];
+
+    for (const section of sections) {
+      assert(json[section] !== undefined, `Report response must contain evidence section '${section}'`);
+    }
+
+    // Verify structure of specific evidence sections & numeric metric format
+    assert.equal(typeof json.projectPurpose.summary, "string");
+    assert.equal(typeof json.architectureAndTechnology.primaryLanguage, "string");
+    assert.equal(typeof json.architectureAndTechnology.workflowCount.value, "number");
+    assert(["high", "medium", "low"].includes(json.architectureAndTechnology.workflowCount.confidence));
+
+    assert.equal(typeof json.developmentActivity.commitCount30d.value, "number");
+    assert(["high", "medium", "low"].includes(json.developmentActivity.commitCount30d.confidence));
+
+    assert.equal(typeof json.contributors.sampledCount.value, "number");
+    assert.equal(typeof json.automationAccounts.botCount.value, "number");
+
+    assert(json.engineeringQuality.testing && typeof json.engineeringQuality.testing === "object");
+    assert(json.engineeringQuality.operationalMaturity && typeof json.engineeringQuality.operationalMaturity === "object");
+
+    assert.equal(typeof json.documentationAndGovernance.hasReadme, "boolean");
+    assert.equal(typeof json.releasesAndMaintenance.totalReleases.value, "number");
+
     assert(Array.isArray(json.strengths));
     assert(Array.isArray(json.risks));
     assert(Array.isArray(json.questionsBeforeAdoption));
-    assert.equal(typeof json.confidence, "string");
+
+    assert.equal(typeof json.evidenceAndFreshness.dataProvider, "string");
+    assert.equal(typeof json.limitations.disclaimer, "string");
+    assert(json.categoryConfidence && typeof json.categoryConfidence === "object");
+
     assert.equal(json.verification.status, "verified");
     assert.equal(json.verification.network, "arc-testnet");
     assert(Array.isArray(json.verification.proofs));
