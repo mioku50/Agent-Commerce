@@ -86,7 +86,7 @@ function runPsql(
 ) {
   const result = spawnSync(
     "psql",
-    ["--no-psqlrc", "--set", "ON_ERROR_STOP=1", ...args],
+    ["--no-psqlrc", "--no-password", "--set", "ON_ERROR_STOP=1", ...args],
     {
       cwd: projectRoot,
       env: environment,
@@ -160,7 +160,6 @@ function main() {
       environment,
       [
         "--quiet",
-        "--single-transaction",
         "--file",
         path.join(migrationsDirectory, migration),
         "--command",
@@ -174,7 +173,7 @@ function main() {
   console.log("[agent-db] applying idempotent supabase/seed.sql");
   runPsql(
     environment,
-    ["--quiet", "--single-transaction", "--file", seedPath],
+    ["--quiet", "--file", seedPath],
     "Database seed",
   );
 
