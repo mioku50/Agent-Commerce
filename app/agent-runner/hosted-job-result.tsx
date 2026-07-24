@@ -18,6 +18,9 @@ import {
   HOSTED_REQUESTER_NOT_CHARGED_COPY,
   HOSTED_REQUESTER_PAYMENT_COPY,
   hostedRequesterDisplayLine,
+  evaluateArcVerificationState,
+  getEvidenceState,
+  type EvidenceState,
 } from "@/lib/agent/hosted-ui";
 import { sanitizePublicReportText } from "@/lib/agent/public-report-copy";
 import { shortenHash } from "@/lib/utils";
@@ -121,12 +124,6 @@ function fallbackReasonLabel(
   return "Deterministic report selected";
 }
 
-export type EvidenceState = "present" | "missing" | "unavailable";
-
-function getEvidenceState(value: boolean | undefined | null, isCollected: boolean): EvidenceState {
-  if (!isCollected || value === undefined || value === null) return "unavailable";
-  return value ? "present" : "missing";
-}
 
 function renderEvidenceBadge(
   state: EvidenceState,
@@ -177,87 +174,38 @@ function ArcVerificationBadge({
   isGithubWorkflow?: boolean;
   jobStatus?: string;
 }) {
-  if (isGithubWorkflow && services) {
-    const intelService = services.find((s) => s.serviceSlug === "github-repository-intelligence");
-    const analysisService = services.find((s) => s.serviceSlug === "github-due-diligence-analysis");
+  const result = evaluateArcVerificationState({ proofs, services, isGithubWorkflow, jobStatus });
 
-    const intelPaid = intelService?.status === "paid";
-    const analysisPaid = analysisService?.status === "paid";
-
-    const intelVerified = intelPaid && proofs.some((p) => p.receiptId === intelService?.receiptId && p.status === "verified");
-    const analysisVerified = analysisPaid && proofs.some((p) => p.receiptId === analysisService?.receiptId && p.status === "verified");
-
-    const verifiedCount = (intelVerified ? 1 : 0) + (analysisVerified ? 1 : 0);
-    const paidCount = (intelPaid ? 1 : 0) + (analysisPaid ? 1 : 0);
-
-    const step2Failed = analysisService?.status === "failed" || (intelPaid && jobStatus === "failed" && !analysisPaid);
-
-    if (verifiedCount === 2) {
-      return (
-        <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/10">
-          <BadgeCheck className="size-3.5" />
-          Verified on Arc
-        </Badge>
-      );
-    }
-
-    if (verifiedCount === 1 && !step2Failed) {
-      return (
-        <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-500 bg-amber-500/10">
-          <BadgeCheck className="size-3.5" />
-          Partially verified · 1 of 2 steps
-        </Badge>
-      );
-    }
-
-    if (step2Failed) {
-      return (
-        <Badge variant="outline" className="gap-1 border-muted bg-muted/50 text-muted-foreground">
-          Verification incomplete
-        </Badge>
-      );
-    }
-
-    const hasPendingProofs = proofs.some((p) => p.status === "pending" || (p.status as string) === "submitted");
-    if (hasPendingProofs || paidCount > verifiedCount || jobStatus === "running" || jobStatus === "queued") {
-      return (
-        <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-500 bg-amber-500/10">
-          <LoaderCircle className="size-3.5 animate-spin" />
-          Verification pending
-        </Badge>
-      );
-    }
-
-    return (
-      <Badge variant="outline" className="gap-1 border-muted bg-muted/50 text-muted-foreground">
-        Verification incomplete
-      </Badge>
-    );
-  }
-
-  // Fallback for non-GitHub workflows
-  if (proofs.length > 0 && proofs.every((proof) => proof.status === "verified")) {
+  if (result.variant === "verified") {
     return (
       <Badge variant="outline" className="gap-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/10">
         <BadgeCheck className="size-3.5" />
-        Verified on Arc
+        {result.label}
       </Badge>
     );
   }
-  if (
-    proofs.length > 0 &&
-    proofs.some((proof) => (proof.status as string) === "pending" || (proof.status as string) === "submitted")
-  ) {
+
+  if (result.variant === "partially_verified") {
+    return (
+      <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-500 bg-amber-500/10">
+        <BadgeCheck className="size-3.5" />
+        {result.label}
+      </Badge>
+    );
+  }
+
+  if (result.variant === "pending") {
     return (
       <Badge variant="outline" className="gap-1 border-amber-500/30 text-amber-500 bg-amber-500/10">
         <LoaderCircle className="size-3.5 animate-spin" />
-        Verification pending
+        {result.label}
       </Badge>
     );
   }
+
   return (
     <Badge variant="outline" className="gap-1 border-muted bg-muted/50 text-muted-foreground">
-      Verification unavailable
+      {result.label}
     </Badge>
   );
 }

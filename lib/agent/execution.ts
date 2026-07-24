@@ -472,7 +472,7 @@ function latestExchange(
   return filtered.at(-1);
 }
 
-function previewJson(value: unknown, maxChars = 1600): unknown {
+export function previewJson(value: unknown, maxChars = 1600): unknown {
   const encoded = JSON.stringify(value);
   if (!encoded) return null;
   if (encoded.length <= maxChars) return value;

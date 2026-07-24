@@ -51,7 +51,7 @@
     "byoa:settlement-db-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-settlement-recovery-db-test.mts",
     "byoa:canary": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-canary.mts",
     "test:security": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/security-exploit-tests.mts",
-    "review:smoke": "node --experimental-transform-types --no-warnings scripts/review-smoke.mts",
+    "review:smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/review-smoke.mts",
     "agy:head": "bash .agents/skills/opus-gemini-golova-ruki/scripts/agy-head.sh",
     "agy:worker": "bash .agents/skills/opus-gemini-golova-ruki/scripts/agy-worker.sh",
     "agy:run:new": "bash .agents/skills/opus-gemini-golova-ruki/scripts/new-run.sh",
