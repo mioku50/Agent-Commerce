@@ -1,0 +1,716 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Arc Agent Commerce Machine API",
+    "version": "1.0.0",
+    "description": "Hosted AI Agent Commerce Machine API v1 on Arc Testnet. Enables external autonomous AI agents to discover workflows, obtain binding quotes, launch sponsored or paid runs, poll execution status, and retrieve structured verified JSON reports with Arc proof trails."
+  },
+  "servers": [
+    {
+      "url": "https://agent-commerce.vercel.app",
+      "description": "Arc Testnet Production Server"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "Local Development Server"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/api/agent/v1/workflows": {
+      "get": {
+        "summary": "List available workflows",
+        "description": "Returns available workflow templates, input schemas, list prices, and Arc Testnet metadata. Requires `workflows:read` credential scope.",
+        "operationId": "listWorkflows",
+        "responses": {
+          "200": {
+            "description": "List of available workflows",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "string",
+                      "example": "1"
+                    },
+                    "workflows": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/WorkflowTemplate"
+                      }
+                    }
+                  },
+                  "required": ["version", "workflows"]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/agent/v1/quotes": {
+      "post": {
+        "summary": "Create workflow quote",
+        "description": "Generates an immutable workflow quote with list price and required payment details. Requires `quotes:create` scope and `Idempotency-Key` header.",
+        "operationId": "createQuote",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkflowQuoteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Quote created or returned from cache (idempotent)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowQuoteResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Quote successfully created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowQuoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
+          }
+        }
+      }
+    },
+    "/api/agent/v1/runs": {
+      "post": {
+        "summary": "Launch workflow execution",
+        "description": "Launches execution for a valid quote. Supports sponsored quota or paid x402 transaction hash. Requires `runs:create` scope and `Idempotency-Key` header.",
+        "operationId": "launchRun",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunLaunchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Run queued successfully",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunLaunchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "402": {
+            "$ref": "#/components/responses/PaymentRequired"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/agent/v1/runs/{runId}": {
+      "get": {
+        "summary": "Poll run execution status",
+        "description": "Retrieves the current execution status, stage, progress, and reportId upon completion. Scoped to credential owner. Requires `runs:read` scope.",
+        "operationId": "getRunStatus",
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "description": "The run identifier returned from POST /api/agent/v1/runs",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current run execution status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunStatusResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    },
+    "/api/agent/v1/reports/{reportId}": {
+      "get": {
+        "summary": "Retrieve structured report",
+        "description": "Returns the completed structured report and Arc verification proofs. Supports `Accept: application/json` or `Accept: text/markdown`. Requires `reports:read` scope.",
+        "operationId": "getReport",
+        "parameters": [
+          {
+            "name": "reportId",
+            "in": "path",
+            "required": true,
+            "description": "The report identifier (matches runId)",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "Accept",
+            "in": "header",
+            "required": false,
+            "description": "Media type negotiation: `application/json` (default) or `text/markdown`",
+            "schema": {
+              "type": "string",
+              "enum": ["application/json", "text/markdown"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Structured JSON report or formatted Markdown text",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StructuredReportResponse"
+                }
+              },
+              "text/markdown": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Report not ready yet (`report_not_ready`)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MachineError"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "aac_live_...",
+        "description": "Arc Agent Commerce Bearer credential token (`aac_live_...`)"
+      }
+    },
+    "parameters": {
+      "IdempotencyKey": {
+        "name": "Idempotency-Key",
+        "in": "header",
+        "required": true,
+        "description": "Unique key to ensure request idempotency (e.g. UUIDv4)",
+        "schema": {
+          "type": "string",
+          "example": "idemp_9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        }
+      }
+    },
+    "schemas": {
+      "MachineError": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message", "retryable", "requestId"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "example": "invalid_repository"
+              },
+              "message": {
+                "type": "string",
+                "example": "Enter a valid GitHub repository in owner/repository format."
+              },
+              "retryable": {
+                "type": "boolean",
+                "example": false
+              },
+              "requestId": {
+                "type": "string",
+                "example": "req_8f12a45b7e90"
+              }
+            }
+          }
+        }
+      },
+      "WorkflowTemplate": {
+        "type": "object",
+        "required": ["id", "name", "shortName", "description", "task", "estimatedUsdc", "inputSchema", "arc"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "example": "github_due_diligence"
+          },
+          "name": {
+            "type": "string",
+            "example": "GitHub Due Diligence"
+          },
+          "shortName": {
+            "type": "string",
+            "example": "GitHub Diligence"
+          },
+          "description": {
+            "type": "string",
+            "example": "Comprehensive technical due diligence for open-source GitHub repositories."
+          },
+          "task": {
+            "type": "string",
+            "example": "Evaluate repository health, architecture, security, activity, and risks"
+          },
+          "estimatedUsdc": {
+            "type": "number",
+            "example": 0.05
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "example": "object" },
+              "properties": { "type": "object" },
+              "required": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "arc": {
+            "type": "object",
+            "properties": {
+              "chainId": { "type": "number", "example": 5042002 },
+              "network": { "type": "string", "example": "arc-testnet" },
+              "asset": { "type": "string", "example": "USDC" },
+              "tokenAddress": { "type": "string", "example": "0x36F174a7A8dCA44E72dF88fE8C349C3eDFAe61A7" }
+            }
+          }
+        }
+      },
+      "WorkflowQuoteRequest": {
+        "type": "object",
+        "required": ["workflow"],
+        "properties": {
+          "workflow": {
+            "type": "string",
+            "example": "github_due_diligence"
+          },
+          "repository": {
+            "type": "string",
+            "example": "circlefin/agent-commerce"
+          },
+          "input": {
+            "type": "object",
+            "properties": {
+              "repository": { "type": "string", "example": "circlefin/agent-commerce" }
+            }
+          }
+        }
+      },
+      "WorkflowQuoteResponse": {
+        "type": "object",
+        "required": ["quoteId", "workflow", "totalUsdc", "sponsored", "expiresAt", "requiredPayment"],
+        "properties": {
+          "quoteId": {
+            "type": "string",
+            "example": "qte_9f81a2b3c4d5"
+          },
+          "workflow": {
+            "type": "string",
+            "example": "github_due_diligence"
+          },
+          "repository": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "fullName": { "type": "string", "example": "circlefin/agent-commerce" },
+              "canonicalUrl": { "type": "string", "example": "https://github.com/circlefin/agent-commerce" }
+            }
+          },
+          "totalUsdc": {
+            "type": "number",
+            "example": 0.05
+          },
+          "sponsored": {
+            "type": "boolean",
+            "example": true
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "example": "2026-07-24T22:15:00.000Z"
+          },
+          "requiredPayment": {
+            "type": "object",
+            "properties": {
+              "network": { "type": "string", "example": "arc-testnet" },
+              "asset": { "type": "string", "example": "USDC" },
+              "amount": { "type": "number", "example": 0.0 },
+              "treasuryAddress": { "type": "string", "example": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e" },
+              "chainId": { "type": "number", "example": 5042002 }
+            }
+          }
+        }
+      },
+      "RunLaunchRequest": {
+        "type": "object",
+        "required": ["quoteId"],
+        "properties": {
+          "quoteId": {
+            "type": "string",
+            "example": "qte_9f81a2b3c4d5"
+          },
+          "paymentAuthorization": {
+            "type": "object",
+            "properties": {
+              "type": { "type": "string", "example": "arc_transaction" },
+              "payload": { "type": "string", "example": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef" }
+            }
+          }
+        }
+      },
+      "RunLaunchResponse": {
+        "type": "object",
+        "required": ["runId", "status", "pollAfterMs"],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "example": "job_01h9a8b7c6d5"
+          },
+          "status": {
+            "type": "string",
+            "example": "queued"
+          },
+          "pollAfterMs": {
+            "type": "number",
+            "example": 2000
+          }
+        }
+      },
+      "RunStatusResponse": {
+        "type": "object",
+        "required": ["runId", "status", "progress", "stage", "pollAfterMs"],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "example": "job_01h9a8b7c6d5"
+          },
+          "status": {
+            "type": "string",
+            "enum": ["queued", "running", "completed", "completed_with_warnings", "failed", "expired"],
+            "example": "completed"
+          },
+          "progress": {
+            "type": "number",
+            "example": 1.0
+          },
+          "stage": {
+            "type": "string",
+            "example": "completed"
+          },
+          "pollAfterMs": {
+            "type": "number",
+            "example": 0
+          },
+          "reportId": {
+            "type": "string",
+            "example": "job_01h9a8b7c6d5"
+          },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "example": "verified" },
+              "verifiedSteps": { "type": "number", "example": 2 },
+              "requiredSteps": { "type": "number", "example": 2 }
+            }
+          }
+        }
+      },
+      "StructuredReportResponse": {
+        "type": "object",
+        "required": [
+          "reportId",
+          "workflow",
+          "repository",
+          "status",
+          "executiveSummary",
+          "projectPurpose",
+          "technology",
+          "activity",
+          "strengths",
+          "risks",
+          "questionsBeforeAdoption",
+          "confidence",
+          "verification",
+          "generatedAt"
+        ],
+        "properties": {
+          "reportId": { "type": "string", "example": "job_01h9a8b7c6d5" },
+          "workflow": { "type": "string", "example": "github_due_diligence" },
+          "repository": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "fullName": { "type": "string", "example": "circlefin/agent-commerce" },
+              "canonicalUrl": { "type": "string", "example": "https://github.com/circlefin/agent-commerce" }
+            }
+          },
+          "status": { "type": "string", "example": "completed" },
+          "executiveSummary": { "type": "string", "example": "Repository due diligence completed with strong governance and regular commit activity." },
+          "projectPurpose": { "type": "string", "example": "Hosted AI Agent Commerce layer on Arc Testnet." },
+          "technology": {
+            "type": "object",
+            "properties": {
+              "primaryLanguage": { "type": "string", "example": "TypeScript" },
+              "frameworks": { "type": "array", "items": { "type": "string" }, "example": ["Next.js", "React"] },
+              "hasWorkflows": { "type": "boolean", "example": true },
+              "workflowCount": { "type": "number", "example": 3 }
+            }
+          },
+          "activity": {
+            "type": "object",
+            "properties": {
+              "commitCount30d": { "type": "number", "example": 42 },
+              "commitCount90d": { "type": "number", "example": 120 },
+              "commitCount180d": { "type": "number", "example": 250 },
+              "lastCommitAt": { "type": "string", "example": "2026-07-24T18:00:00Z" }
+            }
+          },
+          "strengths": { "type": "array", "items": { "type": "string" }, "example": ["Comprehensive test suite", "Active maintainers"] },
+          "risks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "code": { "type": "string", "example": "low_test_coverage" },
+                "title": { "type": "string", "example": "Moderate Test Coverage" },
+                "severity": { "type": "string", "example": "low" },
+                "description": { "type": "string", "example": "Some helper functions lack unit tests." },
+                "impact": { "type": "string", "example": "Potential edge case bugs in error handlers." }
+              }
+            }
+          },
+          "questionsBeforeAdoption": { "type": "array", "items": { "type": "string" }, "example": ["What is the long-term maintenance roadmap?"] },
+          "confidence": { "type": "string", "example": "high" },
+          "verification": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string", "example": "verified" },
+              "network": { "type": "string", "example": "arc-testnet" },
+              "proofs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "receiptId": { "type": "string", "example": "rcpt_01h9a8b7" },
+                    "txHash": { "type": "string", "example": "0xabcd1234ef567890" },
+                    "status": { "type": "string", "example": "verified" },
+                    "explorerUrl": { "type": "string", "example": "https://explorer.testnet.arc.network/tx/0xabcd1234ef567890" }
+                  }
+                }
+              }
+            }
+          },
+          "generatedAt": { "type": "string", "format": "date-time", "example": "2026-07-24T21:05:00.000Z" }
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "Invalid input or repository reference",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Missing or invalid Bearer token credential",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      },
+      "PaymentRequired": {
+        "description": "Payment authorization required for paid workflow quote",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Credential scope denied or workflow disabled",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Quote, run, or report not found or unowned",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Idempotency conflict or quote already executed",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Spending limit or rate policy exceeded",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      },
+      "InternalError": {
+        "description": "Internal server error",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      },
+      "ServiceUnavailable": {
+        "description": "Downstream x402 service or provider unavailable",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/MachineError"
+            }
+          }
+        }
+      }
+    }
+  }
+}

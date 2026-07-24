@@ -7,6 +7,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   Bot,
+  Code2,
   FlaskConical,
   Fuel,
   Radio,
@@ -21,10 +22,16 @@ import { getPythProviderDiagnostic } from "@/lib/providers/pyth";
 export const metadata = {
   title: "Developer Tools | Arc Agent Commerce",
   description:
-    "Advanced API Store, planner, wallet launch, and local CLI tools for Arc Agent Commerce operators.",
+    "Advanced Machine API, API Store, planner, wallet launch, and local CLI tools for Arc Agent Commerce operators.",
 };
 
 const tools = [
+  {
+    title: "Agent Machine API v1",
+    href: "/console/agent-api",
+    icon: Code2,
+    body: "Machine API v1 endpoints, OpenAPI 3.0 spec, credential scope reference, and interactive TypeScript & Python SDK quickstart snippets.",
+  },
   {
     title: "API Store",
     href: "/store",

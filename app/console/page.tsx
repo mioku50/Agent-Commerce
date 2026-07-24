@@ -1,12 +1,12 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Store, Wrench, ShieldCheck } from "lucide-react";
+import { ArrowRight, Bot, Code2, Store, Wrench, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
   title: "Developer Console | Arc Agent Commerce",
-  description: "Manage agents, seller services, developer utilities, and audit verification.",
+  description: "Manage agents, seller services, Machine API, developer utilities, and audit verification.",
 };
 
 const consoleSections = [
@@ -17,6 +17,14 @@ const consoleSections = [
     description:
       "Owner verification, external agent registration, wallet binding, spending policy, API credentials, test console, and Agent Passport.",
     badge: "BYOA Agent Management",
+  },
+  {
+    title: "Agent Machine API",
+    href: "/console/agent-api",
+    icon: Code2,
+    description:
+      "Machine API v1 endpoints, OpenAPI 3.0 spec, credential scope reference, and interactive TypeScript & Python SDK quickstart snippets.",
+    badge: "Machine-to-Machine API v1",
   },
   {
     title: "Services / Seller",
