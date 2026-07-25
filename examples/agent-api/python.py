@@ -176,8 +176,16 @@ def main():
         # 2. Quote
         quote = client.create_quote("github_due_diligence", repo)
 
-        # 3. Launch
-        run = client.launch_run(quote.get("quoteId"))
+        # 3. Launch handling (Sponsored vs Paid Arc Transaction)
+        payment_tx_hash = None
+        if not quote.get("sponsored"):
+            payment_tx_hash = os.environ.get("PAYMENT_TX_HASH")
+            if not payment_tx_hash:
+                print("\n⚠️ Paid quote requires an Arc USDC transaction.")
+                print("   Provide PAYMENT_TX_HASH environment variable and run again.")
+                return
+
+        run = client.launch_run(quote.get("quoteId"), payment_tx_hash=payment_tx_hash)
 
         # 4. Poll
         final_status = client.poll_until_completion(run.get("runId"))

@@ -243,16 +243,24 @@ export async function resolveMachineIdempotency<T = unknown>(
               result: retryRecord.response_body as T,
             };
           }
+          return {
+            ok: true,
+            conflict: false,
+            cached: false,
+            cachedResponse: null,
+            result: undefined,
+          };
         }
+        // DB error occurred and no existing record found, fall back to memory store
+      } else {
+        return {
+          ok: true,
+          conflict: false,
+          cached: false,
+          cachedResponse: null,
+          result: undefined,
+        };
       }
-
-      return {
-        ok: true,
-        conflict: false,
-        cached: false,
-        cachedResponse: null,
-        result: undefined,
-      };
     } catch (err) {
       console.warn(
         "[machine-idempotency] DB lookup error, falling back to memory store:",

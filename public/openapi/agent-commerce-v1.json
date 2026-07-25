@@ -440,6 +440,18 @@
             "type": "boolean",
             "example": true
           },
+          "checkout": {
+            "type": "object",
+            "properties": {
+              "mode": { "type": "string", "enum": ["sponsored", "arc_transaction"], "example": "sponsored" },
+              "asset": { "type": "string", "example": "USDC" },
+              "network": { "type": "string", "example": "arc-testnet" }
+            }
+          },
+          "downstreamSettlement": {
+            "type": "string",
+            "example": "server_side_x402"
+          },
           "expiresAt": {
             "type": "string",
             "format": "date-time",

@@ -344,8 +344,18 @@ async function main() {
     // 2. Quote
     const quote = await client.createQuote("github_due_diligence", repo);
 
-    // 3. Launch
-    const run = await client.launchRun(quote.quoteId);
+    // 3. Launch handling (Sponsored vs Paid Arc Transaction)
+    let paymentTxHash: string | undefined;
+    if (!quote.sponsored) {
+      paymentTxHash = process.env.PAYMENT_TX_HASH;
+      if (!paymentTxHash) {
+        console.log("\n⚠️ Paid quote requires an Arc USDC transaction.");
+        console.log("   Provide PAYMENT_TX_HASH environment variable and run again.");
+        return;
+      }
+    }
+
+    const run = await client.launchRun(quote.quoteId, paymentTxHash);
 
     // 4. Poll
     const finalStatus = await client.pollUntilCompletion(run.runId);
