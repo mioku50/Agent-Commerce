@@ -28,6 +28,8 @@ import { GET as reportByIdGET } from "../app/api/agent/v1/reports/[reportId]/rou
 console.log("[machine-api-tests] Running Machine API v1 tests...");
 
 // Environment overrides for test isolation
+process.env.NODE_ENV = "test";
+process.env.NEXT_PUBLIC_APP_URL = "http://localhost:3000";
 process.env.HOSTED_WORKFLOW_TREASURY_ADDRESS = "0x2222222222222222222222222222222222222222";
 process.env.SELLER_ADDRESS = "0x2222222222222222222222222222222222222222";
 process.env.RATE_LIMIT_SECRET = "test-rate-limit-secret-12345";
@@ -590,6 +592,121 @@ setByoaClientForTesting(mockClient);
 setCheckoutClientForTesting(mockClient);
 setHostedClientForTesting(mockClient);
 setMachineIdempotencyClientForTesting(mockClient);
+
+function createFailingMachineIdempotencyMockClient(baseClient: any): any {
+  return {
+    ...baseClient,
+    from(tableName: string) {
+      if (tableName === "machine_api_idempotency") {
+        return {
+          select() {
+            return {
+              eq() { return this; },
+              maybeSingle() {
+                return Promise.resolve({ data: null, error: { code: "50000", message: "Database connection lost" } });
+              },
+            };
+          },
+          insert() {
+            return Promise.resolve({ data: null, error: { code: "50000", message: "Database write failed" } });
+          },
+          upsert() {
+            return Promise.resolve({ data: null, error: { code: "50000", message: "Database write failed" } });
+          },
+        };
+      }
+      return baseClient.from(tableName);
+    },
+  };
+}
+
+async function testFailClosedProductionIdempotency() {
+  console.log("-> Testing Fail-Closed Production Idempotency & Fallback Rules...");
+
+  const origEnv = process.env.NODE_ENV;
+  const origAllowOptIn = process.env.MACHINE_API_ALLOW_MEMORY_IDEMPOTENCY;
+
+  try {
+    delete process.env.MACHINE_API_ALLOW_MEMORY_IDEMPOTENCY;
+    process.env.NODE_ENV = "production";
+
+    const failingClient = createFailingMachineIdempotencyMockClient(mockClient);
+
+    // 1. Missing Supabase Client in production mode -> unavailable: true
+    setMachineIdempotencyClientForTesting(null);
+    clearMachineIdempotencyStore();
+    const resProdNoClient = await resolveMachineIdempotency("ik-prod-1", "cred-full-1", { text: "hello" });
+    assert.equal(resProdNoClient.ok, false);
+    assert.equal(resProdNoClient.unavailable, true);
+
+    // 2. Failing Supabase DB in production mode -> unavailable: true
+    setMachineIdempotencyClientForTesting(failingClient);
+    const resProdDbFail = await resolveMachineIdempotency("ik-prod-2", "cred-full-1", { text: "hello" });
+    assert.equal(resProdDbFail.ok, false);
+    assert.equal(resProdDbFail.unavailable, true);
+
+    // 3. HTTP POST /api/agent/v1/quotes in production mode under DB failure -> 503 idempotency_store_unavailable
+    {
+      const req = new NextRequest("http://localhost:3000/api/agent/v1/quotes", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${fullCred.token}`,
+          "Idempotency-Key": `ik-prod-quote-${Date.now()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          workflow: "github_due_diligence",
+          input: { repository: "circlefin/agent-commerce" },
+        }),
+      });
+      const res = await quotesPOST(req);
+      assert.equal(res.status, 503, "Production quote request under DB failure must return HTTP 503");
+      const json = await res.json();
+      assert.equal(json.error.code, "idempotency_store_unavailable");
+      assert.equal(json.error.retryable, true);
+    }
+
+    // 4. HTTP POST /api/agent/v1/runs in production mode under DB failure -> 503 idempotency_store_unavailable
+    {
+      const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${fullCred.token}`,
+          "Idempotency-Key": `ik-prod-run-${Date.now()}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quoteId: "quote-sponsored-1",
+        }),
+      });
+      const res = await runsPOST(req);
+      assert.equal(res.status, 503, "Production run request under DB failure must return HTTP 503");
+      const json = await res.json();
+      assert.equal(json.error.code, "idempotency_store_unavailable");
+      assert.equal(json.error.retryable, true);
+    }
+
+    // 5. Test mode (NODE_ENV=test) allows in-memory fallback
+    process.env.NODE_ENV = "test";
+    setMachineIdempotencyClientForTesting(null);
+    clearMachineIdempotencyStore();
+    const resTestMode = await resolveMachineIdempotency("ik-test-1", "cred-full-1", { text: "hello" });
+    assert.equal(resTestMode.ok, true);
+    assert.equal(resTestMode.unavailable, undefined);
+
+  } finally {
+    process.env.NODE_ENV = origEnv;
+    if (origAllowOptIn !== undefined) {
+      process.env.MACHINE_API_ALLOW_MEMORY_IDEMPOTENCY = origAllowOptIn;
+    } else {
+      delete process.env.MACHINE_API_ALLOW_MEMORY_IDEMPOTENCY;
+    }
+    setMachineIdempotencyClientForTesting(mockClient);
+    clearMachineIdempotencyStore();
+  }
+
+  console.log("✔ Fail-Closed Production Idempotency unit & endpoint tests passed.");
+}
 
 // --- Section 3: Endpoint Tests for GET /api/agent/v1/workflows ---
 console.log("-> Testing GET /api/agent/v1/workflows...");
@@ -1310,6 +1427,7 @@ async function testOpenApiSchema() {
 
 async function runSuite() {
   await testMachineIdempotencyUnit();
+  await testFailClosedProductionIdempotency();
   await testWorkflowsEndpoint();
   await testQuotesEndpoint();
   await testRunsPostEndpoint();

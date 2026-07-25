@@ -89,6 +89,15 @@ export async function POST(request: NextRequest) {
     context.agentId,
   );
 
+  if (idempotencyCheck.unavailable) {
+    return createMachineErrorResponse(
+      "idempotency_store_unavailable",
+      "The request cannot be safely processed right now.",
+      503,
+      true,
+    );
+  }
+
   if (idempotencyCheck.conflict) {
     return createMachineErrorResponse(
       "idempotency_conflict",

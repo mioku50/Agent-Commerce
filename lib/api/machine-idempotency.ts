@@ -10,12 +10,20 @@ import { tryGetServerSupabaseConfig } from "../supabase/server-env.ts";
 export interface IdempotencyCheckResult<T = unknown> {
   ok: boolean;
   conflict: boolean;
+  unavailable?: boolean;
   cachedResponse?: {
     status: number;
     body: T;
   } | null;
   cached: boolean;
   result?: T;
+}
+
+export function isMemoryFallbackAllowed(): boolean {
+  return (
+    process.env.NODE_ENV === "test" ||
+    process.env.MACHINE_API_ALLOW_MEMORY_IDEMPOTENCY === "true"
+  );
 }
 
 export interface ResolveMachineIdempotencyOptions {
@@ -147,6 +155,7 @@ export async function resolveMachineIdempotency<T = unknown>(
   const idempotencyKeyHash = createHash("sha256").update(key.trim()).digest("hex");
   const requestHash = computeCanonicalRequestHash(payload);
   const expiresAt = new Date(Date.now() + TTL_MS).toISOString();
+  const allowMemoryFallback = isMemoryFallbackAllowed();
 
   const supabase = getSupabaseClient();
   if (supabase) {
@@ -159,7 +168,17 @@ export async function resolveMachineIdempotency<T = unknown>(
         .eq("idempotency_key_hash", idempotencyKeyHash)
         .maybeSingle();
 
-      if (!selectError && existing) {
+      if (selectError) {
+        console.warn("[machine-idempotency] DB select error:", selectError);
+        if (!allowMemoryFallback) {
+          return {
+            ok: false,
+            unavailable: true,
+            conflict: false,
+            cached: false,
+          };
+        }
+      } else if (existing) {
         if (new Date(existing.expires_at).getTime() > Date.now()) {
           if (existing.request_hash !== requestHash) {
             return {
@@ -195,54 +214,74 @@ export async function resolveMachineIdempotency<T = unknown>(
         }
       }
 
-      const { error: insertError } = await supabase
-        .from("machine_api_idempotency")
-        .insert({
-          credential_id: credentialId,
-          agent_id: agentId,
-          route: route,
-          idempotency_key_hash: idempotencyKeyHash,
-          request_hash: requestHash,
-          expires_at: expiresAt,
-        });
-
-      if (insertError) {
-        const { data: retryRecord } = await supabase
+      if (!selectError) {
+        const { error: insertError } = await supabase
           .from("machine_api_idempotency")
-          .select("*")
-          .eq("credential_id", credentialId)
-          .eq("route", route)
-          .eq("idempotency_key_hash", idempotencyKeyHash)
-          .maybeSingle();
+          .insert({
+            credential_id: credentialId,
+            agent_id: agentId,
+            route: route,
+            idempotency_key_hash: idempotencyKeyHash,
+            request_hash: requestHash,
+            expires_at: expiresAt,
+          });
 
-        if (
-          retryRecord &&
-          new Date(retryRecord.expires_at).getTime() > Date.now()
-        ) {
-          if (retryRecord.request_hash !== requestHash) {
+        if (insertError) {
+          const { data: retryRecord, error: retrySelectError } = await supabase
+            .from("machine_api_idempotency")
+            .select("*")
+            .eq("credential_id", credentialId)
+            .eq("route", route)
+            .eq("idempotency_key_hash", idempotencyKeyHash)
+            .maybeSingle();
+
+          if (
+            !retrySelectError &&
+            retryRecord &&
+            new Date(retryRecord.expires_at).getTime() > Date.now()
+          ) {
+            if (retryRecord.request_hash !== requestHash) {
+              return {
+                ok: false,
+                conflict: true,
+                cached: false,
+                cachedResponse: null,
+                result: undefined,
+              };
+            }
+            if (
+              retryRecord.response_status !== null &&
+              retryRecord.response_status !== undefined
+            ) {
+              return {
+                ok: true,
+                conflict: false,
+                cached: true,
+                cachedResponse: {
+                  status: retryRecord.response_status,
+                  body: retryRecord.response_body as T,
+                },
+                result: retryRecord.response_body as T,
+              };
+            }
             return {
-              ok: false,
-              conflict: true,
+              ok: true,
+              conflict: false,
               cached: false,
               cachedResponse: null,
               result: undefined,
             };
           }
-          if (
-            retryRecord.response_status !== null &&
-            retryRecord.response_status !== undefined
-          ) {
+
+          if (!allowMemoryFallback) {
             return {
-              ok: true,
+              ok: false,
+              unavailable: true,
               conflict: false,
-              cached: true,
-              cachedResponse: {
-                status: retryRecord.response_status,
-                body: retryRecord.response_body as T,
-              },
-              result: retryRecord.response_body as T,
+              cached: false,
             };
           }
+        } else {
           return {
             ok: true,
             conflict: false,
@@ -251,21 +290,29 @@ export async function resolveMachineIdempotency<T = unknown>(
             result: undefined,
           };
         }
-        // DB error occurred and no existing record found, fall back to memory store
-      } else {
-        return {
-          ok: true,
-          conflict: false,
-          cached: false,
-          cachedResponse: null,
-          result: undefined,
-        };
       }
     } catch (err) {
       console.warn(
-        "[machine-idempotency] DB lookup error, falling back to memory store:",
+        "[machine-idempotency] DB lookup error:",
         err,
       );
+      if (!allowMemoryFallback) {
+        return {
+          ok: false,
+          unavailable: true,
+          conflict: false,
+          cached: false,
+        };
+      }
+    }
+  } else {
+    if (!allowMemoryFallback) {
+      return {
+        ok: false,
+        unavailable: true,
+        conflict: false,
+        cached: false,
+      };
     }
   }
 
@@ -386,6 +433,7 @@ export async function saveMachineIdempotency<T = unknown>(
   const idempotencyKeyHash = createHash("sha256").update(key.trim()).digest("hex");
   const requestHash = computeCanonicalRequestHash(payload);
   const expiresAt = new Date(Date.now() + TTL_MS).toISOString();
+  const allowMemoryFallback = isMemoryFallbackAllowed();
 
   const supabase = getSupabaseClient();
   if (supabase) {
@@ -409,15 +457,19 @@ export async function saveMachineIdempotency<T = unknown>(
       );
       if (!error) return;
       console.warn(
-        "[machine-idempotency] DB upsert error, falling back to memory store:",
+        "[machine-idempotency] DB upsert error:",
         error,
       );
+      if (!allowMemoryFallback) return;
     } catch (err) {
       console.warn(
-        "[machine-idempotency] DB upsert failed, falling back to memory store:",
+        "[machine-idempotency] DB upsert failed:",
         err,
       );
+      if (!allowMemoryFallback) return;
     }
+  } else {
+    if (!allowMemoryFallback) return;
   }
 
   const compositeKey = `${credentialId}:${route}:${idempotencyKeyHash}`;
@@ -440,3 +492,4 @@ export async function saveMachineIdempotency<T = unknown>(
 export function clearMachineIdempotencyStore(): void {
   memoryStore.clear();
 }
+

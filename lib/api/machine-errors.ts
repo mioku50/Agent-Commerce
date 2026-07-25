@@ -19,6 +19,7 @@ export type MachineErrorCode =
   | "quote_already_used"
   | "idempotency_key_missing"
   | "idempotency_conflict"
+  | "idempotency_store_unavailable"
   | "invalid_request"
   | "payment_required"
   | "payment_invalid"
