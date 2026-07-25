@@ -87,6 +87,7 @@ export type HostedAgentJobRow = {
   byoa_agent_id: string | null;
   byoa_quote_id: string | null;
   aggregate_payment_event_id: string | null;
+  machine_credential_id: string | null;
 };
 
 export type HostedLaunchResult = {
@@ -575,6 +576,8 @@ export async function getHostedAgentJobView(jobId: string) {
       paymentMode: job.payment_mode,
       workflowQuoteId: job.workflow_quote_id,
       userPaymentId: job.user_payment_id,
+      byoaAgentId: job.byoa_agent_id ?? null,
+      machineCredentialId: job.machine_credential_id ?? null,
     },
     userPayment,
     payerWallet: agentWallet,

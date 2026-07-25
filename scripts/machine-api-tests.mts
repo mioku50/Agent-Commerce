@@ -1056,6 +1056,11 @@ async function testRunsPostEndpoint() {
     createdRunId = json.runId;
     assert.equal(json.status, "queued");
     assert.equal(json.pollAfterMs, 2000);
+
+    // Verify job row persisted machine_credential_id
+    const storedJob = mockJobsStore.get(createdRunId);
+    assert(storedJob, "Job row must exist in mockJobsStore");
+    assert.equal(storedJob.machine_credential_id, "cred-full-1", "Job creation must persist machine_credential_id");
   }
 
   // Test 8: Idempotency Deduplication (Identical run request returns cached response)

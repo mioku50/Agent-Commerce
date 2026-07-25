@@ -501,6 +501,15 @@ export async function confirmHostedWorkflowQuote(input: {
     retry_after_seconds: number;
   }> | null)?.[0];
   if (!row) throw new Error("Hosted workflow checkout returned no result.");
+  if (row.job_id && (quote.machine_credential_id || quote.byoa_agent_id)) {
+    await getCheckoutClient()
+      .from("hosted_agent_jobs")
+      .update({
+        ...(quote.machine_credential_id ? { machine_credential_id: quote.machine_credential_id } : {}),
+        ...(quote.byoa_agent_id ? { byoa_agent_id: quote.byoa_agent_id } : {}),
+      })
+      .eq("id", row.job_id);
+  }
   return {
     jobId: row.job_id,
     userPaymentId: row.user_payment_id,

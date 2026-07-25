@@ -325,13 +325,14 @@ export async function POST(request: NextRequest) {
       jobId = result.jobId;
     }
 
-    // Associate Agent ID with job
+    // Associate Agent ID and Credential ID with job
     if (jobId) {
       await getByoaClient()
         .from("hosted_agent_jobs")
         .update({
           byoa_agent_id: context.agentId,
           byoa_quote_id: storedQuote.id,
+          machine_credential_id: context.credential.id,
         })
         .eq("id", jobId);
     }
