@@ -111,6 +111,8 @@ const fullCred = createApiCredential("agt_test_full");
 const readOnlyCred = createApiCredential("agt_test_readonly");
 const revokedCred = createApiCredential("agt_test_revoked");
 const credB = createApiCredential("agt_test_agentB");
+const credSameAgent2 = createApiCredential("agt_test_credA2");
+const credSameOwnerAgent2 = createApiCredential("agt_test_sameowner2");
 
 const mockCredentials: Record<string, any> = {
   [fullCred.hash]: {
@@ -119,6 +121,28 @@ const mockCredentials: Record<string, any> = {
     label: "Full Access Token",
     token_prefix: fullCred.prefix,
     credential_hash: fullCred.hash,
+    scopes: ["workflows:read", "quotes:create", "runs:create", "runs:read", "reports:read"],
+    expires_at: "2099-01-01T00:00:00.000Z",
+    revoked_at: null,
+    created_at: "2026-01-01T00:00:00.000Z",
+  },
+  [credSameAgent2.hash]: {
+    id: "cred-full-2",
+    agent_id: "agent-1",
+    label: "Second Token Same Agent",
+    token_prefix: credSameAgent2.prefix,
+    credential_hash: credSameAgent2.hash,
+    scopes: ["workflows:read", "quotes:create", "runs:create", "runs:read", "reports:read"],
+    expires_at: "2099-01-01T00:00:00.000Z",
+    revoked_at: null,
+    created_at: "2026-01-01T00:00:00.000Z",
+  },
+  [credSameOwnerAgent2.hash]: {
+    id: "cred-agent2-1",
+    agent_id: "agent-2-same-owner",
+    label: "Agent 2 Token Same Owner",
+    token_prefix: credSameOwnerAgent2.prefix,
+    credential_hash: credSameOwnerAgent2.hash,
     scopes: ["workflows:read", "quotes:create", "runs:create", "runs:read", "reports:read"],
     expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: null,
@@ -172,6 +196,26 @@ const mockAgent = {
   created_at: "2026-01-01T00:00:00.000Z",
   updated_at: "2026-01-01T00:00:00.000Z",
 };
+
+const mockAgentsStore = new Map<string, any>([
+  ["agent-1", mockAgent],
+  [
+    "agent-2-same-owner",
+    {
+      id: "agent-2-same-owner",
+      public_id: "agt_test_agent2",
+      display_name: "Test Agent 2 Same Owner",
+      owner_wallet: mockAgent.owner_wallet,
+      agent_wallet: getAddress("0x4444444444444444444444444444444444444444"),
+      agent_wallet_status: "verified",
+      status: "active",
+      canary_enabled: true,
+      wallet_verified_at: "2026-01-01T00:00:00.000Z",
+      created_at: "2026-01-01T00:00:00.000Z",
+      updated_at: "2026-01-01T00:00:00.000Z",
+    },
+  ],
+]);
 
 const mockPolicy = {
   agent_id: "agent-1",
@@ -272,6 +316,7 @@ const fixtureCompletedJob = {
   id: "job-existing-1",
   agent_run_id: "run-existing-1",
   byoa_agent_id: "agent-1",
+  machine_credential_id: "cred-full-1",
   requester_wallet: mockAgent.owner_wallet,
   workflow_type: "github_due_diligence",
   task: "Run GitHub due diligence",
@@ -478,7 +523,8 @@ function createMockSupabaseClient(): any {
             return { data: row || null, error: null };
           }
           if (tableName === "byoa_agents") {
-            return { data: mockAgent, error: null };
+            const row = mockAgentsStore.get(filterEqVal) || mockAgent;
+            return { data: row, error: null };
           }
           if (tableName === "byoa_agent_policies") {
             return { data: mockPolicy, error: null };
@@ -1135,7 +1181,7 @@ async function testRunByIdGetEndpoint() {
     assert.equal(res.status, 404);
     const json = await res.json();
     assert.equal(json.error.code, "run_not_found");
-    assert.match(json.error.message, /not owned by this credential/i);
+    assert.match(json.error.message, /The specified workflow run could not be found/i);
   }
 
   // Test 4: Verification Integrity - Receipts without verified Arc proof records evaluate to verification_pending (never verified)
@@ -1302,6 +1348,97 @@ async function testReportByIdGetEndpoint() {
   console.log("✔ GET /api/agent/v1/reports/[reportId] tests passed.");
 }
 
+// --- Section 7b: Multi-Layer Credential Isolation Tests ---
+async function testMultiLayerCredentialIsolation() {
+  console.log("-> Testing Multi-Layer Credential Isolation for Runs & Reports...");
+
+  // 1. Agent 2 sharing the same owner wallet receives 404 run_not_found when querying Agent 1's resource
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${credSameOwnerAgent2.token}` },
+    });
+    const params = Promise.resolve({ runId: "job-existing-1" });
+    const res = await runByIdGET(req, { params });
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "run_not_found");
+    assert.equal(json.error.message, "The specified workflow run could not be found.");
+  }
+
+  // 2. Agent 2 sharing the same owner wallet receives 404 report_not_found when querying Agent 1's report
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/reports/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${credSameOwnerAgent2.token}` },
+    });
+    const params = Promise.resolve({ reportId: "job-existing-1" });
+    const res = await reportByIdGET(req, { params });
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "report_not_found");
+    assert.equal(json.error.message, "The specified workflow report could not be found.");
+  }
+
+  // 3. Credential 2 under the same agent receives 404 run_not_found when querying resources created by Credential 1
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${credSameAgent2.token}` },
+    });
+    const params = Promise.resolve({ runId: "job-existing-1" });
+    const res = await runByIdGET(req, { params });
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "run_not_found");
+    assert.equal(json.error.message, "The specified workflow run could not be found.");
+  }
+
+  // 4. Credential 2 under the same agent receives 404 report_not_found when querying resources created by Credential 1
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/reports/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${credSameAgent2.token}` },
+    });
+    const params = Promise.resolve({ reportId: "job-existing-1" });
+    const res = await reportByIdGET(req, { params });
+    assert.equal(res.status, 404);
+    const json = await res.json();
+    assert.equal(json.error.code, "report_not_found");
+    assert.equal(json.error.message, "The specified workflow report could not be found.");
+  }
+
+  // 5. Original Credential 1 receives 200 and full response for run
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/runs/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ runId: "job-existing-1" });
+    const res = await runByIdGET(req, { params });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.runId, "job-existing-1");
+    assert.equal(json.status, "completed");
+  }
+
+  // 6. Original Credential 1 receives 200 and full response for report
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/reports/job-existing-1", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${fullCred.token}` },
+    });
+    const params = Promise.resolve({ reportId: "job-existing-1" });
+    const res = await reportByIdGET(req, { params });
+    assert.equal(res.status, 200);
+    const json = await res.json();
+    assert.equal(json.reportId, "job-existing-1");
+    assert.equal(json.status, "completed");
+  }
+
+  console.log("✔ Multi-Layer Credential Isolation tests passed.");
+}
+
 // --- Section 8: Spending Limit & Rate Policy Test ---
 console.log("-> Testing Spending Limit & Rate Policy...");
 
@@ -1438,6 +1575,7 @@ async function runSuite() {
   await testRunsPostEndpoint();
   await testRunByIdGetEndpoint();
   await testReportByIdGetEndpoint();
+  await testMultiLayerCredentialIsolation();
   await testSpendingLimit();
   await testSanitizedInternalError();
   await testOpenApiSchema();

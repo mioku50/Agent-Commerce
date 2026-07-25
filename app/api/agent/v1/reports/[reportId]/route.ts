@@ -120,7 +120,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   const { reportId } = await params;
   if (!reportId || typeof reportId !== "string" || !reportId.trim()) {
-    return createMachineErrorResponse("report_not_found", "Report not found.", 404);
+    return createMachineErrorResponse(
+      "report_not_found",
+      "The specified workflow report could not be found.",
+      404,
+    );
   }
 
   let job: HostedAgentJobRow | null = null;
@@ -132,23 +136,30 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     }
   } catch (err) {
     console.error("[reports/[reportId]/route] Job query error:", err);
-    return createMachineErrorResponse("report_not_found", "Report not found.", 404);
+    return createMachineErrorResponse(
+      "report_not_found",
+      "The specified workflow report could not be found.",
+      404,
+    );
   }
 
   if (!job) {
-    return createMachineErrorResponse("report_not_found", "Report not found.", 404);
-  }
-
-  // Scoped Access: Validate ownership against authenticated credential's owner/agent
-  const isAgentOwner =
-    (job.byoa_agent_id && job.byoa_agent_id === context.agentId) ||
-    (job.requester_wallet &&
-      job.requester_wallet.toLowerCase() === context.ownerWallet.toLowerCase());
-
-  if (!isAgentOwner) {
     return createMachineErrorResponse(
       "report_not_found",
-      "Report not found or not owned by this credential.",
+      "The specified workflow report could not be found.",
+      404,
+    );
+  }
+
+  // Enforce strict Machine API credential ownership
+  const isOwner =
+    job.byoa_agent_id === context.agentId &&
+    job.machine_credential_id === context.credential.id;
+
+  if (!isOwner) {
+    return createMachineErrorResponse(
+      "report_not_found",
+      "The specified workflow report could not be found.",
       404,
     );
   }

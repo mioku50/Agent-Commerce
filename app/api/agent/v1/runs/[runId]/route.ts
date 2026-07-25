@@ -55,7 +55,11 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
 
   const { runId } = await params;
   if (!runId || typeof runId !== "string" || !runId.trim()) {
-    return createMachineErrorResponse("run_not_found", "Run not found.", 404);
+    return createMachineErrorResponse(
+      "run_not_found",
+      "The specified workflow run could not be found.",
+      404,
+    );
   }
 
   let job: HostedAgentJobRow | null = null;
@@ -63,23 +67,30 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     job = await getHostedAgentJob(runId.trim());
   } catch (err) {
     console.error("[runs/[runId]/route] Job query error:", err);
-    return createMachineErrorResponse("run_not_found", "Run not found.", 404);
+    return createMachineErrorResponse(
+      "run_not_found",
+      "The specified workflow run could not be found.",
+      404,
+    );
   }
 
   if (!job) {
-    return createMachineErrorResponse("run_not_found", "Run not found.", 404);
-  }
-
-  // Validate Ownership against authenticated credential's agent/owner
-  const isAgentOwner =
-    (job.byoa_agent_id && job.byoa_agent_id === context.agentId) ||
-    (job.requester_wallet &&
-      job.requester_wallet.toLowerCase() === context.ownerWallet.toLowerCase());
-
-  if (!isAgentOwner) {
     return createMachineErrorResponse(
       "run_not_found",
-      "Run not found or not owned by this credential.",
+      "The specified workflow run could not be found.",
+      404,
+    );
+  }
+
+  // Enforce strict Machine API credential ownership
+  const isOwner =
+    job.byoa_agent_id === context.agentId &&
+    job.machine_credential_id === context.credential.id;
+
+  if (!isOwner) {
+    return createMachineErrorResponse(
+      "run_not_found",
+      "The specified workflow run could not be found.",
       404,
     );
   }
