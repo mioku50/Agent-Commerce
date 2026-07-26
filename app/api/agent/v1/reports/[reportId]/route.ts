@@ -62,24 +62,18 @@ function buildReportFromJob(
         : "completed"
       : job.status;
 
-  const proofs: HostedWorkflowArcProofItem[] = (jobView?.proofs || []).map((p) => ({
-    receiptId: p.receiptId,
-    txHash: p.transactionHash || p.receiptId,
-    status: p.status || "verified",
-    explorerUrl:
-      p.transactionUrl ||
-      (p.transactionHash
-        ? `https://explorer.testnet.arc.network/tx/${p.transactionHash}`
-        : null),
-    blockNumber: p.blockNumber,
-    contractAddress: p.contractAddress,
-  }));
-
-  const fallbackProofs: HostedWorkflowArcProofItem[] = (job.proof_transaction_hashes || []).map(
-    (hash) => ({
-      txHash: hash,
-      status: "verified",
-      explorerUrl: `https://explorer.testnet.arc.network/tx/${hash}`,
+  const proofs: HostedWorkflowArcProofItem[] = (jobView?.proofs || []).map(
+    (proof) => ({
+      receiptId: proof.receiptId,
+      txHash: proof.transactionHash || null,
+      status: proof.status,
+      explorerUrl:
+        proof.transactionUrl ||
+        (proof.transactionHash
+          ? `https://testnet.arcscan.app/tx/${proof.transactionHash}`
+          : null),
+      blockNumber: proof.blockNumber,
+      contractAddress: proof.contractAddress,
     }),
   );
 
@@ -105,7 +99,7 @@ function buildReportFromJob(
     repository,
     snapshot,
     assessment,
-    proofs: proofs.length > 0 ? proofs : fallbackProofs,
+    proofs,
     receipts,
     generatedAt,
   });

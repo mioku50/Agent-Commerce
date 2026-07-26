@@ -30,10 +30,9 @@ async function verifyProductionMachineSchema() {
   // Load server configuration safely without logging secrets or URLs
   const serverConfig = tryGetServerSupabaseConfig();
   if (!serverConfig) {
-    console.log(
-      "[verify-machine-schema] SKIPPED: Server Supabase configuration is unconfigured.",
+    throw new Error(
+      "Server Supabase configuration is required for production verification.",
     );
-    return;
   }
 
   console.log(
@@ -64,10 +63,9 @@ async function verifyProductionMachineSchema() {
 
     if (idempotencyTableError) {
       if (isNetworkError(idempotencyTableError.message)) {
-        console.warn(
-          "[verify-machine-schema] WARNING: Database host unreachable (fetch failed / ENOTFOUND). Live database verification skipped.",
+        throw new Error(
+          "Database host is unreachable; production verification cannot be skipped.",
         );
-        return;
       }
       throw new Error(
         `Table public.machine_api_idempotency or required columns missing: ${idempotencyTableError.message}`,
@@ -75,10 +73,9 @@ async function verifyProductionMachineSchema() {
     }
   } catch (err) {
     if (isNetworkError(err)) {
-      console.warn(
-        "[verify-machine-schema] WARNING: Database host unreachable (fetch failed / ENOTFOUND). Live database verification skipped.",
+      throw new Error(
+        "Database host is unreachable; production verification cannot be skipped.",
       );
-      return;
     }
     throw err;
   }
@@ -114,6 +111,30 @@ async function verifyProductionMachineSchema() {
   );
   console.log("  ✓ Unique constraint/index on (credential_id, route, idempotency_key_hash) verified.");
 
+  const { data: reservationProbe, error: reservationProbeError } =
+    await serverClient.rpc("reserve_machine_api_idempotency_v1", {
+      p_credential_id: probeRecord.credential_id,
+      p_agent_id: probeRecord.agent_id,
+      p_route: probeRecord.route,
+      p_idempotency_key_hash: probeRecord.idempotency_key_hash,
+      p_request_hash: probeRecord.request_hash,
+      p_expires_at: probeRecord.expires_at,
+    });
+
+  const reservationRow = (
+    reservationProbe as Array<{
+      reservation_outcome?: string;
+      cached_status?: number | null;
+    }> | null
+  )?.[0];
+  assert(
+    !reservationProbeError &&
+      reservationRow?.reservation_outcome === "cached" &&
+      reservationRow.cached_status === 200,
+    `Atomic reservation RPC verification failed: ${reservationProbeError?.message ?? "unexpected outcome"}`,
+  );
+  console.log("  ✓ Atomic idempotency reservation RPC verified.");
+
   // Verify check 4 (test reservation probe record exists)
   const { data: fetchedProbe, error: fetchProbeError } = await serverClient
     .from("machine_api_idempotency")
@@ -143,14 +164,14 @@ async function verifyProductionMachineSchema() {
 
   const { error: quotesColError } = await serverClient
     .from("hosted_workflow_quotes")
-    .select("id, machine_credential_id")
+    .select("id, byoa_agent_id, machine_credential_id, owner_wallet")
     .limit(0);
 
   assert(
     !quotesColError,
-    `Column machine_credential_id missing or inaccessible in hosted_workflow_quotes: ${quotesColError?.message}`,
+    `Machine ownership columns missing or inaccessible in hosted_workflow_quotes: ${quotesColError?.message}`,
   );
-  console.log("  ✓ Column machine_credential_id exists in hosted_workflow_quotes.");
+  console.log("  ✓ Machine ownership columns exist in hosted_workflow_quotes.");
 
   const { error: jobsColError } = await serverClient
     .from("hosted_agent_jobs")
@@ -210,7 +231,9 @@ async function verifyProductionMachineSchema() {
     }
     console.log("  ✓ RLS protection verified: public/anon client blocked from machine_api_idempotency.");
   } else {
-    console.log("  ✓ RLS check skipped (public Supabase config unconfigured in this environment).");
+    throw new Error(
+      "Public Supabase configuration is required to verify anonymous access denial.",
+    );
   }
 
   console.log("[verify-machine-schema] All production database schema verifications PASSED successfully!");

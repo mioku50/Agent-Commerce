@@ -11,6 +11,7 @@ import { getAddress } from "viem";
 import { createApiCredential, hashApiCredential } from "../lib/byoa/auth.ts";
 import { setByoaClientForTesting } from "../lib/byoa/service.ts";
 import {
+  inspectMachineIdempotency,
   resolveMachineIdempotency,
   saveMachineIdempotency,
   clearMachineIdempotencyStore,
@@ -71,12 +72,38 @@ async function testMachineIdempotencyUnit() {
     sponsored: true,
   };
 
+  // Read-only inspection must not reserve a previously unseen key.
+  const inspection1 = await inspectMachineIdempotency(
+    idempotencyKey,
+    credId,
+    payloadA,
+  );
+  const inspection2 = await inspectMachineIdempotency(
+    idempotencyKey,
+    credId,
+    payloadA,
+  );
+  assert.equal(inspection1.ok, true);
+  assert.equal(inspection1.cached, false);
+  assert.equal(inspection2.ok, true);
+  assert.equal(inspection2.pending, undefined);
+
   // Initial check should be uncached and non-conflicting
   const check1 = await resolveMachineIdempotency(idempotencyKey, credId, payloadA);
   assert.equal(check1.cached, false);
   assert.equal(check1.conflict, false);
   assert.equal(check1.ok, true);
   assert.equal(check1.result, undefined);
+
+  // A concurrent replay before the first response is finalized must not execute.
+  const pendingCheck = await resolveMachineIdempotency(
+    idempotencyKey,
+    credId,
+    payloadA,
+  );
+  assert.equal(pendingCheck.ok, false);
+  assert.equal(pendingCheck.pending, true);
+  assert.equal(pendingCheck.conflict, false);
 
   // Save record
   await saveMachineIdempotency(idempotencyKey, credId, payloadA, mockResult);
@@ -375,6 +402,67 @@ let mockDailyCallCount = 0;
 function createMockSupabaseClient(): any {
   return {
     rpc(fnName: string, args: any) {
+      if (fnName === "reserve_machine_api_idempotency_v1") {
+        const compositeKey =
+          `${args.p_credential_id}:${args.p_route}:${args.p_idempotency_key_hash}`;
+        const existing = mockIdempotencyDbStore.get(compositeKey);
+
+        if (!existing || Date.parse(existing.expires_at) <= Date.now()) {
+          mockIdempotencyDbStore.set(compositeKey, {
+            credential_id: args.p_credential_id,
+            agent_id: args.p_agent_id,
+            route: args.p_route,
+            idempotency_key_hash: args.p_idempotency_key_hash,
+            request_hash: args.p_request_hash,
+            response_status: null,
+            response_body: null,
+            expires_at: args.p_expires_at,
+          });
+          return Promise.resolve({
+            data: [{
+              reservation_outcome: "reserved",
+              cached_status: null,
+              cached_body: null,
+            }],
+            error: null,
+          });
+        }
+
+        if (existing.request_hash !== args.p_request_hash) {
+          return Promise.resolve({
+            data: [{
+              reservation_outcome: "conflict",
+              cached_status: null,
+              cached_body: null,
+            }],
+            error: null,
+          });
+        }
+
+        if (
+          existing.response_status !== null &&
+          existing.response_status !== undefined
+        ) {
+          return Promise.resolve({
+            data: [{
+              reservation_outcome: "cached",
+              cached_status: existing.response_status,
+              cached_body: existing.response_body,
+            }],
+            error: null,
+          });
+        }
+
+        return Promise.resolve({
+          data: [{
+            reservation_outcome: "pending",
+            cached_status: null,
+            cached_body: null,
+          }],
+          error: null,
+        });
+      }
+
       if (fnName === "launch_hosted_workflow_checkout_v1") {
         const quote = mockQuotesStore.get(args.p_quote_id);
         if (!quote) {
@@ -642,6 +730,15 @@ setMachineIdempotencyClientForTesting(mockClient);
 function createFailingMachineIdempotencyMockClient(baseClient: any): any {
   return {
     ...baseClient,
+    rpc(fnName: string, args: any) {
+      if (fnName === "reserve_machine_api_idempotency_v1") {
+        return Promise.resolve({
+          data: null,
+          error: { code: "50000", message: "Database reservation failed" },
+        });
+      }
+      return baseClient.rpc(fnName, args);
+    },
     from(tableName: string) {
       if (tableName === "machine_api_idempotency") {
         return {
@@ -693,6 +790,8 @@ async function testFailClosedProductionIdempotency() {
 
     // 3. HTTP POST /api/agent/v1/quotes in production mode under DB failure -> 503 idempotency_store_unavailable
     {
+      const quoteRowsBefore = mockQuotesStore.size;
+      const jobRowsBefore = mockJobsStore.size;
       const req = new NextRequest("http://localhost:3000/api/agent/v1/quotes", {
         method: "POST",
         headers: {
@@ -710,10 +809,22 @@ async function testFailClosedProductionIdempotency() {
       const json = await res.json();
       assert.equal(json.error.code, "idempotency_store_unavailable");
       assert.equal(json.error.retryable, true);
+      assert.equal(
+        mockQuotesStore.size,
+        quoteRowsBefore,
+        "Unavailable idempotency storage must not create a quote",
+      );
+      assert.equal(
+        mockJobsStore.size,
+        jobRowsBefore,
+        "Unavailable idempotency storage must not create a job",
+      );
     }
 
     // 4. HTTP POST /api/agent/v1/runs in production mode under DB failure -> 503 idempotency_store_unavailable
     {
+      const quoteRowsBefore = mockQuotesStore.size;
+      const jobRowsBefore = mockJobsStore.size;
       const req = new NextRequest("http://localhost:3000/api/agent/v1/runs", {
         method: "POST",
         headers: {
@@ -730,6 +841,16 @@ async function testFailClosedProductionIdempotency() {
       const json = await res.json();
       assert.equal(json.error.code, "idempotency_store_unavailable");
       assert.equal(json.error.retryable, true);
+      assert.equal(
+        mockQuotesStore.size,
+        quoteRowsBefore,
+        "Unavailable idempotency storage must not create a quote",
+      );
+      assert.equal(
+        mockJobsStore.size,
+        jobRowsBefore,
+        "Unavailable idempotency storage must not create a job",
+      );
     }
 
     // 5. Test mode (NODE_ENV=test) allows in-memory fallback
@@ -853,13 +974,15 @@ async function testQuotesEndpoint() {
     assert.equal(json.error.message, "Missing required Idempotency-Key header.");
   }
 
-  // Test 2: Invalid Repository Input -> 400 invalid_repository
+  // Test 2: Invalid Repository Input -> 400 invalid_repository. The same key
+  // remains usable because validation failures must not create a reservation.
+  const reusableInvalidKey = `ik-inv-${Date.now()}`;
   {
     const req = new NextRequest("http://localhost:3000/api/agent/v1/quotes", {
       method: "POST",
       headers: {
         Authorization: `Bearer ${fullCred.token}`,
-        "Idempotency-Key": `ik-inv-${Date.now()}`,
+        "Idempotency-Key": reusableInvalidKey,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -871,6 +994,26 @@ async function testQuotesEndpoint() {
     assert.equal(res.status, 400);
     const json = await res.json();
     assert.equal(json.error.code, "invalid_repository");
+  }
+
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/quotes", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": reusableInvalidKey,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workflow: "github_due_diligence",
+        input: { repository: "circlefin/agent-commerce" },
+      }),
+    });
+    const res = await quotesPOST(req);
+    assert(
+      [200, 201].includes(res.status),
+      "A key used by an invalid request must remain available",
+    );
   }
 
   // Test 3: Successful Quote Creation -> 201/200
@@ -910,6 +1053,12 @@ async function testQuotesEndpoint() {
     assert(json.expiresAt, "expiresAt must be set");
     assert.equal(json.requiredPayment.network, "arc-testnet");
     assert.equal(json.requiredPayment.asset, "USDC");
+
+    const storedQuote = mockQuotesStore.get(createdQuoteId);
+    assert(storedQuote, "Quote row must exist in mockQuotesStore");
+    assert.equal(storedQuote.byoa_agent_id, "agent-1");
+    assert.equal(storedQuote.machine_credential_id, "cred-full-1");
+    assert.equal(storedQuote.owner_wallet, mockAgent.owner_wallet);
   }
 
   // Test 4: Idempotency Deduplication (Identical key & payload returns cached quote)
@@ -1190,7 +1339,9 @@ async function testRunByIdGetEndpoint() {
       ...fixtureCompletedJob,
       id: "job-no-proofs-1",
       agent_run_id: null,
-      proof_transaction_hashes: [],
+      // Deliberately retain denormalized hashes: they must never be treated as
+      // verified without corresponding verified proof records.
+      proof_transaction_hashes: [...fixtureCompletedJob.proof_transaction_hashes],
     };
     mockJobsStore.set("job-no-proofs-1", jobNoProofs);
 
@@ -1216,6 +1367,26 @@ async function testRunByIdGetEndpoint() {
     );
     assert.equal(json.verification.verifiedSteps, 0);
     assert.equal(json.verification.requiredSteps, 2);
+
+    const reportReq = new NextRequest(
+      "http://localhost:3000/api/agent/v1/reports/job-no-proofs-1",
+      {
+        method: "GET",
+        headers: { Authorization: `Bearer ${fullCred.token}` },
+      },
+    );
+    const reportRes = await reportByIdGET(reportReq, {
+      params: Promise.resolve({ reportId: "job-no-proofs-1" }),
+    });
+    assert.equal(reportRes.status, 200);
+    const reportJson = await reportRes.json();
+    assert.equal(reportJson.verification.status, "verification_pending");
+    assert.equal(reportJson.verification.verifiedSteps, 0);
+    assert.deepEqual(
+      reportJson.verification.proofs,
+      [],
+      "Denormalized job hashes must not be exposed as verified Arc proofs",
+    );
   }
 
   console.log("✔ GET /api/agent/v1/runs/[runId] tests passed.");

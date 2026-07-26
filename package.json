@@ -37,6 +37,7 @@
     "github:workflow-test": "node --experimental-transform-types --no-warnings scripts/github-workflow-tests.mts",
     "machine:api-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/machine-api-tests.mts",
     "machine:production-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-machine-schema.mts",
+    "machine:production-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/production-machine-smoke.mts",
     "seller:ssrf-test": "node --experimental-transform-types --no-warnings scripts/ssrf-protection-tests.mts",
     "seller:external-402-test": "node --experimental-transform-types --no-warnings scripts/external-fulfillment-tests.mts",
     "seller:proxy-test": "node --experimental-transform-types --no-warnings scripts/external-proxy-tests.mts",

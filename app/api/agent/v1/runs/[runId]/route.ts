@@ -114,17 +114,14 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       hasFailedProof = view.proofs.some((p) => p.status === "failed");
     }
   } catch {
-    // Ignore error in view fetch, fallback to job.proof_transaction_hashes
+    // A proof-view failure must never be upgraded from denormalized hashes.
   }
 
-  const verifiedHashes = Array.isArray(job.proof_transaction_hashes)
-    ? job.proof_transaction_hashes.filter((h): h is string => Boolean(h && typeof h === "string" && h.trim()))
-    : [];
-
-  const verifiedSteps =
-    proofRecords.length > 0
-      ? proofRecords.filter((p) => p.status === "verified" && Boolean(p.transactionHash)).length
-      : verifiedHashes.length;
+  const verifiedSteps = proofRecords.filter(
+    (proof) =>
+      proof.status === "verified" &&
+      Boolean(proof.transactionHash?.trim()),
+  ).length;
 
   let verificationStatus:
     | "verified"

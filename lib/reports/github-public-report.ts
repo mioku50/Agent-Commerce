@@ -21,7 +21,7 @@ export interface NumericMetric {
 
 export interface HostedWorkflowArcProofItem {
   receiptId?: string;
-  txHash: string;
+  txHash: string | null;
   status: string;
   explorerUrl: string | null;
   blockNumber?: number | null;
@@ -562,7 +562,7 @@ export function formatGitHubPublicReportAsMarkdown(
       ? report.verification.proofs
           .map(
             (p) =>
-              `- \`${p.txHash}\` (${p.status})${p.explorerUrl ? ` — [View Arc Proof](${p.explorerUrl})` : ""}`,
+              `- ${p.txHash ? `\`${p.txHash}\`` : p.receiptId ? `Receipt \`${p.receiptId}\`` : "Proof record"} (${p.status})${p.explorerUrl ? ` — [View Arc Proof](${p.explorerUrl})` : ""}`,
           )
           .join("\n")
       : "- No on-chain proof metadata recorded.";

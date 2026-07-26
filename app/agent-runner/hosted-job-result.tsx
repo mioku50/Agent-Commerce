@@ -344,7 +344,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
     assessment,
     proofs: view.proofs.map((p) => ({
       receiptId: p.receiptId,
-      txHash: p.transactionHash || p.receiptId,
+      txHash: p.transactionHash || null,
       status: p.status,
       explorerUrl: p.transactionUrl,
       blockNumber: p.blockNumber,
