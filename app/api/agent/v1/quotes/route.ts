@@ -8,12 +8,14 @@ import { type Address } from "viem";
 import {
   authenticateMachineRequest,
   enforceQuoteCreationPolicy,
+  enforceQuoteSpendingPolicy,
 } from "../../../../../lib/api/machine-auth.ts";
 import {
   createMachineErrorResponse,
   handleMachineInternalError,
 } from "../../../../../lib/api/machine-errors.ts";
 import {
+  inspectMachineIdempotency,
   resolveMachineIdempotency,
   saveMachineIdempotency,
 } from "../../../../../lib/api/machine-idempotency.ts";
@@ -51,11 +53,6 @@ export async function POST(request: NextRequest) {
   }
   const { context } = authResult;
 
-  const policyResult = await enforceQuoteCreationPolicy(context);
-  if (!policyResult.ok) {
-    return policyResult.response;
-  }
-
   const idempotencyKey =
     request.headers.get("idempotency-key") ||
     request.headers.get("Idempotency-Key");
@@ -79,8 +76,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Idempotency deduplication check
-  const idempotencyCheck = await resolveMachineIdempotency(
+  // A read-only check lets completed retries bypass validation and current
+  // policy limits without reserving malformed requests for the full TTL.
+  const idempotencyCheck = await inspectMachineIdempotency(
     idempotencyKey,
     context.credential.id,
     body,
@@ -102,6 +100,15 @@ export async function POST(request: NextRequest) {
       "idempotency_conflict",
       "This Idempotency-Key is already bound to a different workflow input.",
       409,
+    );
+  }
+
+  if (idempotencyCheck.pending) {
+    return createMachineErrorResponse(
+      "idempotency_in_progress",
+      "A request with this Idempotency-Key is already being processed.",
+      409,
+      true,
     );
   }
 
@@ -195,6 +202,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const policyResult = await enforceQuoteCreationPolicy(context);
+  if (!policyResult.ok) {
+    return policyResult.response;
+  }
+
   try {
     const plan = await previewHostedWorkflow(workflowRequest);
 
@@ -204,6 +216,71 @@ export async function POST(request: NextRequest) {
         "Required workflow services are temporarily unavailable.",
         503,
       );
+    }
+
+    if (workflow === "github_due_diligence") {
+      const selected = new Set(
+        plan.selectedServices.map((service) => service.slug),
+      );
+      const missingRequiredService = [
+        "github-repository-intelligence",
+        "github-due-diligence-analysis",
+      ].some((slug) => !selected.has(slug));
+      if (missingRequiredService) {
+        return createMachineErrorResponse(
+          "provider_unavailable",
+          "GitHub Project Due Diligence is temporarily unavailable because required analysis services are disabled.",
+          503,
+          true,
+        );
+      }
+    }
+
+    const spendingPolicyResult = await enforceQuoteSpendingPolicy(
+      context,
+      plan.estimatedSpendUsdc,
+    );
+    if (!spendingPolicyResult.ok) {
+      return spendingPolicyResult.response;
+    }
+
+    // Reserve only after every read-only validation and policy check. The RPC
+    // is atomic, so a concurrent request can no longer enter the mutation.
+    const reservation = await resolveMachineIdempotency(
+      idempotencyKey,
+      context.credential.id,
+      body,
+      "/api/agent/v1/quotes",
+      context.agentId,
+    );
+    if (reservation.unavailable) {
+      return createMachineErrorResponse(
+        "idempotency_store_unavailable",
+        "The request cannot be safely processed right now.",
+        503,
+        true,
+      );
+    }
+    if (reservation.conflict) {
+      return createMachineErrorResponse(
+        "idempotency_conflict",
+        "This Idempotency-Key is already bound to a different workflow input.",
+        409,
+      );
+    }
+    if (reservation.pending) {
+      return createMachineErrorResponse(
+        "idempotency_in_progress",
+        "A request with this Idempotency-Key is already being processed.",
+        409,
+        true,
+      );
+    }
+    if (reservation.cachedResponse?.body) {
+      return NextResponse.json(reservation.cachedResponse.body, {
+        status: reservation.cachedResponse.status,
+        headers: { "Cache-Control": "no-store" },
+      });
     }
 
     const config = getHostedRunnerConfig();

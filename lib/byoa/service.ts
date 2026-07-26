@@ -465,7 +465,13 @@ export async function updateAgentStatus(ownerWallet: Address, agentId: string, s
 }
 
 
-const allowedWorkflowValues = ["sentiment_tone", "builder_update", "market_context", "custom_task"] as const;
+const allowedWorkflowValues = [
+  "github_due_diligence",
+  "sentiment_tone",
+  "builder_update",
+  "market_context",
+  "custom_task",
+] as const;
 const allowedServiceTypeValues = ["internal_deterministic", "live_provider", "seller_created", "external_seller"] as const;
 
 function policyArray<T extends string>(value: unknown, allowed: readonly T[], label: string) {

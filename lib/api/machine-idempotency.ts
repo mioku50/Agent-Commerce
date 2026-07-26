@@ -10,6 +10,7 @@ import { tryGetServerSupabaseConfig } from "../supabase/server-env.ts";
 export interface IdempotencyCheckResult<T = unknown> {
   ok: boolean;
   conflict: boolean;
+  pending?: boolean;
   unavailable?: boolean;
   cachedResponse?: {
     status: number;
@@ -64,7 +65,7 @@ const memoryStore = new Map<string, MemoryStoredRecord>();
 const MAX_STORE_SIZE = 1000;
 const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-let customClient: SupabaseClient | null = null;
+let customClient: SupabaseClient | null | undefined;
 
 export function setMachineIdempotencyClientForTesting(
   client: SupabaseClient | null,
@@ -73,7 +74,7 @@ export function setMachineIdempotencyClientForTesting(
 }
 
 function getSupabaseClient(): SupabaseClient | null {
-  if (customClient) return customClient;
+  if (customClient !== undefined) return customClient;
   const config = tryGetServerSupabaseConfig();
   if (!config) return null;
   return createClient(config.url, config.key, {
@@ -113,6 +114,184 @@ export function buildIdempotencyCompositeKey(
 ): string {
   const keyHash = createHash("sha256").update(key.trim()).digest("hex");
   return `${credentialId}:${route}:${keyHash}`;
+}
+
+export async function inspectMachineIdempotency<T = unknown>(
+  keyOrOptions: string | ResolveMachineIdempotencyOptions,
+  credentialIdArg?: string,
+  payloadArg?: unknown,
+  routeArg = "/api/agent/v1",
+  _agentIdArg?: string,
+): Promise<IdempotencyCheckResult<T>> {
+  let key: string;
+  let credentialId: string;
+  let route: string;
+  let payload: unknown;
+
+  if (typeof keyOrOptions === "object" && keyOrOptions !== null) {
+    key = keyOrOptions.key;
+    credentialId = keyOrOptions.credentialId;
+    route = keyOrOptions.route || "/api/agent/v1";
+    payload = keyOrOptions.payload;
+  } else {
+    key = keyOrOptions;
+    credentialId = credentialIdArg!;
+    route = routeArg;
+    payload = payloadArg;
+  }
+
+  if (!key || !key.trim()) {
+    return {
+      ok: true,
+      conflict: false,
+      cached: false,
+      cachedResponse: null,
+      result: undefined,
+    };
+  }
+
+  const idempotencyKeyHash = createHash("sha256").update(key.trim()).digest("hex");
+  const requestHash = computeCanonicalRequestHash(payload);
+  const allowMemoryFallback = isMemoryFallbackAllowed();
+  const supabase = getSupabaseClient();
+
+  if (supabase) {
+    try {
+      const { data: existing, error } = await supabase
+        .from("machine_api_idempotency")
+        .select("request_hash,response_status,response_body,expires_at")
+        .eq("credential_id", credentialId)
+        .eq("route", route)
+        .eq("idempotency_key_hash", idempotencyKeyHash)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("[machine-idempotency] DB inspection error:", error);
+        if (!allowMemoryFallback) {
+          return {
+            ok: false,
+            unavailable: true,
+            conflict: false,
+            cached: false,
+          };
+        }
+      } else {
+        if (!existing || Date.parse(existing.expires_at) <= Date.now()) {
+          return {
+            ok: true,
+            conflict: false,
+            cached: false,
+            cachedResponse: null,
+            result: undefined,
+          };
+        }
+        if (existing.request_hash !== requestHash) {
+          return {
+            ok: false,
+            conflict: true,
+            cached: false,
+            cachedResponse: null,
+            result: undefined,
+          };
+        }
+        if (
+          existing.response_status !== null &&
+          existing.response_status !== undefined
+        ) {
+          return {
+            ok: true,
+            conflict: false,
+            cached: true,
+            cachedResponse: {
+              status: existing.response_status,
+              body: existing.response_body as T,
+            },
+            result: existing.response_body as T,
+          };
+        }
+        return {
+          ok: false,
+          pending: true,
+          conflict: false,
+          cached: false,
+          cachedResponse: null,
+          result: undefined,
+        };
+      }
+    } catch (err) {
+      console.warn("[machine-idempotency] DB inspection failed:", err);
+      if (!allowMemoryFallback) {
+        return {
+          ok: false,
+          unavailable: true,
+          conflict: false,
+          cached: false,
+        };
+      }
+    }
+  } else if (!allowMemoryFallback) {
+    return {
+      ok: false,
+      unavailable: true,
+      conflict: false,
+      cached: false,
+    };
+  }
+
+  const compositeKey = `${credentialId}:${route}:${idempotencyKeyHash}`;
+  const existing = memoryStore.get(compositeKey);
+
+  if (!existing) {
+    return {
+      ok: true,
+      conflict: false,
+      cached: false,
+      cachedResponse: null,
+      result: undefined,
+    };
+  }
+  if (Date.now() - existing.createdAt > TTL_MS) {
+    memoryStore.delete(compositeKey);
+    return {
+      ok: true,
+      conflict: false,
+      cached: false,
+      cachedResponse: null,
+      result: undefined,
+    };
+  }
+  if (existing.requestHash !== requestHash) {
+    return {
+      ok: false,
+      conflict: true,
+      cached: false,
+      cachedResponse: null,
+      result: undefined,
+    };
+  }
+  if (
+    existing.responseStatus !== undefined &&
+    existing.responseStatus !== null
+  ) {
+    return {
+      ok: true,
+      conflict: false,
+      cached: true,
+      cachedResponse: {
+        status: existing.responseStatus,
+        body: existing.responseBody as T,
+      },
+      result: existing.responseBody as T,
+    };
+  }
+  return {
+    ok: false,
+    pending: true,
+    conflict: false,
+    cached: false,
+    cachedResponse: null,
+    result: undefined,
+  };
 }
 
 export async function resolveMachineIdempotency<T = unknown>(
@@ -160,16 +339,20 @@ export async function resolveMachineIdempotency<T = unknown>(
   const supabase = getSupabaseClient();
   if (supabase) {
     try {
-      const { data: existing, error: selectError } = await supabase
-        .from("machine_api_idempotency")
-        .select("*")
-        .eq("credential_id", credentialId)
-        .eq("route", route)
-        .eq("idempotency_key_hash", idempotencyKeyHash)
-        .maybeSingle();
+      const { data, error } = await supabase.rpc(
+        "reserve_machine_api_idempotency_v1",
+        {
+          p_credential_id: credentialId,
+          p_agent_id: agentId,
+          p_route: route,
+          p_idempotency_key_hash: idempotencyKeyHash,
+          p_request_hash: requestHash,
+          p_expires_at: expiresAt,
+        },
+      );
 
-      if (selectError) {
-        console.warn("[machine-idempotency] DB select error:", selectError);
+      if (error) {
+        console.warn("[machine-idempotency] DB reservation error:", error);
         if (!allowMemoryFallback) {
           return {
             ok: false,
@@ -178,101 +361,16 @@ export async function resolveMachineIdempotency<T = unknown>(
             cached: false,
           };
         }
-      } else if (existing) {
-        if (new Date(existing.expires_at).getTime() > Date.now()) {
-          if (existing.request_hash !== requestHash) {
-            return {
-              ok: false,
-              conflict: true,
-              cached: false,
-              cachedResponse: null,
-              result: undefined,
-            };
-          }
-          if (
-            existing.response_status !== null &&
-            existing.response_status !== undefined
-          ) {
-            return {
-              ok: true,
-              conflict: false,
-              cached: true,
-              cachedResponse: {
-                status: existing.response_status,
-                body: existing.response_body as T,
-              },
-              result: existing.response_body as T,
-            };
-          }
-          return {
-            ok: true,
-            conflict: false,
-            cached: false,
-            cachedResponse: null,
-            result: undefined,
-          };
-        }
-      }
+      } else {
+        const record = (
+          data as Array<{
+            reservation_outcome?: string;
+            cached_status?: number | null;
+            cached_body?: T | null;
+          }> | null
+        )?.[0];
 
-      if (!selectError) {
-        const { error: insertError } = await supabase
-          .from("machine_api_idempotency")
-          .insert({
-            credential_id: credentialId,
-            agent_id: agentId,
-            route: route,
-            idempotency_key_hash: idempotencyKeyHash,
-            request_hash: requestHash,
-            expires_at: expiresAt,
-          });
-
-        if (insertError) {
-          const { data: retryRecord, error: retrySelectError } = await supabase
-            .from("machine_api_idempotency")
-            .select("*")
-            .eq("credential_id", credentialId)
-            .eq("route", route)
-            .eq("idempotency_key_hash", idempotencyKeyHash)
-            .maybeSingle();
-
-          if (
-            !retrySelectError &&
-            retryRecord &&
-            new Date(retryRecord.expires_at).getTime() > Date.now()
-          ) {
-            if (retryRecord.request_hash !== requestHash) {
-              return {
-                ok: false,
-                conflict: true,
-                cached: false,
-                cachedResponse: null,
-                result: undefined,
-              };
-            }
-            if (
-              retryRecord.response_status !== null &&
-              retryRecord.response_status !== undefined
-            ) {
-              return {
-                ok: true,
-                conflict: false,
-                cached: true,
-                cachedResponse: {
-                  status: retryRecord.response_status,
-                  body: retryRecord.response_body as T,
-                },
-                result: retryRecord.response_body as T,
-              };
-            }
-            return {
-              ok: true,
-              conflict: false,
-              cached: false,
-              cachedResponse: null,
-              result: undefined,
-            };
-          }
-
+        if (!record?.reservation_outcome) {
           if (!allowMemoryFallback) {
             return {
               ok: false,
@@ -281,13 +379,52 @@ export async function resolveMachineIdempotency<T = unknown>(
               cached: false,
             };
           }
-        } else {
+        } else if (record.reservation_outcome === "reserved") {
           return {
             ok: true,
             conflict: false,
             cached: false,
             cachedResponse: null,
             result: undefined,
+          };
+        } else if (record.reservation_outcome === "conflict") {
+          return {
+            ok: false,
+            conflict: true,
+            cached: false,
+            cachedResponse: null,
+            result: undefined,
+          };
+        } else if (record.reservation_outcome === "pending") {
+          return {
+            ok: false,
+            pending: true,
+            conflict: false,
+            cached: false,
+            cachedResponse: null,
+            result: undefined,
+          };
+        } else if (
+          record.reservation_outcome === "cached" &&
+          record.cached_status !== null &&
+          record.cached_status !== undefined
+        ) {
+          return {
+            ok: true,
+            conflict: false,
+            cached: true,
+            cachedResponse: {
+              status: record.cached_status,
+              body: record.cached_body as T,
+            },
+            result: record.cached_body as T,
+          };
+        } else if (!allowMemoryFallback) {
+          return {
+            ok: false,
+            unavailable: true,
+            conflict: false,
+            cached: false,
           };
         }
       }
@@ -348,7 +485,8 @@ export async function resolveMachineIdempotency<T = unknown>(
         };
       }
       return {
-        ok: true,
+        ok: false,
+        pending: true,
         conflict: false,
         cached: false,
         cachedResponse: null,
@@ -492,4 +630,3 @@ export async function saveMachineIdempotency<T = unknown>(
 export function clearMachineIdempotencyStore(): void {
   memoryStore.clear();
 }
-

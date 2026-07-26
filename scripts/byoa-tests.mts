@@ -83,6 +83,22 @@ assert.match(generated.token, /^aac_[0-9a-f]{8}\.agt_[a-z0-9]{20}\./);
 assert.equal(hashApiCredential(generated.token), generated.hash);
 assert.notEqual(generated.hash, generated.token);
 assert.deepEqual(normalizeScopes(["quotes:create", "results:read", "quotes:create"]), ["quotes:create", "results:read"]);
+assert.deepEqual(
+  normalizeScopes([
+    "workflows:read",
+    "quotes:create",
+    "runs:create",
+    "runs:read",
+    "reports:read",
+  ]),
+  [
+    "workflows:read",
+    "quotes:create",
+    "runs:create",
+    "runs:read",
+    "reports:read",
+  ],
+);
 assert.throws(() => normalizeScopes(["admin"]), /unsupported/);
 assert.throws(
   () => validateByoaWorkflowRequest({ workflowType: "market_context", inputText: "short" }),

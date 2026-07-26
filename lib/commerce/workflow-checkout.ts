@@ -318,6 +318,9 @@ export async function createHostedWorkflowQuote(input: {
     treasury_address: checkoutConfig.treasuryAddress,
     chain_id: checkoutConfig.chainId,
     asset: checkoutConfig.asset,
+    byoa_agent_id: input.byoaAgentId || null,
+    machine_credential_id: input.machineCredentialId || null,
+    owner_wallet: input.ownerWallet || null,
     status: "quoted",
     expires_at: expiresAt,
   };

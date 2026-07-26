@@ -181,6 +181,9 @@
           },
           "500": {
             "$ref": "#/components/responses/InternalError"
+          },
+          "503": {
+            "$ref": "#/components/responses/ServiceUnavailable"
           }
         }
       }
@@ -327,7 +330,8 @@
             "properties": {
               "code": {
                 "type": "string",
-                "example": "invalid_repository"
+                "example": "invalid_repository",
+                "description": "Stable Machine API error code. Idempotent mutations may return idempotency_key_missing, idempotency_conflict, idempotency_in_progress, or idempotency_store_unavailable."
               },
               "message": {
                 "type": "string",
@@ -620,9 +624,9 @@
                   "type": "object",
                   "properties": {
                     "receiptId": { "type": "string", "example": "rcpt_01h9a8b7" },
-                    "txHash": { "type": "string", "example": "0xabcd1234ef567890" },
+                    "txHash": { "type": "string", "nullable": true, "example": "0xabcd1234ef567890" },
                     "status": { "type": "string", "example": "verified" },
-                    "explorerUrl": { "type": "string", "example": "https://explorer.testnet.arc.network/tx/0xabcd1234ef567890" }
+                    "explorerUrl": { "type": "string", "example": "https://testnet.arcscan.app/tx/0xabcd1234ef567890" }
                   }
                 }
               }
@@ -684,7 +688,7 @@
         }
       },
       "Conflict": {
-        "description": "Idempotency conflict or quote already executed",
+        "description": "Idempotency conflict, mutation already in progress, or quote already executed",
         "content": {
           "application/json": {
             "schema": {

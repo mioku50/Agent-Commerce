@@ -42,7 +42,7 @@ export default async function Home() {
   return (
     <main className="min-h-screen bg-background">
       <section className="border-b bg-secondary/20">
-        <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-12 sm:px-6 xl:grid-cols-[1.12fr_0.88fr] xl:items-center">
+        <div className="mx-auto grid w-full max-w-7xl grid-cols-[minmax(0,1fr)] gap-8 px-4 py-12 sm:px-6 xl:grid-cols-[minmax(0,1.12fr)_minmax(0,0.88fr)] xl:items-center">
           <div className="min-w-0">
             <Badge className="mb-4">GitHub Project Intelligence · Arc Testnet</Badge>
             <h1 className="max-w-4xl text-4xl font-bold leading-[1.05] tracking-normal text-foreground sm:text-6xl">
@@ -77,7 +77,7 @@ export default async function Home() {
             </form>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 sm:grid-cols-2">
             {[
               ["Reports generated", totalReportsCount.toString(), "Completed workflows"],
               [
@@ -100,7 +100,7 @@ export default async function Home() {
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6 xl:grid-cols-[1fr_0.9fr]">
+      <section className="mx-auto grid w-full max-w-7xl grid-cols-[minmax(0,1fr)] gap-5 px-4 py-8 sm:px-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
         <Card className="command-card rounded-lg">
           <CardHeader>
             <div className="flex items-center justify-between gap-3">

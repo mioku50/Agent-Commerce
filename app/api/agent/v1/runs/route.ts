@@ -13,6 +13,7 @@ import {
   handleMachineInternalError,
 } from "../../../../../lib/api/machine-errors.ts";
 import {
+  inspectMachineIdempotency,
   resolveMachineIdempotency,
   saveMachineIdempotency,
 } from "../../../../../lib/api/machine-idempotency.ts";
@@ -42,11 +43,6 @@ export async function POST(request: NextRequest) {
     return authResult.response;
   }
   const { context } = authResult;
-
-  const policyResult = await enforceRunCreationPolicy(context);
-  if (!policyResult.ok) {
-    return policyResult.response;
-  }
 
   const idempotencyKey =
     request.headers.get("idempotency-key") ||
@@ -80,8 +76,9 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Idempotency deduplication check
-  const idempotencyCheck = await resolveMachineIdempotency(
+  // Check replay state without reserving requests that may still fail quote or
+  // payment validation.
+  const idempotencyCheck = await inspectMachineIdempotency(
     idempotencyKey,
     context.credential.id,
     body,
@@ -106,11 +103,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  if (idempotencyCheck.pending) {
+    return createMachineErrorResponse(
+      "idempotency_in_progress",
+      "A request with this Idempotency-Key is already being processed.",
+      409,
+      true,
+    );
+  }
+
   if (idempotencyCheck.cachedResponse?.body) {
     return NextResponse.json(idempotencyCheck.cachedResponse.body, {
       status: idempotencyCheck.cachedResponse.status,
       headers: { "Cache-Control": "no-store" },
     });
+  }
+
+  const policyResult = await enforceRunCreationPolicy(context);
+  if (!policyResult.ok) {
+    return policyResult.response;
   }
 
   // Fetch Quote
@@ -246,6 +257,44 @@ export async function POST(request: NextRequest) {
     budgetUsdc: workflowRequest.budgetUsdc,
   });
 
+  // Atomically reserve immediately before checkout mutates quote/job state.
+  const reservation = await resolveMachineIdempotency(
+    idempotencyKey,
+    context.credential.id,
+    body,
+    "/api/agent/v1/runs",
+    context.agentId,
+  );
+  if (reservation.unavailable) {
+    return createMachineErrorResponse(
+      "idempotency_store_unavailable",
+      "The request cannot be safely processed right now.",
+      503,
+      true,
+    );
+  }
+  if (reservation.conflict) {
+    return createMachineErrorResponse(
+      "idempotency_conflict",
+      "This Idempotency-Key is already bound to a different run request.",
+      409,
+    );
+  }
+  if (reservation.pending) {
+    return createMachineErrorResponse(
+      "idempotency_in_progress",
+      "A request with this Idempotency-Key is already being processed.",
+      409,
+      true,
+    );
+  }
+  if (reservation.cachedResponse?.body) {
+    return NextResponse.json(reservation.cachedResponse.body, {
+      status: reservation.cachedResponse.status,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
   let jobId: string | null = null;
 
   try {
@@ -327,14 +376,18 @@ export async function POST(request: NextRequest) {
 
     // Associate Agent ID and Credential ID with job
     if (jobId) {
-      await getByoaClient()
+      const { error: ownershipUpdateError } = await getByoaClient()
         .from("hosted_agent_jobs")
         .update({
           byoa_agent_id: context.agentId,
-          byoa_quote_id: storedQuote.id,
           machine_credential_id: context.credential.id,
         })
         .eq("id", jobId);
+      if (ownershipUpdateError) {
+        throw new Error(
+          "Unable to persist Machine API job credential ownership.",
+        );
+      }
     }
 
     const responsePayload = {

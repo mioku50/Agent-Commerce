@@ -260,7 +260,7 @@ Downloads the final structured evaluation report and Arc verification proof meta
         "receiptId": "rcpt_01h9a8b7",
         "txHash": "0xabcd1234ef567890...",
         "status": "verified",
-        "explorerUrl": "https://explorer.testnet.arc.network/tx/0xabcd1234ef567890..."
+        "explorerUrl": "https://testnet.arcscan.app/tx/0xabcd1234ef567890..."
       }
     ]
   },
@@ -289,7 +289,11 @@ All error responses from Machine API v1 follow a standard structure:
 
 | Code | HTTP Status | Description |
 | :--- | :--- | :--- |
-| `credential_missing` | 400 | `Authorization` or `Idempotency-Key` header missing |
+| `credential_missing` | 401 | Bearer credential is missing or invalid |
+| `idempotency_key_missing` | 400 | Required `Idempotency-Key` header is missing |
+| `idempotency_conflict` | 409 | The key is already bound to a different request |
+| `idempotency_in_progress` | 409 | An identical mutation with this key is still running; retry later |
+| `idempotency_store_unavailable` | 503 | Durable idempotency storage is unavailable; no mutation was started |
 | `invalid_repository` | 400 | Malformed repository or JSON input |
 | `credential_revoked` | 401 | The API key has been revoked |
 | `payment_required` | 402 | Payment transaction hash missing for paid quote |

@@ -249,13 +249,24 @@ export async function enforceQuoteCreationPolicy(
   const todayStartIso =
     new Date().toISOString().slice(0, 10) + "T00:00:00.000Z";
   const { count: dailyCallCount, error: countError } = await client
-    .from("byoa_workflow_quotes")
+    .from("hosted_workflow_quotes")
     .select("id", { count: "exact", head: true })
-    .eq("agent_id", context.agentId)
+    .eq("byoa_agent_id", context.agentId)
     .gte("created_at", todayStartIso);
 
+  if (countError) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "internal_error",
+        "The quote policy could not be safely evaluated right now.",
+        503,
+        true,
+      ),
+    };
+  }
+
   if (
-    !countError &&
     dailyCallCount !== null &&
     dailyCallCount >= context.spendingPolicy.max_daily_calls
   ) {
@@ -272,6 +283,87 @@ export async function enforceQuoteCreationPolicy(
   return { ok: true };
 }
 
+export async function enforceQuoteSpendingPolicy(
+  context: MachineAuthContext,
+  estimatedProviderCostUsdc: number,
+): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
+  const maxPerRun = Number(context.spendingPolicy.max_price_per_run_usdc);
+  const dailyLimit = Number(context.spendingPolicy.daily_spend_limit_usdc);
+
+  if (
+    !Number.isFinite(estimatedProviderCostUsdc) ||
+    !Number.isFinite(maxPerRun) ||
+    !Number.isFinite(dailyLimit)
+  ) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "internal_error",
+        "The quote spending policy is invalid.",
+        503,
+        true,
+      ),
+    };
+  }
+
+  if (estimatedProviderCostUsdc > maxPerRun + Number.EPSILON) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "spending_limit_exceeded",
+        `Estimated provider cost exceeds the ${maxPerRun.toFixed(6)} USDC per-run policy limit.`,
+        429,
+      ),
+    };
+  }
+
+  const todayStartIso =
+    new Date().toISOString().slice(0, 10) + "T00:00:00.000Z";
+  const { data, error } = await getByoaClient()
+    .from("hosted_workflow_quotes")
+    .select("estimated_provider_cost_usdc,status")
+    .eq("byoa_agent_id", context.agentId)
+    .gte("created_at", todayStartIso);
+
+  if (error) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "internal_error",
+        "The daily spending policy could not be safely evaluated right now.",
+        503,
+        true,
+      ),
+    };
+  }
+
+  const reservedToday = (data ?? [])
+    .filter(
+      (row) =>
+        row.status !== "expired" &&
+        row.status !== "cancelled" &&
+        row.status !== "credited",
+    )
+    .reduce(
+      (total, row) =>
+        total + Number(row.estimated_provider_cost_usdc || 0),
+      0,
+    );
+
+  if (reservedToday + estimatedProviderCostUsdc > dailyLimit + Number.EPSILON) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "spending_limit_exceeded",
+        `Daily provider spending limit of ${dailyLimit.toFixed(6)} USDC would be exceeded.`,
+        429,
+      ),
+    };
+  }
+
+  return { ok: true };
+}
+
 export async function enforceRunCreationPolicy(
   context: MachineAuthContext,
 ): Promise<{ ok: true } | { ok: false; response: NextResponse }> {
@@ -279,13 +371,24 @@ export async function enforceRunCreationPolicy(
   const todayStartIso =
     new Date().toISOString().slice(0, 10) + "T00:00:00.000Z";
   const { count: dailyCallCount, error: countError } = await client
-    .from("byoa_workflow_quotes")
+    .from("hosted_agent_jobs")
     .select("id", { count: "exact", head: true })
-    .eq("agent_id", context.agentId)
+    .eq("byoa_agent_id", context.agentId)
     .gte("created_at", todayStartIso);
 
+  if (countError) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "internal_error",
+        "The run policy could not be safely evaluated right now.",
+        503,
+        true,
+      ),
+    };
+  }
+
   if (
-    !countError &&
     dailyCallCount !== null &&
     dailyCallCount >= context.spendingPolicy.max_daily_calls
   ) {
