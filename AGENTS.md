@@ -6,118 +6,6 @@ The primary product is not a generic API marketplace demo. A user selects a work
 
 Legacy API Store, Agent Launch, Agent Setup, and local CLI surfaces remain available under Developer Tools.
 
-## Supported orchestration workflows
-
-For non-trivial development, choose exactly one project workflow per run.
-
-### Option A — Opus head, Gemini hands
-
-Skill:
-
-```text
-.agents/skills/opus-gemini-golova-ruki/SKILL.md
-```
-
-Role split:
-
-```text
-Claude Opus 4.6 (Thinking)
-= head
-= decisions
-= issue-spec
-= final acceptance
-
-Gemini 3.1 Pro (High)
-= fresh scout
-= coding executor
-= CLI / git / gh
-= tests and commits
-= fresh DoD verifier
-= fresh adversarial reviewer
-```
-
-Commands:
-
-```bash
-npm run agy:head
-npm run agy:worker -- <scout|executor|verifier|reviewer> <prompt-file> [report-file]
-npm run agy:run:new -- <task-slug>
-```
-
-Pipeline:
-
-```text
-fresh Gemini scout
-→ Opus issue-spec
-→ fresh Gemini executor
-→ fresh Gemini DoD verifier
-→ fresh Gemini adversarial reviewer
-→ Opus final acceptance
-```
-
-The final verdict belongs to Opus.
-
-### Option B — Codex head, Gemini hands
-
-Skill:
-
-```text
-.agents/skills/codex-gemini-golova-ruki/SKILL.md
-```
-
-Role split:
-
-```text
-Codex via ChatGPT subscription and ~/.codex/config.toml
-= head
-= decisions
-= issue-spec
-= final acceptance
-
-Gemini 3.1 Pro (High)
-= fresh scout
-= coding executor
-= CLI / git / gh
-= tests and commits
-= fresh DoD verifier
-= fresh adversarial reviewer
-```
-
-Commands:
-
-```bash
-npm run codex:head
-npm run codex:worker -- <scout|executor|verifier|reviewer> <prompt-file> [report-file]
-npm run codex:run:new -- <task-slug>
-```
-
-Pipeline:
-
-```text
-fresh Gemini scout
-→ Codex issue-spec
-→ fresh Gemini executor
-→ fresh Gemini DoD verifier
-→ fresh Gemini adversarial reviewer
-→ Codex final acceptance
-```
-
-The final verdict belongs to Codex.
-
-Do not mix acceptance authorities inside one run. `STATE.md` must identify the selected workflow and head.
-
-## Antigravity worker permission mode
-
-All Gemini workers in both workflows must be launched through their repository wrappers. Every wrapper always includes:
-
-```text
---dangerously-skip-permissions
-```
-
-Do not bypass the wrappers or remove that flag.
-
-Because Antigravity permissions are auto-approved, every head and worker must still obey the repository safety rules below.
-
 ## Required MCP usage
 
 Before Arc-specific development, verify that the Arc Docs MCP server is available.
@@ -134,7 +22,7 @@ Use Circle MCP for current Circle SDK and API details:
 - name: `circle`
 - URL: `https://api.circle.com/v1/codegen/mcp`
 
-If required live documentation is unavailable, stop and report the limitation before making Arc-, Circle-, payment-, or contract-specific decisions. Local `docs.md` is fallback context only.
+If required live documentation is unavailable, stop and report the limitation before making new Arc-, Circle-, payment-, or contract-specific decisions. A narrow compatibility fix to an already accepted flow may continue only when the installed official SDK types or examples and a redacted live provider validation response independently demonstrate the same required payload shape. Such a fallback must not change networks, contract addresses, assets, amounts, recipients, settlement policy, or custody boundaries. Local `docs.md` alone is fallback context only.
 
 ## Local skills
 
