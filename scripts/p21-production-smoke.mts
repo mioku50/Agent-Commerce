@@ -6,7 +6,6 @@
  */
 import { randomUUID } from "node:crypto";
 import type { Address } from "viem";
-import { hashApiCredential } from "../lib/byoa/auth.ts";
 import {
   createAgentCredential,
   getByoaClient,
@@ -65,11 +64,33 @@ function hasMachineScopes(scopes: string[]) {
     MACHINE_API_SCOPES.every((scope) => scopes.includes(scope));
 }
 
-async function validateCredential(token: string, label: string): Promise<CredentialHandle> {
+async function validateCredential(
+  baseUrl: URL,
+  token: string,
+  label: string,
+): Promise<CredentialHandle> {
+  const authenticated = await requestJson(
+    baseUrl,
+    "/api/agent/v1/workflows",
+    token,
+  );
+  assert(authenticated.status === 200, `${label} was rejected by the Production Machine API.`);
+
+  const tokenMetadata = token.match(/^(aac_[a-f0-9]{8})\.(agt_[a-z0-9]{20})\./);
+  assert(tokenMetadata, `${label} does not use the expected credential format.`);
   const client = getByoaClient();
+  const agentResult = await client.from("byoa_agents")
+    .select("id,public_id,owner_wallet,status,agent_wallet_status")
+    .eq("public_id", tokenMetadata[2])
+    .maybeSingle();
+  assert(!agentResult.error && agentResult.data, `${label} is not linked to an agent.`);
+  assert(agentResult.data.status === "active", `${label}'s agent is not active.`);
+  assert(agentResult.data.agent_wallet_status === "verified", `${label}'s agent wallet is not verified.`);
+
   const credentialResult = await client.from("byoa_agent_credentials")
     .select("*")
-    .eq("credential_hash", hashApiCredential(token))
+    .eq("agent_id", agentResult.data.id)
+    .eq("token_prefix", tokenMetadata[1])
     .maybeSingle();
   assert(!credentialResult.error && credentialResult.data, `${label} is not a known production credential.`);
   const credential = credentialResult.data as ByoaCredentialRow;
@@ -78,13 +99,6 @@ async function validateCredential(token: string, label: string): Promise<Credent
   assert(Date.parse(credential.expires_at) > Date.now(), `${label} is expired.`);
   assert(hasMachineScopes(credential.scopes), `${label} does not have the exact Machine API scope set.`);
 
-  const agentResult = await client.from("byoa_agents")
-    .select("id,owner_wallet,status,agent_wallet_status")
-    .eq("id", credential.agent_id)
-    .maybeSingle();
-  assert(!agentResult.error && agentResult.data, `${label} is not linked to an agent.`);
-  assert(agentResult.data.status === "active", `${label}'s agent is not active.`);
-  assert(agentResult.data.agent_wallet_status === "verified", `${label}'s agent wallet is not verified.`);
   return {
     agentId: credential.agent_id,
     credentialId: credential.id,
@@ -221,8 +235,8 @@ async function run(baseUrl: URL) {
     let quote: JsonResponse | null = null;
     if (providedA && providedB) {
       [credentialA, credentialB] = await Promise.all([
-        validateCredential(providedA, "Credential A"),
-        validateCredential(providedB, "Credential B"),
+        validateCredential(baseUrl, providedA, "Credential A"),
+        validateCredential(baseUrl, providedB, "Credential B"),
       ]);
       assert(credentialA.agentId !== credentialB.agentId, "Credentials A and B must belong to different agents.");
       quote = await requestJson(baseUrl, "/api/agent/v1/quotes", credentialA.token, quoteRequest);
