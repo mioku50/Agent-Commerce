@@ -31,7 +31,7 @@ export type ExternalPaymentAcceptance = {
 
 export type ExternalChallengeSummary = {
   x402Version: number;
-  resource: { url: string };
+  resource: { url: string; description: string; mimeType: string };
   acceptsCount: number;
   selectedAccept: ExternalPaymentAcceptance;
 };
@@ -85,6 +85,10 @@ export function parsePaymentRequiredChallenge(
     typeof resource !== "object" ||
     Array.isArray(resource) ||
     typeof (resource as Record<string, unknown>).url !== "string" ||
+    typeof (resource as Record<string, unknown>).description !== "string" ||
+    !(resource as Record<string, unknown>).description ||
+    typeof (resource as Record<string, unknown>).mimeType !== "string" ||
+    !(resource as Record<string, unknown>).mimeType ||
     !Array.isArray(accepts) ||
     accepts.length !== 1
   ) return null;
@@ -92,7 +96,11 @@ export function parsePaymentRequiredChallenge(
   if (!selectedAccept) return null;
   return {
     x402Version: challenge.x402Version,
-    resource: { url: (resource as Record<string, unknown>).url as string },
+    resource: {
+      url: (resource as Record<string, unknown>).url as string,
+      description: (resource as Record<string, unknown>).description as string,
+      mimeType: (resource as Record<string, unknown>).mimeType as string,
+    },
     acceptsCount: accepts.length,
     selectedAccept,
   };
@@ -169,7 +177,7 @@ export function validateExternal402Challenge({
   const summary = parsePaymentRequiredChallenge(paymentRequiredHeader);
   if (!summary) {
     throw new ExternalPaymentValidationError(
-      "PAYMENT-REQUIRED must contain resource.url and exactly one complete, supported acceptance.",
+      "PAYMENT-REQUIRED must contain a complete resource and exactly one complete, supported acceptance.",
     );
   }
   const acceptance = summary.selectedAccept;

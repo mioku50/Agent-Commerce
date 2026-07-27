@@ -43,7 +43,11 @@ const baseService: ApiService = {
 function encodeChallenge(amount = "500") {
   return Buffer.from(JSON.stringify({
     x402Version: 2,
-    resource: { url: baseService.fulfillmentUrl },
+    resource: {
+      url: baseService.fulfillmentUrl,
+      description: "Paid external risk score",
+      mimeType: "application/json",
+    },
     accepts: [{
       scheme: "exact",
       network: ARC_TESTNET_NETWORK,
@@ -121,6 +125,14 @@ async function run() {
       return new Response("", { status: 402, headers: { "PAYMENT-REQUIRED": challenge } });
     }
     assert(headers["Payment-Signature"], "Actual request must carry the signed exact acceptance");
+    const paymentPayload = JSON.parse(
+      Buffer.from(headers["Payment-Signature"], "base64").toString("utf8"),
+    ) as { resource?: unknown };
+    assert.deepEqual(paymentPayload.resource, {
+      url: baseService.fulfillmentUrl,
+      description: "Paid external risk score",
+      mimeType: "application/json",
+    }, "Signed payment payload must preserve the complete challenged resource");
     return new Response(JSON.stringify({ riskScore: 12 }), {
       status: 200,
       headers: {

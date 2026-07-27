@@ -49,10 +49,14 @@ function acceptance(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function challenge(overrides: { resourceUrl?: string; accepts?: unknown[]; x402Version?: number } = {}) {
+function challenge(overrides: { resourceUrl?: string; resource?: unknown; accepts?: unknown[]; x402Version?: number } = {}) {
   return Buffer.from(JSON.stringify({
     x402Version: overrides.x402Version ?? 2,
-    resource: { url: overrides.resourceUrl ?? "https://external-seller.api.com/v1/risk?mode=brief&asset=BTC%2FUSD" },
+    resource: overrides.resource ?? {
+      url: overrides.resourceUrl ?? "https://external-seller.api.com/v1/risk?mode=brief&asset=BTC%2FUSD",
+      description: "Paid risk score",
+      mimeType: "application/json",
+    },
     accepts: overrides.accepts ?? [acceptance()],
   })).toString("base64");
 }
@@ -85,7 +89,8 @@ expectInvalid(challenge({ accepts: [acceptance({ scheme: "upto" })] }), "Unautho
 expectInvalid(challenge({ accepts: [acceptance({ extra: { name: "malicious" } })] }), "Gateway acceptance");
 
 const noResource = Buffer.from(JSON.stringify({ x402Version: 2, accepts: [acceptance()] })).toString("base64");
-expectInvalid(noResource, "resource.url");
+expectInvalid(noResource, "complete resource");
+expectInvalid(challenge({ resource: { url: fulfillmentUrl } }), "complete resource");
 assert.throws(
   () => validateExternal402Challenge({ service, status: 200, paymentRequiredHeader: challenge(), fulfillmentUrl }),
   (error: unknown) => error instanceof ExternalPaymentValidationError && error.message.includes("Expected HTTP 402"),
