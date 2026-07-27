@@ -19,7 +19,7 @@
 import { promises as dns } from "node:dns";
 import http from "node:http";
 import https from "node:https";
-import { isIP } from "node:net";
+import { isIP, type LookupFunction } from "node:net";
 import { isTransientNetworkError, toErrorMessage } from "../agent/fetch-with-retry.ts";
 
 export class SSRFProtectionError extends Error {
@@ -327,6 +327,28 @@ function headersFromIncoming(headers: http.IncomingHttpHeaders) {
 }
 
 /**
+ * Returns only the address that passed the request-scoped SSRF checks. Node 22
+ * enables family auto-selection for HTTPS requests and asks custom lookup
+ * functions for `all` addresses. Supplying the legacy single-address callback
+ * shape in that case makes Node discard the value and fail with
+ * `Invalid IP address: undefined` before opening the socket.
+ */
+export function createPinnedAddressLookup(pinnedIp: string): LookupFunction {
+  const family = isIP(pinnedIp);
+  if (family !== 4 && family !== 6) {
+    throw new SSRFProtectionError("SSRF protection: validated address is not a literal IP");
+  }
+
+  return (_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, [{ address: pinnedIp, family }]);
+      return;
+    }
+    callback(null, pinnedIp, family);
+  };
+}
+
+/**
  * Opens the socket to the already validated IP while retaining the registered
  * hostname for Host/SNI certificate validation. Node's request API never follows
  * redirects, so the same request-scoped transport protects preflight and payment.
@@ -348,9 +370,7 @@ async function requestPinnedAddress(
       method: init.method ?? "GET",
       headers: init.headers as http.OutgoingHttpHeaders,
       servername: url.hostname,
-      lookup: ((_hostname: string, _options: unknown, callback: (error: NodeJS.ErrnoException | null, address: string, family: number) => void) => {
-        callback(null, pinnedIp, isIP(pinnedIp));
-      }) as never,
+      lookup: createPinnedAddressLookup(pinnedIp),
     }, (response) => {
       if ((response.statusCode ?? 0) >= 300 && (response.statusCode ?? 0) < 400) {
         response.resume();

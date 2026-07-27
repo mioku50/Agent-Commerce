@@ -26,6 +26,7 @@ import {
   SSRFProtectionError,
   fetchWithSsrfProtection,
   setSellerRequestAdapterForTests,
+  createPinnedAddressLookup,
 } from "../lib/seller/ssrf.ts";
 
 process.env.NODE_ENV = "test";
@@ -81,7 +82,24 @@ async function runTests() {
   assert.equal(filtered["Authorization"], undefined, "Authorization must be stripped");
   assert.equal(filtered["Cookie"], undefined, "Cookie must be stripped");
 
-  // Test 4: the production request-scoped transport never follows redirects.
+  // Test 4: Node 22 requests custom lookup results in both callback shapes.
+  const pinnedLookup = createPinnedAddressLookup("203.0.113.8");
+  pinnedLookup("seller.example", { all: false }, (error, address, family) => {
+    assert.ifError(error);
+    assert.equal(address, "203.0.113.8");
+    assert.equal(family, 4);
+  });
+  pinnedLookup("seller.example", { all: true }, (error, addresses) => {
+    assert.ifError(error);
+    assert.deepEqual(addresses, [{ address: "203.0.113.8", family: 4 }]);
+  });
+  assert.throws(
+    () => createPinnedAddressLookup("not-an-ip"),
+    (error: unknown) => error instanceof SSRFProtectionError && error.message.includes("literal IP"),
+    "Pinned lookup must reject non-IP values",
+  );
+
+  // Test 5: the production request-scoped transport never follows redirects.
   setSellerRequestAdapterForTests(null);
   const server = createServer((_request, response) => {
     response.writeHead(302, { Location: "http://169.254.169.254/latest/meta-data" });
