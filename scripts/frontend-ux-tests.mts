@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
 import {
   DEFAULT_HOSTED_WORKFLOW,
   DEFAULT_MARKET_SYMBOL,
@@ -31,6 +32,32 @@ import {
 import { humanizeError } from "../lib/errors/humanize-error.ts";
 import { sanitizePublicReportText } from "../lib/agent/public-report-copy.ts";
 import { hostedWorkflowTemplates } from "../lib/agent/workflow-templates.ts";
+
+const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+assert(readme.split(/\r?\n/).length <= 220, "README must remain under 220 lines");
+assert(readme.trim().split(/\s+/).length <= 1_500, "README must remain under 1,500 words");
+assert(!/FreeModel|Phase\s+\d+|Canary deployment|treasury address|HMAC implementation/i.test(readme));
+assert(readme.includes("A workflow commerce platform where people and autonomous agents"));
+assert(readme.includes("docs/agent-api.md"));
+assert(readme.includes("public/openapi/agent-commerce-v1.json"));
+assert(existsSync(new URL("../docs/agent-api.md", import.meta.url)));
+assert(existsSync(new URL("../public/openapi/agent-commerce-v1.json", import.meta.url)));
+
+const homeSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+assert(homeSource.includes("Verified workflows for people and AI agents"));
+assert(homeSource.includes("Agent Commerce on Arc Testnet"));
+assert(homeSource.includes("Built for humans and autonomous agents"));
+assert(homeSource.includes("Agent Machine API"));
+for (const [type, label] of [
+  ["github_due_diligence", "GitHub Project Due Diligence"],
+  ["market_context", "Market Context Brief"],
+  ["sentiment_tone", "Sentiment & Tone Report"],
+  ["builder_update", "Builder Update Summary"],
+] as const) {
+  assert(homeSource.includes(`type: "${type}"`), `Home must present ${label}`);
+  assert(hostedWorkflowTemplates.some((template) => template.value === type && template.label === label));
+}
+assert(!homeSource.includes("Understand any GitHub project before you build on it"));
 
 for (const template of hostedWorkflowTemplates) {
   assert(typeof template.benefitLabel === "string" && template.benefitLabel.length > 0);
@@ -417,5 +444,3 @@ assert(categoryHeaderContainerClass.includes("sm:flex-row"));
 assert(categoryHeaderContainerClass.includes("border-b"));
 
 console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, humanized error mapper, public copy sanitizer, executive summary prioritization, confidence badges, commit bounds, contributor bot separation, and full-width completed layout badges");
-
-
