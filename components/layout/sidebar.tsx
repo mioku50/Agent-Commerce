@@ -204,7 +204,7 @@ export function MobileSidebar({
           </span>
           <div>
             <p className="text-sm font-semibold">
-              {isConsole ? "Arc Developer Console" : "Arc Agent Commerce"}
+              {isConsole ? "Agent Developer Console" : "Arc Agent Commerce"}
             </p>
             <p className="text-xs text-muted-foreground">
               {isConsole ? "Developer & Operator tools" : "Hosted workflow reports"}
@@ -229,4 +229,3 @@ export function MobileSidebar({
     </div>
   );
 }
-

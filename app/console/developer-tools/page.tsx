@@ -2,7 +2,7 @@ import DeveloperToolsPage, { metadata as devToolsMetadata } from "@/app/develope
 
 export const metadata = {
   ...devToolsMetadata,
-  title: "Developer Tools | Developer Console | Arc Agent Commerce",
+  title: "Developer Tools | Agent Developer Console | Arc Agent Commerce",
 };
 
 export default DeveloperToolsPage;

@@ -10,16 +10,11 @@ import {
   getByoaClient,
   revokeAgentCredential,
 } from "../lib/byoa/service.ts";
+import { hashApiCredential } from "../lib/byoa/auth.ts";
+import { MACHINE_API_SCOPES, type ByoaCredentialRow } from "../lib/byoa/types.ts";
 
 const PRODUCTION_CONFIRMATION = "--confirm-production";
 const DEFAULT_TIMEOUT_MS = 120_000;
-const LEGACY_MACHINE_SCOPES = [
-  "quotes:create",
-  "workflows:execute",
-  "results:read",
-  "manifest:read",
-] as const;
-
 type CredentialHandle = {
   agentId: string;
   credentialId: string;
@@ -64,8 +59,9 @@ async function issueCredential(
   label: string,
 ): Promise<CredentialHandle> {
   const created = await createAgentCredential(ownerWallet, agentId, {
+    credentialType: "machine_api",
     label,
-    scopes: [...LEGACY_MACHINE_SCOPES],
+    scopes: [...MACHINE_API_SCOPES],
     expiresAt: new Date(Date.now() + 30 * 60_000).toISOString(),
   });
   return {
@@ -73,6 +69,47 @@ async function issueCredential(
     credentialId: created.credential.id,
     ownerWallet,
     token: created.token,
+  };
+}
+
+function hasExactMachineScopes(scopes: string[]) {
+  return scopes.length === MACHINE_API_SCOPES.length &&
+    MACHINE_API_SCOPES.every((scope) => scopes.includes(scope));
+}
+
+async function validateProvidedCredential(token: string, label: string): Promise<CredentialHandle> {
+  const client = getByoaClient();
+  const credentialResult = await client
+    .from("byoa_agent_credentials")
+    .select("*")
+    .eq("credential_hash", hashApiCredential(token))
+    .maybeSingle();
+  assert(!credentialResult.error, `${label} could not be validated.`);
+  assert(credentialResult.data, `${label} is not a known production credential.`);
+  const credential = credentialResult.data as ByoaCredentialRow;
+  assert(credential.credential_type === "machine_api", `${label} is not a Machine API credential.`);
+  assert(!credential.revoked_at, `${label} is revoked.`);
+  assert(Date.parse(credential.expires_at) > Date.now(), `${label} is expired.`);
+  assert(hasExactMachineScopes(credential.scopes), `${label} does not have the exact Machine API scope set.`);
+
+  const agentResult = await client
+    .from("byoa_agents")
+    .select("id,owner_wallet,status,agent_wallet_status")
+    .eq("id", credential.agent_id)
+    .maybeSingle();
+  assert(!agentResult.error && agentResult.data, `${label} is not linked to an agent.`);
+  assert(agentResult.data.status === "active", `${label}'s agent is not active.`);
+  assert(agentResult.data.agent_wallet_status === "verified", `${label}'s agent wallet is not verified.`);
+  assert(
+    String(agentResult.data.owner_wallet).toLowerCase() === credential.owner_wallet.toLowerCase(),
+    `${label}'s owner relation is invalid.`,
+  );
+
+  return {
+    agentId: credential.agent_id,
+    credentialId: credential.id,
+    ownerWallet: credential.owner_wallet as Address,
+    token,
   };
 }
 
@@ -177,6 +214,12 @@ async function runSmoke(baseUrl: URL) {
     };
 
     if (tokenA && tokenB) {
+      const [providedA, providedB] = await Promise.all([
+        validateProvidedCredential(tokenA, "Credential A"),
+        validateProvidedCredential(tokenB, "Credential B"),
+      ]);
+      assert(providedA.credentialId !== providedB.credentialId, "Credentials A and B must be different credentials.");
+      assert(providedA.agentId !== providedB.agentId, "Credentials A and B must belong to different agents.");
       console.log(
         "[production-machine-smoke] using caller-provided credentials; tokens will not be logged or revoked",
       );
@@ -184,40 +227,39 @@ async function runSmoke(baseUrl: URL) {
     } else {
       const eligibleAgents = await findEligibleAgents();
       assert(
-        eligibleAgents.length > 0,
-        "No active verified production agent permits the smoke workflow.",
+        eligibleAgents.length >= 2,
+        "At least two different active verified production agents must permit the smoke workflow.",
       );
       console.log(
         `[production-machine-smoke] eligible agents=${eligibleAgents.length}`,
       );
 
       for (const candidate of eligibleAgents) {
+        const isolationCandidate = eligibleAgents.find((agent) => agent.id !== candidate.id);
+        assert(isolationCandidate, "A second eligible production agent is required.");
         const marker = randomUUID().slice(0, 8);
         credentialA = await issueCredential(
           candidate.ownerWallet,
           candidate.id,
           `Production gate A ${marker}`,
         );
-        credentialB = await issueCredential(
-          candidate.ownerWallet,
-          candidate.id,
-          `Production gate B ${marker}`,
-        );
         tokenA = credentialA.token;
-        tokenB = credentialB.token;
         const candidateQuote = await createSmokeQuote();
 
         if (candidateQuote.sponsored === true) {
+          credentialB = await issueCredential(
+            isolationCandidate.ownerWallet,
+            isolationCandidate.id,
+            `Production gate B ${marker}`,
+          );
+          tokenB = credentialB.token;
           quote = candidateQuote;
           break;
         }
 
-        await revokeCredential(credentialB);
         await revokeCredential(credentialA);
         credentialA = null;
-        credentialB = null;
         tokenA = "";
-        tokenB = "";
       }
     }
 
@@ -231,18 +273,19 @@ async function runSmoke(baseUrl: URL) {
     );
     console.log("[production-machine-smoke] Credential A quote=ok sponsored=true");
 
+    const runRequest = {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Idempotency-Key": `production-gate-run-${randomUUID()}`,
+      },
+      body: JSON.stringify({ quoteId: quote.quoteId }),
+    } satisfies RequestInit;
     const run = await requestJson(
       baseUrl,
       "/api/agent/v1/runs",
       tokenA,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Idempotency-Key": `production-gate-run-${randomUUID()}`,
-        },
-        body: JSON.stringify({ quoteId: quote.quoteId }),
-      },
+      runRequest,
     );
     assert(
       run.status === 200 || run.status === 201,
@@ -251,6 +294,13 @@ async function runSmoke(baseUrl: URL) {
     assert(typeof run.body.runId === "string", "Run launch returned no runId.");
     const runId = run.body.runId as string;
     console.log("[production-machine-smoke] Credential A run launch=ok");
+
+    const replay = await requestJson(baseUrl, "/api/agent/v1/runs", tokenA, runRequest);
+    assert(
+      (replay.status === 200 || replay.status === 201) && replay.body.runId === runId,
+      "Credential A idempotent run replay did not return the original run.",
+    );
+    console.log("[production-machine-smoke] Credential A idempotent replay=same run");
 
     const crossRun = await requestJson(
       baseUrl,

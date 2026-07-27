@@ -1,7 +1,13 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { getAddress, isAddress, type Address } from "viem";
 import { getByoaConfig } from "./config.ts";
-import { BYOA_SCOPES, type ByoaScope } from "./types.ts";
+import {
+  BYOA_SCOPES,
+  BYOA_WORKFLOW_SCOPES,
+  MACHINE_API_SCOPES,
+  type ByoaScope,
+  type CredentialType,
+} from "./types.ts";
 
 export const BYOA_OWNER_SESSION_COOKIE = "byoa_owner_session";
 
@@ -76,6 +82,27 @@ export function normalizeScopes(value: unknown): ByoaScope[] {
     throw new Error("Credential scopes contain an unsupported value.");
   }
   return scopes as ByoaScope[];
+}
+
+export function normalizeCredentialType(value: unknown): CredentialType {
+  if (value === "byoa_workflow" || value === "machine_api") return value;
+  throw new Error("Credential type must be byoa_workflow or machine_api.");
+}
+
+export function scopesForCredentialType(type: CredentialType): readonly ByoaScope[] {
+  return type === "machine_api" ? MACHINE_API_SCOPES : BYOA_WORKFLOW_SCOPES;
+}
+
+export function normalizeCredentialScopes(value: unknown, type: CredentialType): ByoaScope[] {
+  const scopes = normalizeScopes(value);
+  const required = scopesForCredentialType(type);
+  if (
+    scopes.length !== required.length ||
+    required.some((scope) => !scopes.includes(scope))
+  ) {
+    throw new Error(`Credential scopes must exactly match the ${type} permission set.`);
+  }
+  return [...required];
 }
 
 export function credentialExpiry(value: unknown, now = Date.now()) {

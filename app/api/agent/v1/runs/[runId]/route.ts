@@ -47,7 +47,7 @@ function mapMachineStatus(job: HostedAgentJobRow): {
 }
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const authResult = await authenticateMachineRequest(request, "runs:read");
+  const authResult = await authenticateMachineRequest(request, "results:read");
   if (!authResult.ok) {
     return authResult.response;
   }
@@ -57,7 +57,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   if (!runId || typeof runId !== "string" || !runId.trim()) {
     return createMachineErrorResponse(
       "run_not_found",
-      "The specified workflow run could not be found.",
+      "The requested run was not found.",
       404,
     );
   }
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     console.error("[runs/[runId]/route] Job query error:", err);
     return createMachineErrorResponse(
       "run_not_found",
-      "The specified workflow run could not be found.",
+      "The requested run was not found.",
       404,
     );
   }
@@ -77,7 +77,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   if (!job) {
     return createMachineErrorResponse(
       "run_not_found",
-      "The specified workflow run could not be found.",
+      "The requested run was not found.",
       404,
     );
   }
@@ -90,7 +90,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   if (!isOwner) {
     return createMachineErrorResponse(
       "run_not_found",
-      "The specified workflow run could not be found.",
+      "The requested run was not found.",
       404,
     );
   }

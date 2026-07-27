@@ -13,6 +13,7 @@ import type {
   ByoaCredentialRow,
   ByoaPolicyRow,
 } from "../byoa/types.ts";
+import { MACHINE_API_SCOPES } from "../byoa/types.ts";
 
 export interface MachineAuthContext {
   credential: ByoaCredentialRow;
@@ -90,6 +91,17 @@ export async function authenticateMachineRequest(
 
   const credential = credData as ByoaCredentialRow;
 
+  if (credential.credential_type !== "machine_api") {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "credential_missing",
+        "Invalid API credential token.",
+        401,
+      ),
+    };
+  }
+
   // Constant-time hash verification
   const hashBuffer = Buffer.from(computedHash, "hex");
   const dbHashBuffer = Buffer.from(credential.credential_hash, "hex");
@@ -132,19 +144,10 @@ export async function authenticateMachineRequest(
 
   // Check Scope
   const grantedScopes = new Set<string>(credential.scopes || []);
-  const hasScope =
-    grantedScopes.has("*") ||
-    grantedScopes.has(requiredScope) ||
-    (requiredScope === "workflows:read" &&
-      (grantedScopes.has("manifest:read") ||
-        grantedScopes.has("workflows:execute"))) ||
-    (requiredScope === "quotes:create" && grantedScopes.has("quotes:create")) ||
-    (requiredScope === "runs:create" &&
-      grantedScopes.has("workflows:execute")) ||
-    (requiredScope === "runs:read" &&
-      (grantedScopes.has("results:read") ||
-        grantedScopes.has("workflows:execute"))) ||
-    (requiredScope === "reports:read" && grantedScopes.has("results:read"));
+  const hasClosedMachineScopeSet =
+    grantedScopes.size === MACHINE_API_SCOPES.length &&
+    MACHINE_API_SCOPES.every((scope) => grantedScopes.has(scope));
+  const hasScope = hasClosedMachineScopeSet && grantedScopes.has(requiredScope);
 
   if (!hasScope) {
     return {
@@ -195,6 +198,17 @@ export async function authenticateMachineRequest(
 
   const agent = agentRes.data as ByoaAgentRow;
   const policy = policyRes.data as ByoaPolicyRow;
+
+  if (credential.owner_wallet.toLowerCase() !== agent.owner_wallet.toLowerCase()) {
+    return {
+      ok: false,
+      response: createMachineErrorResponse(
+        "credential_missing",
+        "Invalid API credential token.",
+        401,
+      ),
+    };
+  }
 
   if (agent.status !== "active" || policy.status !== "active") {
     return {

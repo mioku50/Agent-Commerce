@@ -5,6 +5,8 @@ import {
   createApiCredential,
   createOwnerSession,
   hashApiCredential,
+  normalizeCredentialScopes,
+  normalizeCredentialType,
   normalizeScopes,
   verifyOwnerSession,
 } from "../lib/byoa/auth.ts";
@@ -83,21 +85,17 @@ assert.match(generated.token, /^aac_[0-9a-f]{8}\.agt_[a-z0-9]{20}\./);
 assert.equal(hashApiCredential(generated.token), generated.hash);
 assert.notEqual(generated.hash, generated.token);
 assert.deepEqual(normalizeScopes(["quotes:create", "results:read", "quotes:create"]), ["quotes:create", "results:read"]);
+assert.equal(normalizeCredentialType("machine_api"), "machine_api");
 assert.deepEqual(
-  normalizeScopes([
-    "workflows:read",
-    "quotes:create",
-    "runs:create",
-    "runs:read",
-    "reports:read",
-  ]),
-  [
-    "workflows:read",
-    "quotes:create",
-    "runs:create",
-    "runs:read",
-    "reports:read",
-  ],
+  normalizeCredentialScopes(
+    ["results:read", "runs:create", "quotes:create", "workflows:read"],
+    "machine_api",
+  ),
+  ["workflows:read", "quotes:create", "runs:create", "results:read"],
+);
+assert.throws(
+  () => normalizeCredentialScopes(["manifest:read", "quotes:create", "workflows:execute", "results:read"], "machine_api"),
+  /exactly match/,
 );
 assert.throws(() => normalizeScopes(["admin"]), /unsupported/);
 assert.throws(
@@ -121,10 +119,12 @@ const agentRow = {
 const credentialRow = {
   id: "22222222-2222-4222-8222-222222222222",
   agent_id: agentRow.id,
+  owner_wallet: owner.address,
+  credential_type: "byoa_workflow",
   label: "Unit credential",
   token_prefix: generated.prefix,
   credential_hash: generated.hash,
-  scopes: ["quotes:create", "workflows:execute", "results:read"],
+  scopes: ["manifest:read", "quotes:create", "workflows:execute", "results:read"],
   expires_at: "2026-08-20T00:00:00.000Z",
   rotated_from_id: null,
   revoked_at: null,

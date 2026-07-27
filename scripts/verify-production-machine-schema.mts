@@ -184,6 +184,17 @@ async function verifyProductionMachineSchema() {
   );
   console.log("  ✓ Column machine_credential_id exists in hosted_agent_jobs.");
 
+  const { error: credentialColumnsError } = await serverClient
+    .from("byoa_agent_credentials")
+    .select("id, agent_id, owner_wallet, credential_type, scopes, created_at, expires_at, revoked_at")
+    .limit(0);
+
+  assert(
+    !credentialColumnsError,
+    `Credential type/ownership columns missing or inaccessible: ${credentialColumnsError?.message}`,
+  );
+  console.log("  ✓ Explicit credential type and owner relation columns exist.");
+
   // Check 5: Verify server role access works and public/anon client cannot access table without auth
   console.log("[verify-machine-schema] Check 5: Verifying RLS protection (public/anon client blocked)...");
 

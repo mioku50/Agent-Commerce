@@ -38,7 +38,7 @@ export function Topbar({
             </span>
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold leading-none text-foreground">
-                {isConsole ? "Arc Developer Console" : "Arc Agent Commerce"}
+                {isConsole ? "Agent Developer Console" : "Arc Agent Commerce"}
               </span>
               <span className="mt-1 inline-flex max-w-full items-center gap-2 text-xs text-muted-foreground">
                 <span className="truncate">
@@ -88,7 +88,7 @@ export function Topbar({
             <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
               <Link href="/console">
                 <Wrench className="size-4" />
-                Developer Console
+                Agent Developer Console
               </Link>
             </Button>
           )}
@@ -97,4 +97,3 @@ export function Topbar({
     </header>
   );
 }
-

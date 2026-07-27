@@ -139,7 +139,7 @@ assert.deepEqual(
 );
 assert.deepEqual(sidebarNavigation, publicSidebarNavigation);
 
-assert.deepEqual(consoleSidebarNavigation.map(({ label }) => label), ["Developer Console"]);
+assert.deepEqual(consoleSidebarNavigation.map(({ label }) => label), ["Agent Developer Console"]);
 assert.deepEqual(
   consoleSidebarNavigation[0].items.map(({ label, href }) => ({ label, href })),
   [
@@ -417,6 +417,5 @@ assert(categoryHeaderContainerClass.includes("sm:flex-row"));
 assert(categoryHeaderContainerClass.includes("border-b"));
 
 console.log("[frontend-ux-test] passed: template deep links, safe query/symbol parsing, Results search/filter/sort, disabled-input helper, requester/payer checkout copy, generic provider presentation, scrollable sidebar model, humanized error mapper, public copy sanitizer, executive summary prioritization, confidence badges, commit bounds, contributor bot separation, and full-width completed layout badges");
-
 
 

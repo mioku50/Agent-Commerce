@@ -140,15 +140,20 @@ const revokedCred = createApiCredential("agt_test_revoked");
 const credB = createApiCredential("agt_test_agentB");
 const credSameAgent2 = createApiCredential("agt_test_credA2");
 const credSameOwnerAgent2 = createApiCredential("agt_test_sameowner2");
+const byoaNamespaceCred = createApiCredential("agt_test_byoa");
+const machineScopes = ["workflows:read", "quotes:create", "runs:create", "results:read"];
+const mockOwnerWallet = getAddress("0x1111111111111111111111111111111111111111");
 
 const mockCredentials: Record<string, any> = {
   [fullCred.hash]: {
     id: "cred-full-1",
     agent_id: "agent-1",
+    owner_wallet: mockOwnerWallet,
+    credential_type: "machine_api",
     label: "Full Access Token",
     token_prefix: fullCred.prefix,
     credential_hash: fullCred.hash,
-    scopes: ["workflows:read", "quotes:create", "runs:create", "runs:read", "reports:read"],
+    scopes: [...machineScopes],
     expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: null,
     created_at: "2026-01-01T00:00:00.000Z",
@@ -156,10 +161,12 @@ const mockCredentials: Record<string, any> = {
   [credSameAgent2.hash]: {
     id: "cred-full-2",
     agent_id: "agent-1",
+    owner_wallet: mockOwnerWallet,
+    credential_type: "machine_api",
     label: "Second Token Same Agent",
     token_prefix: credSameAgent2.prefix,
     credential_hash: credSameAgent2.hash,
-    scopes: ["workflows:read", "quotes:create", "runs:create", "runs:read", "reports:read"],
+    scopes: [...machineScopes],
     expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: null,
     created_at: "2026-01-01T00:00:00.000Z",
@@ -167,10 +174,12 @@ const mockCredentials: Record<string, any> = {
   [credSameOwnerAgent2.hash]: {
     id: "cred-agent2-1",
     agent_id: "agent-2-same-owner",
+    owner_wallet: mockOwnerWallet,
+    credential_type: "machine_api",
     label: "Agent 2 Token Same Owner",
     token_prefix: credSameOwnerAgent2.prefix,
     credential_hash: credSameOwnerAgent2.hash,
-    scopes: ["workflows:read", "quotes:create", "runs:create", "runs:read", "reports:read"],
+    scopes: [...machineScopes],
     expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: null,
     created_at: "2026-01-01T00:00:00.000Z",
@@ -178,10 +187,12 @@ const mockCredentials: Record<string, any> = {
   [readOnlyCred.hash]: {
     id: "cred-readonly-1",
     agent_id: "agent-1",
+    owner_wallet: mockOwnerWallet,
+    credential_type: "machine_api",
     label: "Read Only Token",
     token_prefix: readOnlyCred.prefix,
     credential_hash: readOnlyCred.hash,
-    scopes: ["reports:read"],
+    scopes: ["results:read"],
     expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: null,
     created_at: "2026-01-01T00:00:00.000Z",
@@ -189,10 +200,12 @@ const mockCredentials: Record<string, any> = {
   [revokedCred.hash]: {
     id: "cred-revoked-1",
     agent_id: "agent-1",
+    owner_wallet: mockOwnerWallet,
+    credential_type: "machine_api",
     label: "Revoked Token",
     token_prefix: revokedCred.prefix,
     credential_hash: revokedCred.hash,
-    scopes: ["*"],
+    scopes: [...machineScopes],
     expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: "2026-01-01T12:00:00.000Z",
     created_at: "2026-01-01T00:00:00.000Z",
@@ -200,10 +213,25 @@ const mockCredentials: Record<string, any> = {
   [credB.hash]: {
     id: "cred-agentB-1",
     agent_id: "agent-2",
+    owner_wallet: mockOwnerWallet,
+    credential_type: "machine_api",
     label: "Agent B Token",
     token_prefix: credB.prefix,
     credential_hash: credB.hash,
-    scopes: ["workflows:read", "quotes:create", "runs:create", "runs:read", "reports:read"],
+    scopes: [...machineScopes],
+    expires_at: "2099-01-01T00:00:00.000Z",
+    revoked_at: null,
+    created_at: "2026-01-01T00:00:00.000Z",
+  },
+  [byoaNamespaceCred.hash]: {
+    id: "cred-byoa-1",
+    agent_id: "agent-1",
+    owner_wallet: mockOwnerWallet,
+    credential_type: "byoa_workflow",
+    label: "BYOA Workflow Token",
+    token_prefix: byoaNamespaceCred.prefix,
+    credential_hash: byoaNamespaceCred.hash,
+    scopes: ["manifest:read", "quotes:create", "workflows:execute", "results:read"],
     expires_at: "2099-01-01T00:00:00.000Z",
     revoked_at: null,
     created_at: "2026-01-01T00:00:00.000Z",
@@ -214,7 +242,7 @@ const mockAgent = {
   id: "agent-1",
   public_id: "agt_test_full",
   display_name: "Test Agent",
-  owner_wallet: getAddress("0x1111111111111111111111111111111111111111"),
+  owner_wallet: mockOwnerWallet,
   agent_wallet: getAddress("0x3333333333333333333333333333333333333333"),
   agent_wallet_status: "verified",
   status: "active",
@@ -926,7 +954,19 @@ async function testWorkflowsEndpoint() {
     assert.equal(json.error.code, "scope_denied");
   }
 
-  // Test 5: Successful Workflows Listing -> 200
+  // Test 5: BYOA Workflow credentials never authenticate in the Machine API namespace.
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/workflows", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${byoaNamespaceCred.token}` },
+    });
+    const res = await workflowsGET(req);
+    assert.equal(res.status, 401);
+    const json = await res.json();
+    assert.equal(json.error.code, "credential_missing");
+  }
+
+  // Test 6: Successful Workflows Listing -> 200
   {
     const req = new NextRequest("http://localhost:3000/api/agent/v1/workflows", {
       method: "GET",
@@ -1330,7 +1370,7 @@ async function testRunByIdGetEndpoint() {
     assert.equal(res.status, 404);
     const json = await res.json();
     assert.equal(json.error.code, "run_not_found");
-    assert.match(json.error.message, /The specified workflow run could not be found/i);
+    assert.equal(json.error.message, "The requested run was not found.");
   }
 
   // Test 4: Verification Integrity - Receipts without verified Arc proof records evaluate to verification_pending (never verified)
@@ -1534,7 +1574,7 @@ async function testMultiLayerCredentialIsolation() {
     assert.equal(res.status, 404);
     const json = await res.json();
     assert.equal(json.error.code, "run_not_found");
-    assert.equal(json.error.message, "The specified workflow run could not be found.");
+    assert.equal(json.error.message, "The requested run was not found.");
   }
 
   // 2. Agent 2 sharing the same owner wallet receives 404 report_not_found when querying Agent 1's report
@@ -1548,7 +1588,7 @@ async function testMultiLayerCredentialIsolation() {
     assert.equal(res.status, 404);
     const json = await res.json();
     assert.equal(json.error.code, "report_not_found");
-    assert.equal(json.error.message, "The specified workflow report could not be found.");
+    assert.equal(json.error.message, "The requested report was not found.");
   }
 
   // 3. Credential 2 under the same agent receives 404 run_not_found when querying resources created by Credential 1
@@ -1562,7 +1602,7 @@ async function testMultiLayerCredentialIsolation() {
     assert.equal(res.status, 404);
     const json = await res.json();
     assert.equal(json.error.code, "run_not_found");
-    assert.equal(json.error.message, "The specified workflow run could not be found.");
+    assert.equal(json.error.message, "The requested run was not found.");
   }
 
   // 4. Credential 2 under the same agent receives 404 report_not_found when querying resources created by Credential 1
@@ -1576,7 +1616,7 @@ async function testMultiLayerCredentialIsolation() {
     assert.equal(res.status, 404);
     const json = await res.json();
     assert.equal(json.error.code, "report_not_found");
-    assert.equal(json.error.message, "The specified workflow report could not be found.");
+    assert.equal(json.error.message, "The requested report was not found.");
   }
 
   // 5. Original Credential 1 receives 200 and full response for run

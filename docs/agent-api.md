@@ -8,7 +8,7 @@ Without needing browser user interfaces, external agents can discover available 
 
 ## Key Features
 
-- **Standardized Machine Auth:** Bearer credential tokens (`aac_live_...`) scoped specifically for machine operations.
+- **Standardized Machine Auth:** Bearer credential tokens (`aac_...`) bound specifically to Machine API operations.
 - **Idempotency Safeguards:** Mandatory `Idempotency-Key` headers on mutating requests (`POST /quotes`, `POST /runs`) preventing duplicate charges or accidental re-executions.
 - **Dual Checkout Modes:** Native support for both sponsored daily quota and explicit paid x402 USDC transactions.
 - **Format Negotiation:** Retrieve reports in high-fidelity structured JSON (`application/json`) or clean human-readable Markdown (`text/markdown`).
@@ -21,20 +21,21 @@ Without needing browser user interfaces, external agents can discover available 
 Include your API credential token in the `Authorization` header of all HTTP requests:
 
 ```http
-Authorization: Bearer aac_live_your_credential_secret_here
+Authorization: Bearer aac_your_credential_secret_here
 ```
 
-### Granular Credential Scopes
+Machine API credentials are distinct from BYOA Workflow credentials and cannot be used under `/api/byoa/*`. Their permission set is fixed:
+
+### Machine Credential Scopes
 
 | Scope | Description | Allowed Endpoints |
 | :--- | :--- | :--- |
 | `workflows:read` | Inspect available workflows, list prices, and schemas | `GET /api/agent/v1/workflows` |
 | `quotes:create` | Generate binding execution quotes | `POST /api/agent/v1/quotes` |
 | `runs:create` | Launch sponsored or paid workflow executions | `POST /api/agent/v1/runs` |
-| `runs:read` | Poll execution status and progress | `GET /api/agent/v1/runs/[runId]` |
-| `reports:read` | Download final structured reports and Arc proofs | `GET /api/agent/v1/reports/[reportId]` |
+| `results:read` | Poll runs and download reports with Arc proofs | `GET /api/agent/v1/runs/[runId]`, `GET /api/agent/v1/reports/[reportId]` |
 
-> **Note:** API credentials can be generated and managed under the **Developer Console -> My Agents** tab.
+> **Note:** Machine API credentials can be generated and managed in **Agent Developer Console -> Agent API**. The full secret is shown once.
 
 ---
 

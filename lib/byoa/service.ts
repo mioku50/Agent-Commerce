@@ -19,7 +19,8 @@ import {
   createApiCredential,
   credentialExpiry,
   hashApiCredential,
-  normalizeScopes,
+  normalizeCredentialScopes,
+  normalizeCredentialType,
 } from "./auth.ts";
 import {
   getByoaConfig,
@@ -34,6 +35,7 @@ import type {
   ByoaQuoteRow,
   ByoaScope,
   ByoaServiceType,
+  CredentialType,
   PublicByoaQuote,
 } from "./types.ts";
 
@@ -129,9 +131,20 @@ function credentialLabel(value: unknown) {
   return label;
 }
 
-function validatedCredentialScopes(value: unknown) {
+function validatedCredentialType(value: unknown) {
   try {
-    return normalizeScopes(value);
+    return normalizeCredentialType(value);
+  } catch (error) {
+    throw new ByoaError(
+      error instanceof Error ? error.message : "Credential type is invalid.",
+      "invalid_credential_type",
+    );
+  }
+}
+
+function validatedCredentialScopes(value: unknown, credentialType: CredentialType) {
+  try {
+    return normalizeCredentialScopes(value, credentialType);
   } catch (error) {
     throw new ByoaError(
       error instanceof Error ? error.message : "Credential scopes are invalid.",
@@ -205,6 +218,9 @@ function managementAgent(agent: ByoaAgentRow) {
 export function safeCredential(row: ByoaCredentialRow) {
   return {
     id: row.id,
+    agentId: row.agent_id,
+    ownerWallet: getAddress(row.owner_wallet),
+    credentialType: row.credential_type,
     label: row.label,
     prefix: row.token_prefix,
     scopes: row.scopes,
@@ -524,15 +540,18 @@ export async function createAgentCredential(ownerWallet: Address, agentId: strin
   if (agent.status !== "active" || agent.agent_wallet_status !== "verified") {
     throw new ByoaError("Verify the agent wallet before creating credentials.", "agent_inactive", 409);
   }
+  const credentialType = validatedCredentialType(input.credentialType);
   const generated = createApiCredential(agent.public_id);
   const { data, error } = await getByoaClient()
     .from("byoa_agent_credentials")
     .insert({
       agent_id: agent.id,
+      owner_wallet: ownerWallet,
+      credential_type: credentialType,
       label: credentialLabel(input.label),
       token_prefix: generated.prefix,
       credential_hash: generated.hash,
-      scopes: validatedCredentialScopes(input.scopes),
+      scopes: validatedCredentialScopes(input.scopes, credentialType),
       expires_at: validatedCredentialExpiry(input.expiresAt),
     })
     .select("*")
@@ -557,6 +576,17 @@ export async function revokeAgentCredential(ownerWallet: Address, agentId: strin
   return safeCredential(data as ByoaCredentialRow);
 }
 
+export async function listAgentCredentials(ownerWallet: Address, agentId: string) {
+  const agent = await getOwnerAgent(ownerWallet, agentId);
+  const { data, error } = await getByoaClient()
+    .from("byoa_agent_credentials")
+    .select("*")
+    .eq("agent_id", agent.id)
+    .order("created_at", { ascending: false });
+  if (error) throw new ByoaError("Unable to load API credentials.", "database_unavailable", 503);
+  return (data ?? []).map((row) => safeCredential(row as ByoaCredentialRow));
+}
+
 export async function rotateAgentCredential(ownerWallet: Address, agentId: string, credentialId: string, input: Record<string, unknown>) {
   const agent = await getOwnerAgent(ownerWallet, agentId);
   requireUuid(credentialId, "Credential ID");
@@ -572,7 +602,9 @@ export async function rotateAgentCredential(ownerWallet: Address, agentId: strin
   if (!existing.data) throw new ByoaError("Credential was not found or is already revoked.", "not_found", 404);
   const previous = existing.data as ByoaCredentialRow;
   const generated = createApiCredential(agent.public_id);
-  const scopes = input.scopes === undefined ? previous.scopes : validatedCredentialScopes(input.scopes);
+  const scopes = input.scopes === undefined
+    ? previous.scopes
+    : validatedCredentialScopes(input.scopes, previous.credential_type);
   const expiresAt = input.expiresAt === undefined ? previous.expires_at : validatedCredentialExpiry(input.expiresAt);
   const rotated = await client.rpc("rotate_byoa_credential_v1", {
     p_owner_wallet: ownerWallet,
@@ -655,6 +687,14 @@ export async function authenticateAgentCredential(token: string, requiredScope: 
   if (result.error) throw new ByoaError("Unable to authenticate BYOA credential.", "database_unavailable", 503);
   if (!result.data) throw new ByoaError("BYOA credential is invalid.", "credential_invalid", 401);
   const credential = result.data as ByoaCredentialRow;
+  if (credential.credential_type !== "byoa_workflow") {
+    throw new ByoaError("BYOA credential is invalid.", "credential_invalid", 401);
+  }
+  try {
+    normalizeCredentialScopes(credential.scopes, "byoa_workflow");
+  } catch {
+    throw new ByoaError("BYOA credential scope set is invalid.", "scope_denied", 403);
+  }
   if (credential.revoked_at || Date.parse(credential.expires_at) <= Date.now()) {
     throw new ByoaError("BYOA credential is expired or revoked.", "credential_inactive", 401);
   }
@@ -669,6 +709,9 @@ export async function authenticateAgentCredential(token: string, requiredScope: 
   if (!agentResult.data || !policyResult.data) throw new ByoaError("BYOA agent authorization is incomplete.", "agent_inactive", 403);
   const agent = agentResult.data as ByoaAgentRow;
   const policy = policyResult.data as ByoaPolicyRow;
+  if (credential.owner_wallet.toLowerCase() !== agent.owner_wallet.toLowerCase()) {
+    throw new ByoaError("BYOA credential is invalid.", "credential_invalid", 401);
+  }
   if (agent.status !== "active" || agent.agent_wallet_status !== "verified" || !agent.canary_enabled || policy.status !== "active") {
     throw new ByoaError("BYOA agent or policy is not active.", "agent_inactive", 403);
   }

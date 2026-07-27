@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { serviceRegistry } from "@/lib/services/registry";
 
 export const metadata = {
-  title: "Audit & Verification | Developer Console | Arc Agent Commerce",
+  title: "Audit & Verification | Agent Developer Console | Arc Agent Commerce",
   description: "Unified audit trail for Activity, Arc Proofs, Agent Passports, Commerce Receipts, and Audited Services.",
 };
 

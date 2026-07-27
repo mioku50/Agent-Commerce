@@ -20,9 +20,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AgentApiInteractiveClient } from "./agent-api-interactive-client";
+import { MachineCredentialsClient, ProductionSmokeInstructions } from "./machine-credentials-client";
 
 export const metadata = {
-  title: "Agent API | Developer Console | Arc Agent Commerce",
+  title: "Agent API | Agent Developer Console | Arc Agent Commerce",
   description:
     "Machine API v1 developer quickstart, credential scopes, OpenAPI 3.0 spec, and interactive code snippets.",
 };
@@ -44,14 +45,9 @@ const credentialScopes = [
     description: "Launch sponsored or paid x402 workflow execution for a valid quote.",
   },
   {
-    scope: "runs:read",
-    endpoint: "GET /api/agent/v1/runs/[runId]",
-    description: "Poll real-time execution status, progress percentage, and stage.",
-  },
-  {
-    scope: "reports:read",
-    endpoint: "GET /api/agent/v1/reports/[reportId]",
-    description: "Retrieve complete structured JSON report with Arc Testnet verification proofs.",
+    scope: "results:read",
+    endpoint: "GET /api/agent/v1/runs/[runId] · GET /api/agent/v1/reports/[reportId]",
+    description: "Poll run status and retrieve structured reports with Arc Testnet verification proofs.",
   },
 ];
 
@@ -62,7 +58,7 @@ export default function AgentApiConsolePage() {
       <section className="border-b bg-secondary/20">
         <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Badge variant="default">Developer Console</Badge>
+            <Badge variant="default">Agent Developer Console</Badge>
             <Badge variant="outline">Machine API v1</Badge>
             <Badge variant="secondary">Arc Testnet · Chain 5042002</Badge>
           </div>
@@ -92,6 +88,18 @@ export default function AgentApiConsolePage() {
 
       {/* Main Content Grid */}
       <section className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 sm:px-6">
+        <Card className="rounded-lg border-primary/30" id="credentials">
+          <CardHeader>
+            <CardTitle>Machine API Credentials</CardTitle>
+            <CardDescription>
+              Select an agent, create a namespace-bound credential, and manage rotation or revocation. Secrets are shown only once.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <MachineCredentialsClient />
+          </CardContent>
+        </Card>
+
         {/* Quickstart Overview Card */}
         <div className="grid gap-6 md:grid-cols-3">
           <Card className="rounded-lg border-primary/20">
@@ -174,7 +182,7 @@ export default function AgentApiConsolePage() {
         </Card>
 
         {/* Interactive Code Snippets Component */}
-        <Card className="rounded-lg border-primary/25">
+        <Card className="rounded-lg border-primary/25" id="quickstart">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -193,6 +201,8 @@ export default function AgentApiConsolePage() {
             <AgentApiInteractiveClient />
           </CardContent>
         </Card>
+
+        <ProductionSmokeInstructions />
 
         {/* OpenAPI Specification Card */}
         <Card className="rounded-lg bg-secondary/10">

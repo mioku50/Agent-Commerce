@@ -5,8 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
-  title: "Developer Console | Arc Agent Commerce",
+  title: "Agent Developer Console | Arc Agent Commerce",
   description: "Manage agents, seller services, Machine API, developer utilities, and audit verification.",
+  openGraph: {
+    title: "Agent Developer Console | Arc Agent Commerce",
+    description: "Manage agents, seller services, Machine API, developer utilities, and audit verification.",
+  },
 };
 
 const consoleSections = [
@@ -58,10 +62,10 @@ export default function ConsoleDashboardPage() {
       <section className="border-b bg-secondary/20">
         <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Badge variant="default">Developer Console</Badge>
+            <Badge variant="default">Agent Developer Console</Badge>
             <Badge variant="outline">Arc Testnet</Badge>
           </div>
-          <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">Developer Console</h1>
+          <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">Agent Developer Console</h1>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
             Manage your autonomous AI agents, register custom seller services, access developer tools, and inspect complete audit and verification trails.
           </p>
