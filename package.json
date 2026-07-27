@@ -47,6 +47,7 @@
     "seller:checkout-test": "node --experimental-transform-types --no-warnings scripts/seller-checkout-tests.mts",
     "seller:reference-bootstrap": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/bootstrap-reference-seller.mts",
     "seller:production-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/p21-production-smoke.mts",
+    "seller:production-gate": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/p21-production-gate.mts",
     "security:ssrf-test": "node --experimental-transform-types --no-warnings scripts/ssrf-protection-tests.mts",
     "byoa:test": "node --experimental-transform-types --no-warnings scripts/byoa-tests.mts",
     "byoa:console-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-console-tests.mts",
