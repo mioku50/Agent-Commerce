@@ -1,428 +1,231 @@
 "use client";
 
-import { useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { Archive, Loader2, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type {
-  SellerStoreService,
-  StoreServiceSourceType,
-  StoreServiceStatus,
-} from "@/lib/services/store-service-persistence";
-import type { ServiceMethod } from "@/lib/services/registry";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type SellerServiceFormProps = {
-  initialService?: SellerStoreService;
+type ManagementService = {
+  id: string;
+  publicId: string;
+  serviceVersion: number;
+  name: string;
+  slug: string;
+  shortDescription: string;
+  longDescription: string;
+  category: string;
+  method: "GET" | "POST";
+  priceUsdc: string;
+  status: "draft" | "active" | "paused" | "unavailable" | "archived";
+  inputSchema: Record<string, unknown>;
+  outputSchema: Record<string, unknown>;
+  fulfillmentUrl: string;
+  timeoutMs: number;
+  maxResponseSizeBytes: number;
+  sellerWallet: string;
+  hasAuthorizationSecret: boolean;
 };
 
-const textareaClassName =
-  "flex min-h-28 w-full rounded-md border border-input bg-card px-3 py-2 text-sm shadow-sm shadow-primary/5 transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring/20 disabled:cursor-not-allowed disabled:opacity-50";
-
-type JsonField =
-  | "inputSchema"
-  | "outputSchema"
-  | "exampleRequest"
-  | "exampleResponse";
-
-const jsonFields: Array<[JsonField, string]> = [
-  ["inputSchema", "Input schema"],
-  ["outputSchema", "Output schema"],
-  ["exampleRequest", "Example request"],
-  ["exampleResponse", "Example response"],
-];
+const textareaClass = "min-h-36 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
 function slugify(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
 }
 
-function jsonString(value: unknown) {
-  return JSON.stringify(value, null, 2);
-}
-
-function getErrorMessage(error: unknown): string {
-  if (typeof error === "string") return error;
-  if (error && typeof error === "object" && "message" in error) {
-    return getErrorMessage((error as { message: unknown }).message);
-  }
-
-  try {
-    const serialized = JSON.stringify(error);
-    return serialized && serialized !== "{}" ? serialized : "Unknown error";
-  } catch {
-    return "Unknown error";
-  }
-}
-
-function normalizePriceInput(value: string) {
-  const normalized = value.trim().replace(",", ".");
-
-  if (!normalized || !/^\d+(?:\.\d+)?$/.test(normalized)) {
-    throw new Error("Price must be a valid number like 0.002");
-  }
-
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed) || parsed < 0) {
-    throw new Error("Price must be a valid number like 0.002");
-  }
-
-  return parsed;
-}
-
-function defaultService() {
+function defaultState() {
   return {
     name: "",
     slug: "",
     shortDescription: "",
     longDescription: "",
-    category: "Signals",
-    method: "GET" as ServiceMethod,
-    priceUsd: "0.002",
-    status: "draft" as StoreServiceStatus,
-    sourceType: "seller_mock" as StoreServiceSourceType,
-    exampleUseCase:
-      "An agent buys this service when the task matches the category and the price fits the remaining budget.",
-    agentReasoningHint:
-      "Select this service when the task asks for this category and a concise paid response is useful.",
-    inputSchema: jsonString({
+    category: "Productivity",
+    method: "POST" as "GET" | "POST",
+    priceUsdc: "0.002",
+    status: "draft" as ManagementService["status"],
+    fulfillmentUrl: "https://",
+    timeoutMs: "15000",
+    inputSchema: JSON.stringify({
       type: "object",
-      properties: {},
+      properties: { text: { type: "string", minLength: 1, maxLength: 4000 } },
+      required: ["text"],
       additionalProperties: false,
-    }),
-    outputSchema: jsonString({
+    }, null, 2),
+    outputSchema: JSON.stringify({
       type: "object",
-      properties: {
-        result: { type: "string" },
-        generated_at: { type: "string", format: "date-time" },
-      },
-      required: ["result", "generated_at"],
-    }),
-    exampleRequest: jsonString({
-      method: "GET",
-      endpoint: "/api/store/services/my-service/invoke",
-    }),
-    exampleResponse: jsonString({
-      result: "Seller-created demo response for a paid mock API service.",
-      generated_at: "2026-05-18T10:00:00.000Z",
-    }),
+      properties: { result: { type: "string" } },
+      required: ["result"],
+      additionalProperties: false,
+    }, null, 2),
+    authorizationSecret: "",
+    clearAuthorizationSecret: false,
   };
 }
 
-function initialFormState(service?: SellerStoreService) {
-  if (!service) return defaultService();
-
-  return {
-    name: service.name,
-    slug: service.slug,
-    shortDescription: service.shortDescription,
-    longDescription: service.longDescription,
-    category: service.category,
-    method: service.method,
-    priceUsd: String(service.priceUsd),
-    status: service.status,
-    sourceType: service.sourceType,
-    exampleUseCase: service.exampleUseCase,
-    agentReasoningHint: service.agentReasoningHint,
-    inputSchema: jsonString(service.inputSchema),
-    outputSchema: jsonString(service.outputSchema),
-    exampleRequest: jsonString(service.exampleRequest),
-    exampleResponse: jsonString(service.exampleResponse),
-  };
-}
-
-function parseJsonField(value: string, label: string) {
-  try {
-    const parsed = JSON.parse(value);
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error(`${label} must be a JSON object.`);
-    }
-    return parsed as Record<string, unknown>;
-  } catch (error) {
-    if (error instanceof Error) throw new Error(`${label}: ${error.message}`);
-    throw new Error(`${label} must be valid JSON.`);
-  }
-}
-
-export function SellerServiceForm({ initialService }: SellerServiceFormProps) {
+export function SellerServiceForm({ serviceId }: { serviceId?: string }) {
   const router = useRouter();
-  const [form, setForm] = useState(() => initialFormState(initialService));
-  const [slugTouched, setSlugTouched] = useState(Boolean(initialService));
+  const [form, setForm] = useState(defaultState);
+  const [service, setService] = useState<ManagementService | null>(null);
+  const [loading, setLoading] = useState(Boolean(serviceId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  function update<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
+  useEffect(() => {
+    if (!serviceId) return;
+    let cancelled = false;
+    fetch(`/api/seller/services/${serviceId}`, { cache: "no-store" })
+      .then(async (response) => {
+        const body = await response.json();
+        if (!response.ok || !body.service) throw new Error(body.error ?? "Service not found.");
+        return body.service as ManagementService;
+      })
+      .then((value) => {
+        if (cancelled) return;
+        setService(value);
+        setForm({
+          name: value.name,
+          slug: value.slug,
+          shortDescription: value.shortDescription,
+          longDescription: value.longDescription,
+          category: value.category,
+          method: value.method,
+          priceUsdc: value.priceUsdc,
+          status: value.status,
+          fulfillmentUrl: value.fulfillmentUrl,
+          timeoutMs: String(value.timeoutMs),
+          inputSchema: JSON.stringify(value.inputSchema, null, 2),
+          outputSchema: JSON.stringify(value.outputSchema, null, 2),
+          authorizationSecret: "",
+          clearAuthorizationSecret: false,
+        });
+      })
+      .catch((caught) => !cancelled && setError(caught instanceof Error ? caught.message : String(caught)))
+      .finally(() => !cancelled && setLoading(false));
+    return () => { cancelled = true; };
+  }, [serviceId]);
+
+  function update(key: keyof typeof form, value: string | boolean) {
     setForm((current) => ({ ...current, [key]: value }));
   }
 
-  function handleNameChange(value: string) {
-    setForm((current) => ({
-      ...current,
-      name: value,
-      slug: slugTouched ? current.slug : slugify(value),
-    }));
+  function parseSchema(value: string, label: string) {
+    try {
+      const parsed = JSON.parse(value);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("must be an object");
+      return parsed;
+    } catch (caught) {
+      throw new Error(`${label} must be valid JSON: ${caught instanceof Error ? caught.message : String(caught)}`);
+    }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     setError(null);
-
     try {
       const payload = {
         name: form.name,
         slug: form.slug,
         shortDescription: form.shortDescription,
-        longDescription: form.longDescription,
+        longDescription: form.longDescription || form.shortDescription,
         category: form.category,
         method: form.method,
-        priceUsd: normalizePriceInput(form.priceUsd),
-        status: form.status,
-        sourceType: form.sourceType,
-        exampleUseCase: form.exampleUseCase,
-        agentReasoningHint: form.agentReasoningHint,
-        inputSchema: parseJsonField(form.inputSchema, "Input schema"),
-        outputSchema: parseJsonField(form.outputSchema, "Output schema"),
-        exampleRequest: parseJsonField(form.exampleRequest, "Example request"),
-        exampleResponse: parseJsonField(form.exampleResponse, "Example response"),
+        priceUsdc: form.priceUsdc,
+        status: serviceId ? form.status : "draft",
+        inputSchema: parseSchema(form.inputSchema, "Input schema"),
+        outputSchema: parseSchema(form.outputSchema, "Output schema"),
+        fulfillmentUrl: form.fulfillmentUrl,
+        timeoutMs: Number(form.timeoutMs),
+        maxResponseSizeBytes: service?.maxResponseSizeBytes ?? 262144,
+        ...(form.authorizationSecret ? { authorizationSecret: form.authorizationSecret } : {}),
+        clearAuthorizationSecret: form.clearAuthorizationSecret,
       };
-
-      const response = await fetch(
-        initialService
-          ? `/api/seller/services/${initialService.id}`
-          : "/api/seller/services",
-        {
-          method: initialService ? "PATCH" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        },
-      );
+      const response = await fetch(serviceId ? `/api/seller/services/${serviceId}` : "/api/seller/services", {
+        method: serviceId ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
       const body = await response.json().catch(() => ({}));
-
-      if (!response.ok) {
-        throw new Error(getErrorMessage(body.error ?? body));
-      }
-
-      if (!body.service?.slug) {
-        throw new Error(getErrorMessage(body.error ?? body));
-      }
-
+      if (!response.ok || !body.service) throw new Error(body.error ?? "Unable to save seller service.");
+      router.push("/console/seller");
       router.refresh();
-      router.push(`/store/${body.service.slug}`);
-    } catch (err) {
-      setError(getErrorMessage(err));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
       setSaving(false);
     }
   }
 
-  return (
-    <form onSubmit={handleSubmit} className="grid gap-4">
-      {error ? (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-          {error}
-        </p>
-      ) : null}
+  async function archive() {
+    if (!serviceId || !window.confirm("Archive this service? Existing quotes and reports remain available.")) return;
+    setSaving(true);
+    const response = await fetch(`/api/seller/services/${serviceId}`, { method: "DELETE" });
+    if (response.ok) {
+      router.push("/console/seller");
+      router.refresh();
+    } else {
+      const body = await response.json().catch(() => ({}));
+      setError(body.error ?? "Unable to archive service.");
+      setSaving(false);
+    }
+  }
 
+  if (loading) return <Card><CardContent className="p-6 text-sm text-muted-foreground">Loading seller service…</CardContent></Card>;
+
+  return (
+    <form onSubmit={submit} className="grid gap-5">
+      {error ? <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p> : null}
+      {service ? (
+        <div className="flex flex-wrap gap-3 rounded-md border bg-secondary/10 p-4 text-sm">
+          <span>Public ID: <code>{service.publicId}</code></span>
+          <span>Current immutable version: <strong>v{service.serviceVersion}</strong></span>
+          <span>Seller wallet: <code>{service.sellerWallet}</code></span>
+        </div>
+      ) : (
+        <p className="rounded-md border bg-secondary/10 p-4 text-sm text-muted-foreground">The verified owner wallet becomes the seller wallet. New services start as drafts.</p>
+      )}
       <Card className="rounded-lg">
-        <CardHeader>
-          <CardTitle>Service listing</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Service listing</CardTitle></CardHeader>
         <CardContent className="grid gap-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="grid gap-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                value={form.name}
-                onChange={(event) => handleNameChange(event.target.value)}
-                placeholder="Risk Signal"
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="slug">Slug</Label>
-              <Input
-                id="slug"
-                value={form.slug}
-                onChange={(event) => {
-                  setSlugTouched(true);
-                  update("slug", event.target.value);
-                }}
-                placeholder="risk-signal"
-                required
-              />
-            </div>
+            <div className="grid gap-2"><Label htmlFor="name">Service Name</Label><Input id="name" value={form.name} onChange={(event) => { update("name", event.target.value); if (!serviceId) update("slug", slugify(event.target.value)); }} required /></div>
+            <div className="grid gap-2"><Label htmlFor="slug">Service Slug</Label><Input id="slug" value={form.slug} onChange={(event) => update("slug", event.target.value)} disabled={Boolean(serviceId)} required /></div>
           </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="shortDescription">Short description</Label>
-            <Input
-              id="shortDescription"
-              value={form.shortDescription}
-              onChange={(event) => update("shortDescription", event.target.value)}
-              placeholder="A paid mock signal for agent workflows."
-              required
-            />
-          </div>
-
-          <div className="grid gap-2">
-            <Label htmlFor="longDescription">Long description</Label>
-            <textarea
-              id="longDescription"
-              value={form.longDescription}
-              onChange={(event) => update("longDescription", event.target.value)}
-              className={textareaClassName}
-              required
-            />
-          </div>
-
+          <div className="grid gap-2"><Label htmlFor="short">Short Description</Label><Input id="short" value={form.shortDescription} onChange={(event) => update("shortDescription", event.target.value)} required /></div>
+          <div className="grid gap-2"><Label htmlFor="long">Description</Label><textarea id="long" className={textareaClass} value={form.longDescription} onChange={(event) => update("longDescription", event.target.value)} /></div>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <div className="grid gap-2">
-              <Label htmlFor="category">Category</Label>
-              <Input
-                id="category"
-                value={form.category}
-                onChange={(event) => update("category", event.target.value)}
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Method</Label>
-              <Select
-                value={form.method}
-                onValueChange={(value) => update("method", value as ServiceMethod)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="GET">GET</SelectItem>
-                  <SelectItem value="POST">POST</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid gap-2">
-              <Label htmlFor="priceUsd">Price in USDC</Label>
-              <Input
-                id="priceUsd"
-                type="text"
-                inputMode="decimal"
-                min="0"
-                value={form.priceUsd}
-                onChange={(event) => update("priceUsd", event.target.value)}
-                placeholder="0.002"
-                required
-              />
-            </div>
-            <div className="grid gap-2">
-              <Label>Status</Label>
-              <Select
-                value={form.status}
-                onValueChange={(value) => update("status", value as StoreServiceStatus)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="draft">Draft</SelectItem>
-                  <SelectItem value="live">Live</SelectItem>
-                  <SelectItem value="coming-soon">Coming soon</SelectItem>
-                  <SelectItem value="disabled">Disabled</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="grid gap-2">
-            <Label>Source type</Label>
-            <Select
-              value={form.sourceType}
-              onValueChange={(value) =>
-                update("sourceType", value as StoreServiceSourceType)
-              }
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="seller_mock">Seller mock response</SelectItem>
-                <SelectItem value="external_placeholder">
-                  External placeholder
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <div className="grid gap-2"><Label htmlFor="category">Service Category</Label><Input id="category" value={form.category} onChange={(event) => update("category", event.target.value)} required /></div>
+            <div className="grid gap-2"><Label>Request Method</Label><Select value={form.method} onValueChange={(value) => update("method", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="POST">POST</SelectItem><SelectItem value="GET">GET</SelectItem></SelectContent></Select></div>
+            <div className="grid gap-2"><Label htmlFor="price">Price in USDC</Label><Input id="price" inputMode="decimal" value={form.priceUsdc} onChange={(event) => update("priceUsdc", event.target.value)} required /></div>
+            <div className="grid gap-2"><Label>Status</Label><Select value={form.status} onValueChange={(value) => update("status", value)} disabled={!serviceId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="active">Active</SelectItem><SelectItem value="paused">Paused</SelectItem><SelectItem value="unavailable">Unavailable</SelectItem></SelectContent></Select></div>
           </div>
         </CardContent>
       </Card>
-
       <Card className="rounded-lg">
-        <CardHeader>
-          <CardTitle>Agent context</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>External fulfillment</CardTitle></CardHeader>
         <CardContent className="grid gap-4">
-          <div className="grid gap-2">
-            <Label htmlFor="exampleUseCase">Example use case</Label>
-            <textarea
-              id="exampleUseCase"
-              value={form.exampleUseCase}
-              onChange={(event) => update("exampleUseCase", event.target.value)}
-              className={textareaClassName}
-            />
+          <div className="grid gap-2"><Label htmlFor="endpoint">HTTPS Endpoint</Label><Input id="endpoint" type="url" value={form.fulfillmentUrl} onChange={(event) => update("fulfillmentUrl", event.target.value)} required /><p className="text-xs text-muted-foreground">DNS and network ranges are validated server-side. Redirects are rejected.</p></div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-2"><Label htmlFor="timeout">Timeout (ms)</Label><Input id="timeout" type="number" min="1000" max="30000" value={form.timeoutMs} onChange={(event) => update("timeoutMs", event.target.value)} required /></div>
+            <div className="grid gap-2"><Label htmlFor="secret">Endpoint authorization secret</Label><Input id="secret" type="password" autoComplete="new-password" value={form.authorizationSecret} onChange={(event) => update("authorizationSecret", event.target.value)} placeholder={service?.hasAuthorizationSecret ? "Stored — enter only to replace" : "Optional bearer secret"} /><p className="text-xs text-muted-foreground">Encrypted server-side and never returned after save.</p></div>
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="agentReasoningHint">Agent reasoning hint</Label>
-            <textarea
-              id="agentReasoningHint"
-              value={form.agentReasoningHint}
-              onChange={(event) => update("agentReasoningHint", event.target.value)}
-              className={textareaClassName}
-            />
-          </div>
+          {service?.hasAuthorizationSecret ? <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.clearAuthorizationSecret} onChange={(event) => update("clearAuthorizationSecret", event.target.checked)} />Remove the stored endpoint secret in the next version</label> : null}
         </CardContent>
       </Card>
-
       <Card className="rounded-lg">
-        <CardHeader>
-          <CardTitle>Schemas and examples</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>JSON Schemas</CardTitle></CardHeader>
         <CardContent className="grid gap-4 lg:grid-cols-2">
-          {jsonFields.map(([key, label]) => (
-            <div className="grid gap-2" key={key}>
-              <Label htmlFor={key}>{label}</Label>
-              <textarea
-                id={key}
-                value={form[key]}
-                onChange={(event) => update(key, event.target.value)}
-                className={`${textareaClassName} min-h-48 font-mono`}
-                spellCheck={false}
-              />
-            </div>
-          ))}
+          <div className="grid gap-2"><Label htmlFor="input-schema">Input JSON Schema</Label><textarea id="input-schema" className={`${textareaClass} min-h-72 font-mono`} value={form.inputSchema} onChange={(event) => update("inputSchema", event.target.value)} spellCheck={false} /></div>
+          <div className="grid gap-2"><Label htmlFor="output-schema">Output JSON Schema</Label><textarea id="output-schema" className={`${textareaClass} min-h-72 font-mono`} value={form.outputSchema} onChange={(event) => update("outputSchema", event.target.value)} spellCheck={false} /></div>
         </CardContent>
       </Card>
-
-      <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
-        <Button type="button" variant="outline" onClick={() => router.push("/seller")}>
-          Cancel
-        </Button>
-        <Button type="submit" disabled={saving}>
-          {saving ? <Loader2 className="animate-spin" /> : <ArrowRight />}
-          {saving ? "Saving..." : "Publish service"}
-        </Button>
+      <div className="flex flex-wrap justify-end gap-3">
+        {serviceId ? <Button type="button" variant="destructive" onClick={() => void archive()} disabled={saving}><Archive />Archive</Button> : null}
+        <Button type="button" variant="outline" onClick={() => router.push("/console/seller")}>Cancel</Button>
+        <Button type="submit" disabled={saving}>{saving ? <Loader2 className="animate-spin" /> : <Save />}{saving ? "Saving…" : serviceId ? "Save new version" : "Create draft"}</Button>
       </div>
     </form>
   );

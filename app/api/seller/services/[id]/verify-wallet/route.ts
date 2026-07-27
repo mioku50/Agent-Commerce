@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
-import { NextResponse } from "next/server.js";
+import { NextRequest, NextResponse } from "next/server.js";
 import { verifyMessage } from "viem";
-import { requireSellerAuth } from "../../../../../../lib/seller/session.ts";
+import { requireOwnerSession, byoaErrorResponse } from "../../../../../../lib/byoa/http.ts";
+import { getOwnedSellerService } from "../../../../../../lib/seller/marketplace.ts";
 import {
   getDynamicStoreServiceRowById,
   rowToSellerService,
@@ -14,11 +15,18 @@ type RouteContext = {
   }>;
 };
 
-export async function POST(request: Request, { params }: RouteContext): Promise<NextResponse> {
-  const authReject = requireSellerAuth(request);
-  if (authReject) return authReject as NextResponse;
+export async function POST(request: NextRequest, { params }: RouteContext): Promise<NextResponse> {
+  let ownerWallet;
+  try {
+    ownerWallet = requireOwnerSession(request).wallet;
+  } catch (error) {
+    return byoaErrorResponse(error);
+  }
 
   const { id } = await params;
+  if (!await getOwnedSellerService(ownerWallet, id)) {
+    return NextResponse.json({ error: "Service not found" }, { status: 404 });
+  }
   const row = await getDynamicStoreServiceRowById(id);
   if (!row) {
     return NextResponse.json({ error: "Service not found" }, { status: 404 });

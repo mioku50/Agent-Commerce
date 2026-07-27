@@ -22,9 +22,8 @@ export default function NewSellerServicePage() {
             Create API Service
           </h1>
           <p className="mt-3 max-w-2xl leading-7 text-muted-foreground">
-            Publish a safe marketplace listing. Use `seller_mock` for a protected
-            stored response, or `external_placeholder` to document future
-            fulfillment without proxying external APIs.
+            Publish a versioned external service with declared input and output schemas.
+            Endpoint credentials are encrypted server-side and never returned after save.
           </p>
         </div>
       </section>

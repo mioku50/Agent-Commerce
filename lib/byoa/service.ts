@@ -487,6 +487,8 @@ const allowedWorkflowValues = [
   "builder_update",
   "market_context",
   "custom_task",
+  "*",
+  "seller:*",
 ] as const;
 const allowedServiceTypeValues = ["internal_deterministic", "live_provider", "seller_created", "external_seller"] as const;
 
@@ -497,6 +499,21 @@ function policyArray<T extends string>(value: unknown, allowed: readonly T[], la
     throw new ByoaError(`${label} contains an unsupported value.`, "invalid_policy");
   }
   return entries as T[];
+}
+
+function workflowPolicyArray(value: unknown) {
+  if (!Array.isArray(value)) throw new ByoaError("Allowed workflows must be an array.", "invalid_policy");
+  const entries = [...new Set(value.map((entry) => String(entry).trim()))];
+  if (
+    entries.length === 0 || entries.length > 12 ||
+    entries.some((entry) =>
+      !allowedWorkflowValues.includes(entry as (typeof allowedWorkflowValues)[number]) &&
+      !/^seller_[a-z0-9_]{3,80}$/.test(entry)
+    )
+  ) {
+    throw new ByoaError("Allowed workflows contains an unsupported value.", "invalid_policy");
+  }
+  return entries;
 }
 
 function policyUsdc(value: unknown, minimum: number, maximum: number, label: string) {
@@ -518,7 +535,7 @@ export async function updateAgentPolicy(ownerWallet: Address, agentId: string, i
     throw new ByoaError("Daily call limit must be an integer from 1 to 100.", "invalid_policy");
   }
   const payload = {
-    allowed_workflows: policyArray(input.allowedWorkflows, allowedWorkflowValues, "Allowed workflows"),
+    allowed_workflows: workflowPolicyArray(input.allowedWorkflows),
     allowed_service_types: policyArray(input.allowedServiceTypes, allowedServiceTypeValues, "Allowed service types"),
     max_price_per_run_usdc: policyUsdc(input.maxPricePerRunUsdc, 0.001, 0.005, "Maximum run price"),
     daily_spend_limit_usdc: policyUsdc(input.dailySpendLimitUsdc, 0.001, 1, "Daily spend limit"),
@@ -1029,7 +1046,7 @@ export async function isByoaHostedJob(jobId: string) {
   return Boolean((data as { byoa_agent_id?: string | null } | null)?.byoa_agent_id);
 }
 
-export function byoaManifest(baseUrl: string) {
+export function byoaManifest(baseUrl: string, sellerWorkflows: unknown[] = []) {
   const config = getByoaConfig();
   return {
     name: "Arc Agent Commerce Bring Your Own Agent",
@@ -1042,7 +1059,7 @@ export function byoaManifest(baseUrl: string) {
     auth: {
       management: "owner_wallet_signed_session",
       agent: "bearer_credential_hmac_sha256_at_rest",
-      seller: "separate_signed_seller_session",
+      seller: "owner_wallet_signed_session",
     },
     workflowPayment: {
       protocol: "x402",
@@ -1061,6 +1078,7 @@ export function byoaManifest(baseUrl: string) {
       results: `${baseUrl}/api/byoa/v1/results/{jobId}`,
       passport: `${baseUrl}/api/byoa/agents/{publicId}/passport`,
     },
+    sellerWorkflows,
     scopes: ["manifest:read", "quotes:create", "workflows:execute", "results:read"],
   };
 }

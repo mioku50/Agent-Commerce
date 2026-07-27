@@ -1064,7 +1064,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                   <CardContent className="grid gap-4 text-sm">
                     <fieldset className="grid gap-2">
                       <legend className="font-medium mb-1">Allowed Workflows</legend>
-                      {["github_due_diligence", "market_context", "sentiment_tone", "builder_update", "custom_task"].map((val) => (
+                      {["github_due_diligence", "market_context", "sentiment_tone", "builder_update", "custom_task", "seller:*"].map((val) => (
                         <label key={val} className="flex items-center gap-2 text-xs">
                           <input
                             type="checkbox"

@@ -117,6 +117,8 @@ export type BuyerAgentExecutionOptions = {
     endpoint: string;
     method: ServiceMethod;
   }[];
+  serviceSnapshot?: readonly ApiService[];
+  requestPayload?: unknown;
   onProgress?: (progress: BuyerAgentProgress) => void | Promise<void>;
 };
 
@@ -392,8 +394,11 @@ export function requestBodyForService(
   marketSymbol?: PythMarketSymbol | null,
   repository?: GitHubRepositoryRef | null,
   runtimeServiceOutputs?: ReadonlyMap<string, unknown>,
+  requestPayload?: unknown,
 ) {
   if (service.method !== "POST") return undefined;
+
+  if (requestPayload !== undefined) return requestPayload;
 
   if (service.slug === "github-repository-intelligence") {
     let repoRef = repository;
@@ -1148,6 +1153,7 @@ export async function executeBuyerAgent(
         options.marketSymbol,
         options.repository,
         runtimeServiceOutputs,
+        options.requestPayload,
       );
     } catch (error) {
       if (error instanceof WorkflowDependencyError) {
@@ -1298,11 +1304,13 @@ export async function executeBuyerAgent(
     runLog.status = "discovering";
     await writeRunLog(runFilePath, runLog);
     console.log("\nDiscovering services from /api/store/services...");
-    const discoveredServices = await fetchServiceRegistry(
-      baseUrl,
-      fetchRetries,
-      fetchTimeoutMs,
-    );
+    const discoveredServices = options.serviceSnapshot
+      ? [...options.serviceSnapshot]
+      : await fetchServiceRegistry(
+          baseUrl,
+          fetchRetries,
+          fetchTimeoutMs,
+        );
     const services = options.serviceAllowlist
       ? discoveredServices.filter((service) =>
           options.serviceAllowlist?.some(

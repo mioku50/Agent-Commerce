@@ -152,16 +152,19 @@ function logVerificationFailure(
   );
 }
 
-function buildPaymentRequirements(price: string) {
+function buildPaymentRequirements(price: string, payTo: string = sellerAddress) {
   // Parse dollar amount to USDC atomic units (6 decimals)
   const amount = Math.round(parseFloat(price.replace("$", "")) * 1_000_000);
+  if (!/^0x[0-9a-fA-F]{40}$/.test(payTo)) {
+    throw new Error("A valid x402 seller payout address is required.");
+  }
 
   return {
     scheme: "exact" as const,
     network: ARC_TESTNET_NETWORK,
     asset: ARC_TESTNET_USDC,
     amount: amount.toString(),
-    payTo: sellerAddress,
+    payTo,
     maxTimeoutSeconds: GATEWAY_BATCHED_MAX_TIMEOUT_SECONDS,
     extra: {
       name: "GatewayWalletBatched",
@@ -181,11 +184,15 @@ export function withGateway(
   handler: (req: NextRequest) => Promise<NextResponse>,
   price: string,
   endpoint: string,
+  payTo: string = sellerAddress,
 ) {
-  const requirements = buildPaymentRequirements(price);
+  const requirements = buildPaymentRequirements(price, payTo);
 
   return async (req: NextRequest) => {
     const diagnostics = createDiagnosticContext(endpoint, requirements);
+    const resourceUrl = /^https?:\/\//i.test(endpoint)
+      ? endpoint
+      : new URL(endpoint, req.nextUrl.origin).toString();
     const paymentSignature = req.headers.get("payment-signature");
 
     // No payment — return 402 with Gateway batching payment requirements
@@ -197,7 +204,7 @@ export function withGateway(
       const paymentRequired = {
         x402Version: 2,
         resource: {
-          url: endpoint,
+          url: resourceUrl,
           description: `Paid resource (${price} USDC)`,
           mimeType: "application/json",
         },

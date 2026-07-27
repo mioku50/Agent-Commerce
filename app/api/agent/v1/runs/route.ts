@@ -18,8 +18,10 @@ import {
   saveMachineIdempotency,
 } from "../../../../../lib/api/machine-idempotency.ts";
 import {
+  confirmHostedWorkflowQuoteInput,
   confirmHostedWorkflowQuote,
   getHostedWorkflowQuote,
+  type HostedWorkflowQuoteRow,
 } from "../../../../../lib/commerce/workflow-checkout.ts";
 import { getHostedWorkflowCheckoutConfig } from "../../../../../lib/agent/workflow-pricing.ts";
 import { getByoaClient } from "../../../../../lib/byoa/service.ts";
@@ -33,9 +35,153 @@ import {
   hashHostedWorkflowInput,
   validateHostedWorkflowRequest,
 } from "../../../../../lib/agent/hosted-workflows.ts";
+import type { MachineAuthContext } from "../../../../../lib/api/machine-auth.ts";
+import {
+  canonicalSellerInput,
+  getSellerServiceRowById,
+  isSellerWorkflowType,
+} from "../../../../../lib/seller/marketplace.ts";
+import {
+  runSellerAgentJob,
+  sellerQuoteRequestHash,
+  sellerWorkflowAllowed,
+} from "../../../../../lib/seller/workflow.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+async function launchMachineSellerRun(input: {
+  context: MachineAuthContext;
+  idempotencyKey: string;
+  body: Record<string, unknown>;
+  quote: HostedWorkflowQuoteRow;
+  paymentAuthorization?: { type?: string; payload?: string };
+}) {
+  if (
+    !isSellerWorkflowType(input.quote.workflow_type) ||
+    !sellerWorkflowAllowed(input.context.allowedWorkflows, input.quote.workflow_type) ||
+    !input.context.spendingPolicy.allowed_service_types.includes("external_seller") ||
+    !input.quote.seller_service_id || !input.quote.seller_service_version
+  ) {
+    return createMachineErrorResponse("quote_not_found", "The specified workflow quote could not be found.", 404);
+  }
+  if (!input.body.input || typeof input.body.input !== "object" || Array.isArray(input.body.input)) {
+    return createMachineErrorResponse("quote_not_found", "The specified workflow quote could not be found.", 404);
+  }
+  const service = await getSellerServiceRowById(input.quote.seller_service_id);
+  if (!service || service.seller_id !== input.quote.seller_id) {
+    return createMachineErrorResponse("quote_not_found", "The specified workflow quote could not be found.", 404);
+  }
+  const inputText = canonicalSellerInput(input.body.input);
+  const expectedRequestHash = sellerQuoteRequestHash({
+    workflowType: input.quote.workflow_type,
+    payload: input.body.input,
+    serviceId: service.id,
+    serviceVersion: input.quote.seller_service_version,
+    priceUsdc: input.quote.estimated_provider_cost_usdc,
+  });
+  if (expectedRequestHash !== input.quote.request_hash) {
+    return createMachineErrorResponse("quote_not_found", "The specified workflow quote could not be found.", 404);
+  }
+
+  const reservation = await resolveMachineIdempotency(
+    input.idempotencyKey,
+    input.context.credential.id,
+    input.body,
+    "/api/agent/v1/runs",
+    input.context.agentId,
+  );
+  if (reservation.unavailable) {
+    return createMachineErrorResponse("idempotency_store_unavailable", "The request cannot be safely processed right now.", 503, true);
+  }
+  if (reservation.conflict) {
+    return createMachineErrorResponse("idempotency_conflict", "This Idempotency-Key is already bound to a different run request.", 409);
+  }
+  if (reservation.pending) {
+    return createMachineErrorResponse("idempotency_in_progress", "A request with this Idempotency-Key is already being processed.", 409, true);
+  }
+  if (reservation.cachedResponse?.body) {
+    return NextResponse.json(reservation.cachedResponse.body, {
+      status: reservation.cachedResponse.status,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  let jobId: string | null = null;
+  if (input.quote.payment_mode === "sponsored") {
+    const checkoutConfig = getHostedWorkflowCheckoutConfig();
+    const { data, error } = await getByoaClient().rpc("launch_hosted_workflow_checkout_v1", {
+      p_quote_id: input.quote.id,
+      p_idempotency_hash: input.quote.idempotency_hash,
+      p_request_hash: input.quote.request_hash,
+      p_payment_mode: "sponsored",
+      p_transaction_hash: null,
+      p_block_number: null,
+      p_settled_at: null,
+      p_sponsored_quota: checkoutConfig.sponsoredQuota,
+    });
+    if (error) throw new Error("Failed to launch sponsored seller workflow checkout.");
+    const row = (data as Array<{ job_id: string | null; reason: string }> | null)?.[0];
+    if (!row?.job_id) {
+      return createMachineErrorResponse(
+        row?.reason === "sponsored_quota_exhausted" ? "spending_limit_exceeded" : "internal_error",
+        "Sponsored seller workflow checkout could not be finalized.",
+        row?.reason === "sponsored_quota_exhausted" ? 429 : 500,
+      );
+    }
+    jobId = row.job_id;
+  } else {
+    const result = await confirmHostedWorkflowQuoteInput({
+      quoteId: input.quote.id,
+      idempotencyHash: input.quote.idempotency_hash,
+      requestHash: input.quote.request_hash,
+      inputText,
+      transactionHash: input.paymentAuthorization?.payload?.trim() ?? null,
+    });
+    if (!result.jobId) {
+      return createMachineErrorResponse("payment_invalid", `Paid seller workflow checkout failed: ${result.reason}`, 400);
+    }
+    jobId = result.jobId;
+  }
+
+  const ownershipUpdate = await getByoaClient().from("hosted_agent_jobs").update({
+    byoa_agent_id: input.context.agentId,
+    machine_credential_id: input.context.credential.id,
+  }).eq("id", jobId);
+  if (ownershipUpdate.error) throw new Error("Unable to persist Machine API job credential ownership.");
+
+  const responsePayload = { runId: jobId, status: "queued", pollAfterMs: 2000 };
+  await saveMachineIdempotency(
+    input.idempotencyKey,
+    input.context.credential.id,
+    input.body,
+    responsePayload,
+    {
+      agentId: input.context.agentId,
+      route: "/api/agent/v1/runs",
+      responseStatus: 201,
+      resourceType: "run",
+      resourceId: jobId,
+    },
+  );
+  try {
+    after(async () => {
+      try {
+        await runSellerAgentJob(jobId!, input.body.input);
+      } catch (error) {
+        console.error(`[runs/route] Async seller execution failed for job=${jobId}:`, error);
+      }
+    });
+  } catch {
+    runSellerAgentJob(jobId, input.body.input).catch((error) => {
+      console.error(`[runs/route] Async seller execution fallback failed for job=${jobId}:`, error);
+    });
+  }
+  return NextResponse.json(responsePayload, {
+    status: 201,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
 
 export async function POST(request: NextRequest) {
   const authResult = await authenticateMachineRequest(request, "runs:create");
@@ -215,6 +361,20 @@ export async function POST(request: NextRequest) {
         "Invalid payment transaction hash format.",
         400,
       );
+    }
+  }
+
+  if (isSellerWorkflowType(storedQuote.workflow_type)) {
+    try {
+      return await launchMachineSellerRun({
+        context,
+        idempotencyKey,
+        body,
+        quote: storedQuote,
+        paymentAuthorization: paymentAuth,
+      });
+    } catch (error) {
+      return handleMachineInternalError(error, "/api/agent/v1/runs", context.agentId);
     }
   }
 

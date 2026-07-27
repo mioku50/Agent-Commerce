@@ -34,6 +34,8 @@ export type ProxyExecutionInput = {
   body?: unknown;
   headers?: Record<string, string>;
   payerPrivateKey?: string;
+  /** Server-decrypted credential. It must never be populated from request headers. */
+  trustedAuthorization?: string;
 };
 
 export type ProxyExecutionResult = {
@@ -83,17 +85,25 @@ function safeRequestParts(input: ProxyExecutionInput) {
   if (input.headers?.["x-agent-commerce-request-id"]) {
     safeHeaders["X-Agent-Commerce-Request-Id"] = input.headers["x-agent-commerce-request-id"];
   }
+  if (input.trustedAuthorization) {
+    safeHeaders.Authorization = input.trustedAuthorization;
+  }
   const serializedBody = input.method === "POST" && input.body !== undefined
     ? typeof input.body === "string" ? input.body : JSON.stringify(input.body)
     : undefined;
   return { safeHeaders, serializedBody };
 }
 
-function parseResponseData(text: string): unknown {
+async function parseResponseData(response: Response): Promise<unknown> {
+  const contentType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+  if (contentType !== "application/json" && !contentType?.endsWith("+json")) {
+    throw new ExternalProxyError("External seller returned an unsupported content type.", 502);
+  }
+  const text = await response.text();
   try {
     return JSON.parse(text);
   } catch {
-    return { rawResponse: text };
+    throw new ExternalProxyError("External seller returned invalid JSON.", 502);
   }
 }
 
@@ -122,6 +132,7 @@ export async function prepareExternalSellerRequest(
     maxResponseSizeBytes: service.maxResponseSizeBytes ?? 1_048_576,
     maxTimeoutMs: service.maxTimeoutMs ?? 15_000,
     onDnsResolved: (ips) => { pinnedIps = [...ips]; },
+    ...(input.trustedAuthorization ? { allowedHeaders: ["authorization"] } : {}),
   };
 
   let response: Response;
@@ -156,15 +167,14 @@ export async function prepareExternalSellerRequest(
       kind: "free-response",
       result: {
         status: response.status,
-        data: parseResponseData(await response.text()),
+        data: await parseResponseData(response),
         sourceType: "external_seller",
       },
     };
   }
   if (response.status !== 402) {
-    const detail = (await response.text().catch(() => "")).slice(0, 300);
     throw new ExternalProxyError(
-      `External seller endpoint returned unexpected status ${response.status}${detail ? `: ${detail}` : ""}`,
+      `External seller endpoint returned unexpected HTTP status ${response.status}.`,
       response.status >= 400 && response.status < 600 ? response.status : 502,
     );
   }
@@ -279,7 +289,7 @@ export async function executePreparedExternalSellerPayment(
   const transaction = parsePaymentResponse(paidResponse.headers.get("PAYMENT-RESPONSE"));
   return {
     status: paidResponse.status,
-    data: parseResponseData(await paidResponse.text()),
+    data: await parseResponseData(paidResponse),
     paidAmountUsdc: formatUnits(BigInt(challenge.selectedAccept.amount), 6),
     downstreamTransaction: transaction,
     paymentRequiredChallenge: challenge,

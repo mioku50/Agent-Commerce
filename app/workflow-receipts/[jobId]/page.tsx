@@ -4,7 +4,7 @@ import { BadgeCheck, CreditCard, ExternalLink, ReceiptText } from "lucide-react"
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getHostedAgentJobView } from "@/lib/agent/hosted-jobs";
+import { getHostedAgentJobView, redactPublicSellerAccounting } from "@/lib/agent/hosted-jobs";
 import { isByoaHostedJob } from "@/lib/byoa/service";
 
 export const dynamic = "force-dynamic";
@@ -15,9 +15,11 @@ export default async function WorkflowReceiptPage({ params }: PageProps) {
   const { jobId } = await params;
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(jobId)) notFound();
   if (await isByoaHostedJob(jobId).catch(() => true)) notFound();
-  const view = await getHostedAgentJobView(jobId).catch(() => null);
+  const rawView = await getHostedAgentJobView(jobId).catch(() => null);
+  const view = rawView ? redactPublicSellerAccounting(rawView) : null;
   if (!view) notFound();
   const payment = view.userPayment;
+  const isSellerWorkflow = String(view.job.workflowType).startsWith("seller_");
 
   return (
     <main className="min-h-screen bg-background">
@@ -37,11 +39,10 @@ export default async function WorkflowReceiptPage({ params }: PageProps) {
           <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="flex items-center gap-2"><CreditCard className="size-5 text-primary" />User → Agent Commerce</CardTitle><Badge variant={payment?.status === "credit_issued" ? "secondary" : "default"}>{payment?.status ?? view.job.paymentMode}</Badge></div></CardHeader>
           <CardContent className="grid gap-5">
             {payment ? <>
-              <dl className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+              <dl className={`grid gap-4 text-sm sm:grid-cols-2 ${isSellerWorkflow ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
                 <div><dt className="text-muted-foreground">User payment</dt><dd className="mt-1 font-mono font-medium">{payment.grossAmountUsdc} USDC</dd></div>
                 <div><dt className="text-muted-foreground">Provider cost</dt><dd className="mt-1 font-mono font-medium">{payment.providerCostUsdc} USDC</dd></div>
-                <div><dt className="text-muted-foreground">Platform fee</dt><dd className="mt-1 font-mono font-medium">{payment.platformFeeUsdc} USDC</dd></div>
-                <div><dt className="text-muted-foreground">Net revenue</dt><dd className="mt-1 font-mono font-medium">{payment.netRevenueUsdc} USDC</dd></div>
+                {isSellerWorkflow ? <div><dt className="text-muted-foreground">Service version</dt><dd className="mt-1 font-mono font-medium">v{String((view.job.structuredResult?.workflowData as any)?.serviceVersion ?? "n/a")}</dd></div> : <><div><dt className="text-muted-foreground">Platform fee</dt><dd className="mt-1 font-mono font-medium">{payment.platformFeeUsdc} USDC</dd></div><div><dt className="text-muted-foreground">Net revenue</dt><dd className="mt-1 font-mono font-medium">{payment.netRevenueUsdc} USDC</dd></div></>}
               </dl>
               <div className="rounded-md bg-secondary/30 p-3 text-xs"><p>Requested by</p><p className="mt-1 break-all font-mono">{payment.requesterWallet}</p></div>
               {Number(payment.creditAmountUsdc) > 0 ? <div className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-sm"><p className="font-medium">Workflow credit · {payment.creditAmountUsdc} USDC</p><p className="mt-1 text-muted-foreground">{payment.failureReason}</p></div> : null}

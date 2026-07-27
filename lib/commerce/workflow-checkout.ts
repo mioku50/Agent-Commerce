@@ -54,12 +54,12 @@ export type HostedWorkflowQuoteRow = {
   request_hash: string;
   requester_fingerprint: string;
   requester_wallet: string;
-  workflow_type: HostedWorkflowType;
+  workflow_type: HostedWorkflowType | string;
   task: string;
   input_preview: string;
   input_hash: string;
   budget_usdc: string;
-  planner_snapshot: HostedPlannerSnapshot;
+  planner_snapshot: HostedPlannerSnapshot & Record<string, unknown>;
   selected_services: HostedPlannerSnapshot["selectedServices"];
   estimated_provider_cost_usdc: string;
   platform_fee_usdc: string;
@@ -78,6 +78,10 @@ export type HostedWorkflowQuoteRow = {
   byoa_agent_id?: string | null;
   machine_credential_id?: string | null;
   owner_wallet?: string | null;
+  seller_service_id?: string | null;
+  seller_service_version?: number | null;
+  seller_id?: string | null;
+  seller_net_amount_usdc?: string | null;
 };
 
 export type HostedWorkflowUserPaymentRow = {
@@ -145,19 +149,48 @@ function secondsUntil(value: string) {
 
 function publicQuote(row: HostedWorkflowQuoteRow) {
   const meta = (row.planner_snapshot as any)?.metadata as Record<string, any> | undefined;
+  const sellerSnapshot = row.seller_service_id && row.seller_service_version && row.seller_id
+    ? {
+        serviceId: String(meta?.seller_service_public_id ?? ""),
+        serviceVersion: Number(row.seller_service_version),
+      }
+    : null;
+  const publicPlan = sellerSnapshot
+    ? {
+        version: row.planner_snapshot.version,
+        workflowType: row.workflow_type,
+        workflowLabel: row.planner_snapshot.workflowLabel,
+        inputPreview: row.planner_snapshot.inputPreview,
+        inputSha256: row.planner_snapshot.inputSha256,
+        estimatedSpendUsdc: row.planner_snapshot.estimatedSpendUsdc,
+        selectedServices: [{
+          serviceId: sellerSnapshot.serviceId,
+          serviceVersion: sellerSnapshot.serviceVersion,
+          name: (row.selected_services?.[0] as { name?: string } | undefined)?.name ?? "External Service",
+          priceUsdc: Number(row.estimated_provider_cost_usdc),
+          providerType: "external_seller",
+        }],
+      }
+    : row.planner_snapshot;
   return {
     id: row.id,
     requesterWallet: getAddress(row.requester_wallet),
     workflowType: row.workflow_type,
     inputPreview: row.input_preview,
     inputSha256: row.input_hash,
-    plan: row.planner_snapshot,
-    pricing: {
-      estimatedProviderCostUsdc: Number(row.estimated_provider_cost_usdc),
-      platformFeeUsdc: Number(row.platform_fee_usdc),
-      listPriceUsdc: Number(row.list_price_usdc),
-      amountDueUsdc: Number(row.amount_due_usdc),
-    },
+    plan: publicPlan,
+    pricing: sellerSnapshot
+      ? {
+          estimatedProviderCostUsdc: Number(row.estimated_provider_cost_usdc),
+          listPriceUsdc: Number(row.list_price_usdc),
+          amountDueUsdc: Number(row.amount_due_usdc),
+        }
+      : {
+          estimatedProviderCostUsdc: Number(row.estimated_provider_cost_usdc),
+          platformFeeUsdc: Number(row.platform_fee_usdc),
+          listPriceUsdc: Number(row.list_price_usdc),
+          amountDueUsdc: Number(row.amount_due_usdc),
+        },
     paymentMode: row.payment_mode,
     treasuryAddress: getAddress(row.treasury_address),
     chainId: Number(row.chain_id),
@@ -169,6 +202,7 @@ function publicQuote(row: HostedWorkflowQuoteRow) {
     byoaAgentId: row.byoa_agent_id || meta?.byoa_agent_id || null,
     machineCredentialId: row.machine_credential_id || meta?.machine_credential_id || null,
     ownerWallet: row.owner_wallet || meta?.owner_wallet || null,
+    sellerSnapshot,
   };
 }
 
@@ -255,6 +289,15 @@ export async function createHostedWorkflowQuote(input: {
   machineCredentialId?: string;
   ownerWallet?: string;
   metadata?: Record<string, unknown>;
+  allowSponsored?: boolean;
+  sellerSnapshot?: {
+    serviceId: string;
+    servicePublicId: string;
+    serviceVersion: number;
+    sellerId: string;
+    sellerPublicId: string;
+    sellerNetAmountUsdc: number;
+  };
 }) {
   const client = getCheckoutClient();
   const existing = await client
@@ -276,11 +319,13 @@ export async function createHostedWorkflowQuote(input: {
   await currentPolicyState(input.requesterFingerprint, hostedConfig);
   const pricing = priceHostedWorkflow(input.plan, checkoutConfig);
   const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText);
-  const sponsored = await client
-    .from("hosted_workflow_user_payments")
-    .select("id", { count: "exact", head: true })
-    .eq("payment_mode", "sponsored")
-    .ilike("requester_wallet", input.requesterWallet);
+  const sponsored = input.allowSponsored === false
+    ? { count: checkoutConfig.sponsoredQuota, error: null }
+    : await client
+      .from("hosted_workflow_user_payments")
+      .select("id", { count: "exact", head: true })
+      .eq("payment_mode", "sponsored")
+      .ilike("requester_wallet", input.requesterWallet);
   if (sponsored.error) throw new Error("Unable to evaluate sponsored workflow quota.");
   const paymentMode: HostedCheckoutPaymentMode =
     (sponsored.count ?? 0) < checkoutConfig.sponsoredQuota ? "sponsored" : "paid";
@@ -292,6 +337,8 @@ export async function createHostedWorkflowQuote(input: {
     byoa_agent_id: input.byoaAgentId || null,
     machine_credential_id: input.machineCredentialId || null,
     owner_wallet: input.ownerWallet || null,
+    seller_service_public_id: input.sellerSnapshot?.servicePublicId ?? null,
+    seller_public_id: input.sellerSnapshot?.sellerPublicId ?? null,
     ...input.metadata,
   };
 
@@ -321,6 +368,10 @@ export async function createHostedWorkflowQuote(input: {
     byoa_agent_id: input.byoaAgentId || null,
     machine_credential_id: input.machineCredentialId || null,
     owner_wallet: input.ownerWallet || null,
+    seller_service_id: input.sellerSnapshot?.serviceId ?? null,
+    seller_service_version: input.sellerSnapshot?.serviceVersion ?? null,
+    seller_id: input.sellerSnapshot?.sellerId ?? null,
+    seller_net_amount_usdc: input.sellerSnapshot?.sellerNetAmountUsdc ?? null,
     status: "quoted",
     expires_at: expiresAt,
   };
@@ -441,11 +492,11 @@ async function verifyPaidTransaction(
   };
 }
 
-export async function confirmHostedWorkflowQuote(input: {
+export async function confirmHostedWorkflowQuoteInput(input: {
   quoteId: string;
   idempotencyHash: string;
   requestHash: string;
-  request: HostedWorkflowRequest;
+  inputText: string;
   transactionHash?: string | null;
   signature?: string | null;
 }) {
@@ -454,7 +505,7 @@ export async function confirmHostedWorkflowQuote(input: {
   if (
     quote.idempotency_hash !== input.idempotencyHash ||
     quote.request_hash !== input.requestHash ||
-    quote.input_hash !== hostedWorkflowInputMetadata(input.request.inputText).sha256
+    quote.input_hash !== hostedWorkflowInputMetadata(input.inputText).sha256
   ) {
     throw new HostedCheckoutPolicyError("idempotency_conflict");
   }
@@ -520,6 +571,24 @@ export async function confirmHostedWorkflowQuote(input: {
     reason: row.reason,
     retryAfterSeconds: row.retry_after_seconds,
   };
+}
+
+export async function confirmHostedWorkflowQuote(input: {
+  quoteId: string;
+  idempotencyHash: string;
+  requestHash: string;
+  request: HostedWorkflowRequest;
+  transactionHash?: string | null;
+  signature?: string | null;
+}) {
+  return confirmHostedWorkflowQuoteInput({
+    quoteId: input.quoteId,
+    idempotencyHash: input.idempotencyHash,
+    requestHash: input.requestHash,
+    inputText: input.request.inputText,
+    transactionHash: input.transactionHash,
+    signature: input.signature,
+  });
 }
 
 export async function finalizeHostedWorkflowUserPayment(input: {

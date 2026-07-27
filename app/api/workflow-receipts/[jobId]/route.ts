@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getHostedAgentJobView } from "@/lib/agent/hosted-jobs";
+import { getHostedAgentJobView, redactPublicSellerAccounting } from "@/lib/agent/hosted-jobs";
 import { safeHostedError } from "@/lib/agent/hosted-policy";
 import { isByoaHostedJob } from "@/lib/byoa/service";
 
@@ -16,8 +16,9 @@ export async function GET(_request: Request, { params }: RouteContext) {
     if (await isByoaHostedJob(jobId)) {
       return NextResponse.json({ error: "Workflow receipt not found." }, { status: 404 });
     }
-    const view = await getHostedAgentJobView(jobId);
-    if (!view) return NextResponse.json({ error: "Workflow receipt not found." }, { status: 404 });
+    const rawView = await getHostedAgentJobView(jobId);
+    if (!rawView) return NextResponse.json({ error: "Workflow receipt not found." }, { status: 404 });
+    const view = redactPublicSellerAccounting(rawView);
     return NextResponse.json({
       workflowReceipt: {
         id: view.job.id,

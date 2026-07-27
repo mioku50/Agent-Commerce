@@ -1,66 +1,41 @@
 import { revalidatePath } from "next/cache.js";
-import { NextResponse } from "next/server.js";
+import { NextRequest, NextResponse } from "next/server.js";
+import { requireOwnerSession, byoaErrorResponse } from "../../../../lib/byoa/http.ts";
 import {
-  createDynamicStoreService,
-  listDynamicStoreServiceRows,
-  rowToSellerService,
-} from "../../../../lib/services/store-service-persistence.ts";
-import {
-  getErrorMessage,
-  parseSellerServiceRequest,
-  type ValidationContext,
-} from "./validation.ts";
-import { requireSellerAuth } from "../../../../lib/seller/session.ts";
+  createSellerService,
+  listSellerServices,
+  type SellerServiceInput,
+} from "../../../../lib/seller/marketplace.ts";
 
-function logValidationError(
-  action: string,
-  context: ValidationContext,
-  error: unknown,
-) {
-  console.warn(
-    "[seller-services] Validation failed",
-    JSON.stringify({
-      action,
-      slug: context.slug,
-      normalizedStatus: context.normalizedStatus,
-      normalizedSourceType: context.normalizedSourceType,
-      normalizedMethod: context.normalizedMethod,
-      price: context.price,
-      error: getErrorMessage(error),
-    }),
-  );
-}
+export const dynamic = "force-dynamic";
 
-export async function GET(request: Request) {
-  const authReject = requireSellerAuth(request);
-  if (authReject) return authReject;
-
-  const { services, warning } = await listDynamicStoreServiceRows();
-
-  return NextResponse.json({
-    services: services.map(rowToSellerService),
-    ...(warning ? { warning } : {}),
-  });
-}
-
-export async function POST(request: Request) {
-  const authReject = requireSellerAuth(request);
-  if (authReject) return authReject;
-
-  const parsed = await parseSellerServiceRequest(request, { isCreation: true });
-  if ("error" in parsed) {
-    logValidationError("create", parsed.context, parsed.error);
-    return NextResponse.json({ error: parsed.error }, { status: parsed.status });
-  }
-
+export async function GET(request: NextRequest) {
   try {
-    const service = await createDynamicStoreService(parsed.input);
-    revalidatePath("/store");
-    revalidatePath(`/store/${service.slug}`);
-    revalidatePath("/api/store/services");
-    return NextResponse.json({ service }, { status: 201 });
+    const session = requireOwnerSession(request);
+    return NextResponse.json(
+      { services: await listSellerServices(session.wallet) },
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
-    const message = getErrorMessage(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return byoaErrorResponse(error);
+  }
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = requireOwnerSession(request);
+    const body = await request.json() as SellerServiceInput;
+    const service = await createSellerService(session.wallet, body);
+    revalidatePath("/");
+    revalidatePath("/agent-runner");
+    revalidatePath("/console/seller");
+    return NextResponse.json({ service }, {
+      status: 201,
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to create seller service.";
+    if (/session|required/i.test(message)) return byoaErrorResponse(error);
+    return NextResponse.json({ error: message }, { status: 400, headers: { "Cache-Control": "no-store" } });
   }
 }

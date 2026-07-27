@@ -165,8 +165,8 @@ export type HostedJobView = {
     grossAmountUsdc: string;
     estimatedProviderCostUsdc: string;
     providerCostUsdc: string;
-    platformFeeUsdc: string;
-    netRevenueUsdc: string;
+    platformFeeUsdc?: string;
+    netRevenueUsdc?: string;
     creditAmountUsdc: string;
     transactionHash: string | null;
     blockNumber: number | null;

@@ -127,6 +127,10 @@ function serviceReasonForSelection(service: ApiService, task: string) {
     return `Seller-created mock service matches the task context and is safe for the stored-response MVP: ${task}`;
   }
 
+  if (service.sourceType === "external_seller") {
+    return `The allowlisted external seller service matches this workflow and fits the immutable budget: ${task}`;
+  }
+
   if (service.slug === "github-repository-intelligence") {
     return "The task requires live public GitHub repository data, recent commits, releases, and governance file presence.";
   }
@@ -159,7 +163,7 @@ function serviceReasonForSelection(service: ApiService, task: string) {
 }
 
 function shouldSelectLiveService(service: ApiService, task: string, budget: number) {
-  if (service.sourceType === "seller_mock") {
+  if (service.sourceType === "seller_mock" || service.sourceType === "external_seller") {
     return sellerServiceMatchesTask(service, task);
   }
 
@@ -203,7 +207,7 @@ function hasPreferredCategory(service: ApiService, preferredCategories: string[]
 }
 
 function isSellerCreated(service: ApiService) {
-  return service.sourceType === "seller_mock" || service.sourceType === "external_placeholder";
+  return service.sourceType === "seller_mock" || service.sourceType === "external_placeholder" || service.sourceType === "external_seller";
 }
 
 export function planAgentPurchases(input: AgentPlanInput): AgentPlanResult {

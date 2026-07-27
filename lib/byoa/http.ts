@@ -1,11 +1,17 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server.js";
 import { bearerToken, verifyOwnerSession, BYOA_OWNER_SESSION_COOKIE } from "./auth.ts";
 import { ByoaConfigAccessError } from "./config.ts";
 import { authenticateAgentCredential, ByoaError, safeByoaError } from "./service.ts";
 import type { ByoaScope } from "./types.ts";
 
 export function requireOwnerSession(request: NextRequest) {
-  const session = verifyOwnerSession(request.cookies.get(BYOA_OWNER_SESSION_COOKIE)?.value);
+  const cookieValue = request.headers.get("cookie")
+    ?.split(";")
+    .map((item) => item.trim().split("="))
+    .find(([name]) => name === BYOA_OWNER_SESSION_COOKIE)
+    ?.slice(1)
+    .join("=");
+  const session = verifyOwnerSession(cookieValue);
   if (!session) throw new ByoaError("A verified owner-wallet session is required.", "owner_session_required", 401);
   return session;
 }

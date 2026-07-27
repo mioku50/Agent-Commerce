@@ -28,6 +28,8 @@ import {
 } from "@/lib/agent/workflow-templates";
 import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
 import { sanitizePublicReportText } from "@/lib/agent/public-report-copy";
+import { listPublicSellerWorkflows, type PublicSellerWorkflow } from "@/lib/seller/marketplace";
+import { SellerWorkflowCards } from "@/components/seller-workflow-cards";
 
 export const metadata: Metadata = {
   title: "Arc Agent Commerce — Verified Workflows for People and AI Agents",
@@ -122,9 +124,20 @@ async function recentReportsWithTimeout() {
   ]).catch(() => []);
 }
 
+async function sellerWorkflowsWithTimeout() {
+  return Promise.race([
+    listPublicSellerWorkflows(),
+    new Promise<PublicSellerWorkflow[]>((resolve) => setTimeout(() => resolve([]), 3_000)),
+  ]).catch(() => []);
+}
+
 export default async function Home() {
   await connection();
-  const reports = selectDiverseReports(await recentReportsWithTimeout());
+  const [recentReports, sellerWorkflows] = await Promise.all([
+    recentReportsWithTimeout(),
+    sellerWorkflowsWithTimeout(),
+  ]);
+  const reports = selectDiverseReports(recentReports);
   const featured = getHostedWorkflowTemplate("github_due_diligence");
 
   return (
@@ -240,6 +253,17 @@ export default async function Home() {
           </div>
         </div>
       </section>
+
+      {sellerWorkflows.length ? (
+        <section className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6">
+          <div className="max-w-3xl">
+            <Badge variant="secondary">Community & Seller Workflows</Badge>
+            <h2 className="mt-3 text-3xl font-bold">External services for verified reports</h2>
+            <p className="mb-7 mt-3 leading-7 text-muted-foreground">Discover seller-published workflows with declared schemas, immutable versioned pricing, and Arc verification.</p>
+          </div>
+          <SellerWorkflowCards workflows={sellerWorkflows} />
+        </section>
+      ) : null}
 
       <section className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6">
         <div className="text-center">

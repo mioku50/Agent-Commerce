@@ -177,6 +177,10 @@ function rejectObviousSecrets(value: string, field: "Task" | "Input text") {
   }
 }
 
+export function rejectHostedWorkflowSecrets(value: string) {
+  rejectObviousSecrets(value, "Input text");
+}
+
 export function hashHostedWorkflowInput(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -610,4 +614,3 @@ export function buildHostedFinalReport(input: {
     generatedAt: new Date().toISOString(),
   };
 }
-

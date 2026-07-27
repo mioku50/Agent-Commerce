@@ -195,6 +195,24 @@ async function verifyProductionMachineSchema() {
   );
   console.log("  ✓ Explicit credential type and owner relation columns exist.");
 
+  console.log("[verify-machine-schema] Check 4: Verifying P2.1 seller marketplace schema...");
+  const sellerSchemaChecks = [
+    serverClient.from("seller_accounts")
+      .select("id,public_id,owner_wallet,status,created_at,updated_at").limit(0),
+    serverClient.from("seller_service_versions")
+      .select("id,service_id,seller_id,service_version,fulfillment_url,endpoint_auth_ciphertext,created_at").limit(0),
+    serverClient.from("seller_revenue_ledger")
+      .select("id,seller_id,service_id,service_version,quote_id,job_id,gross_amount_usdc,platform_fee_usdc,seller_net_amount_usdc,settlement_status").limit(0),
+    serverClient.from("store_services")
+      .select("id,public_id,seller_id,service_version,archived_at").limit(0),
+    serverClient.from("hosted_workflow_quotes")
+      .select("id,seller_service_id,seller_service_version,seller_id,seller_net_amount_usdc").limit(0),
+  ];
+  const sellerSchemaResults = await Promise.all(sellerSchemaChecks);
+  const sellerSchemaFailure = sellerSchemaResults.find((result) => result.error)?.error;
+  assert(!sellerSchemaFailure, `P2.1 seller marketplace schema is missing or inaccessible: ${sellerSchemaFailure?.message}`);
+  console.log("  ✓ Seller accounts, immutable versions, quote snapshots, and revenue ledger exist.");
+
   // Check 5: Verify server role access works and public/anon client cannot access table without auth
   console.log("[verify-machine-schema] Check 5: Verifying RLS protection (public/anon client blocked)...");
 
@@ -241,6 +259,22 @@ async function verifyProductionMachineSchema() {
       );
     }
     console.log("  ✓ RLS protection verified: public/anon client blocked from machine_api_idempotency.");
+
+    const [anonVersions, anonRevenue, hiddenStoreColumn] = await Promise.all([
+      publicClient.from("seller_service_versions").select("id").limit(1),
+      publicClient.from("seller_revenue_ledger").select("id").limit(1),
+      publicClient.from("store_services").select("fulfillment_url").limit(1),
+    ]);
+    assert(
+      (!anonVersions.data || anonVersions.data.length === 0) &&
+        (!anonRevenue.data || anonRevenue.data.length === 0),
+      "Security check failed: anonymous access exposed private seller tables.",
+    );
+    assert(
+      Boolean(hiddenStoreColumn.error),
+      "Security check failed: anonymous access exposed seller fulfillment URLs.",
+    );
+    console.log("  ✓ Seller versions, revenue, endpoint URLs, and endpoint secrets are denied to anonymous access.");
   } else {
     throw new Error(
       "Public Supabase configuration is required to verify anonymous access denial.",
