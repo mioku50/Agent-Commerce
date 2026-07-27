@@ -20,9 +20,19 @@ try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
 
   await page.goto(`${baseUrl()}/`, { waitUntil: "load" });
+  await page.getByRole("heading", { name: "Verified workflows for people and AI agents", exact: true }).waitFor();
+  await page.getByText("Agent Commerce on Arc Testnet", { exact: true }).waitFor();
+  await page.locator('a[href="/agent-runner"]').filter({ hasText: "Explore Workflows" }).waitFor();
+  await page.getByRole("link", { name: "Developer API", exact: true }).waitFor();
+  assert.equal(await page.locator("main > section").first().locator('input[name="repository"]').count(), 0);
+  await page.getByRole("heading", { name: "GitHub Project Due Diligence", exact: true }).first().waitFor();
+  await page.getByRole("heading", { name: "Market Context Brief", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Sentiment & Tone Report", exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Builder Update Summary", exact: true }).waitFor();
   await page.locator('a[href="/agent-runner?workflow=github"]').first().waitFor();
   await page.locator('a[href="/agent-runner?workflow=sentiment"]').first().waitFor();
   await page.locator('a[href="/agent-runner?workflow=builder_update"]').first().waitFor();
+  await page.locator('a[href^="/agent-runner?workflow=market_context"]').first().waitFor();
 
   await page.goto(`${baseUrl()}/agent-runner?workflow=builder_update`, { waitUntil: "load" });
   assert.equal(await page.locator("#workflow-type").inputValue(), "builder_update");

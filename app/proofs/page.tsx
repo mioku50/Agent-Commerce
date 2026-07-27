@@ -49,12 +49,21 @@ function formatDate(value: string | null) {
   }).format(new Date(value));
 }
 
+function recentReceiptsWithTimeout() {
+  return Promise.race([
+    fetchRecentReceipts({ limit: 100 }),
+    new Promise<CommerceReceipt[]>((_, reject) => {
+      setTimeout(() => reject(new Error("Proof index request timed out.")), 3_000);
+    }),
+  ]);
+}
+
 export default async function ProofsPage() {
   await connection();
   let receipts: CommerceReceipt[] = [];
   let warning: string | null = null;
   try {
-    receipts = await fetchRecentReceipts({ limit: 100 });
+    receipts = await recentReceiptsWithTimeout();
   } catch (error) {
     warning = error instanceof Error ? error.message : String(error);
   }
