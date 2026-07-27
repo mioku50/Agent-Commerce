@@ -62,6 +62,9 @@ type AgentDetail = {
   } | null;
   credentials: Array<{
     id: string;
+    agentId: string;
+    ownerWallet: string;
+    credentialType: "byoa_workflow" | "machine_api";
     label: string;
     prefix: string;
     scopes: string[];
@@ -98,6 +101,13 @@ type AgentDetail = {
   }>;
 };
 
+type CredentialType = "byoa_workflow" | "machine_api";
+
+const credentialPermissions: Record<CredentialType, readonly string[]> = {
+  machine_api: ["workflows:read", "quotes:create", "runs:create", "results:read"],
+  byoa_workflow: ["manifest:read", "quotes:create", "workflows:execute", "results:read"],
+};
+
 type ReservedQuote = {
   id: string;
   agentPublicId: string;
@@ -130,16 +140,6 @@ async function jsonFetch(path: string, init: RequestInit = {}) {
   return body;
 }
 
-function getStoredCredential(agentId: string): string | null {
-  if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(`byoa_cred_${agentId}`);
-}
-
-function storeCredential(agentId: string, token: string) {
-  if (typeof window === "undefined") return;
-  sessionStorage.setItem(`byoa_cred_${agentId}`, token);
-}
-
 export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
   const wallet = useArcWallet();
   const [ownerWallet, setOwnerWallet] = useState<string | null>(null);
@@ -158,7 +158,11 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
   const [bindingSignature, setBindingSignature] = useState("");
 
   // Credential state
-  const [newCredentialToken, setNewCredentialToken] = useState<string | null>(null);
+  const [oneTimeCredential, setOneTimeCredential] = useState<{
+    token: string;
+    agentId: string;
+    credentialType: CredentialType;
+  } | null>(null);
 
   // Policy form state
   const [policyWorkflows, setPolicyWorkflows] = useState<string[]>(["market_context", "sentiment_tone"]);
@@ -235,7 +239,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
       setAgents([]);
       setSelectedId(null);
       setDetail(null);
-      setNewCredentialToken(null);
+      setOneTimeCredential(null);
       setReservedQuote(null);
       setTestResult(null);
     }
@@ -249,6 +253,10 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
     if (!selectedId || !ownerWallet) return;
     void loadDetail(selectedId).catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)));
   }, [loadDetail, selectedId, ownerWallet]);
+
+  useEffect(() => {
+    setOneTimeCredential(null);
+  }, [selectedId]);
 
   useEffect(() => {
     if (!detail?.policy) return;
@@ -389,20 +397,20 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
     });
   }
 
-  async function issueCredential() {
+  async function issueCredential(credentialType: CredentialType) {
     if (!selected) return;
     await act(async () => {
       const body = await jsonFetch(`/api/byoa/management/agents/${selected.id}/credentials`, {
         method: "POST",
         body: JSON.stringify({
-          label: "BYOA Test Console Credential",
-          scopes: ["manifest:read", "quotes:create", "workflows:execute", "results:read"],
+          credentialType,
+          label: credentialType === "machine_api" ? "Machine API Credential" : "BYOA Workflow Credential",
+          scopes: credentialPermissions[credentialType],
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString(),
         }),
       });
       const token = body.token as string;
-      setNewCredentialToken(token);
-      storeCredential(selected.id, token);
+      setOneTimeCredential({ token, agentId: selected.id, credentialType });
       await loadDetail(selected.id);
     });
   }
@@ -415,8 +423,9 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
         body: "{}",
       });
       const token = body.token as string;
-      setNewCredentialToken(token);
-      storeCredential(selected.id, token);
+      const credential = detail?.credentials.find((item) => item.id === credentialId);
+      if (!credential) throw new Error("Credential metadata is unavailable.");
+      setOneTimeCredential({ token, agentId: selected.id, credentialType: credential.credentialType });
       await loadDetail(selected.id);
     });
   }
@@ -425,6 +434,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
     if (!selected) return;
     await act(async () => {
       await jsonFetch(`/api/byoa/management/agents/${selected.id}/credentials/${credentialId}`, { method: "DELETE" });
+      setOneTimeCredential(null);
       await loadDetail(selected.id);
     });
   }
@@ -494,8 +504,10 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
   async function prepareQuote() {
 
     if (!selected) throw new Error("Select an agent first.");
-    const token = newCredentialToken ?? getStoredCredential(selected.id);
-    if (!token) throw new Error("No active API credential found. Please issue a credential in Step 3 first.");
+    const token = oneTimeCredential?.agentId === selected.id && oneTimeCredential.credentialType === "byoa_workflow"
+      ? oneTimeCredential.token
+      : null;
+    if (!token) throw new Error("Issue a BYOA Workflow Credential in Step 3 before using the browser test runner.");
 
     setRunnerState("quoting");
     setError(null);
@@ -533,8 +545,10 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
       throw new Error(`Connected wallet (${shortenHash(wallet.address ?? "", 5)}) differs from registered agent wallet (${shortenHash(selected.agentWallet, 5)}). Switch connected wallet to agent wallet.`);
     }
 
-    const token = newCredentialToken ?? getStoredCredential(selected.id);
-    if (!token) throw new Error("No active API credential found in memory/sessionStorage. Issue a credential in Step 3.");
+    const token = oneTimeCredential?.agentId === selected.id && oneTimeCredential.credentialType === "byoa_workflow"
+      ? oneTimeCredential.token
+      : null;
+    if (!token) throw new Error("Issue a BYOA Workflow Credential in Step 3 before using the browser test runner.");
 
     setRunnerState("executing");
     setError(null);
@@ -664,9 +678,9 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
       <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
         <Card>
           <CardContent className="p-6">
-            <p className="font-medium">BYOA canary is closed.</p>
+            <p className="font-medium">Agent test access is unavailable.</p>
             <p className="mt-2 text-sm text-muted-foreground">
-              The server feature flag and canary allowlists must be configured before registration. Public registration remains disabled.
+              Server access controls must be configured before registration. Public registration remains disabled.
             </p>
           </CardContent>
         </Card>
@@ -863,7 +877,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                       <span className="font-medium capitalize">{selected.status}</span>
                     </div>
                     <div>
-                      <span className="text-muted-foreground block">Canary Access</span>
+                      <span className="text-muted-foreground block">Test Access</span>
                       <span className="font-medium">{selected.canaryEnabled ? "Enabled" : "Disabled"}</span>
                     </div>
                   </div>
@@ -1050,7 +1064,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                   <CardContent className="grid gap-4 text-sm">
                     <fieldset className="grid gap-2">
                       <legend className="font-medium mb-1">Allowed Workflows</legend>
-                      {["market_context", "sentiment_tone", "builder_update", "custom_task"].map((val) => (
+                      {["github_due_diligence", "market_context", "sentiment_tone", "builder_update", "custom_task"].map((val) => (
                         <label key={val} className="flex items-center gap-2 text-xs">
                           <input
                             type="checkbox"
@@ -1105,27 +1119,53 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
-                      <KeyRound className="size-5" /> Step 3 — API Credential
+                      <KeyRound className="size-5" /> Step 3 — Choose API Credential
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="grid gap-4">
                     <p className="text-xs text-muted-foreground">
-                      Credentials are stored as HMAC-SHA256 hashes at rest. Plaintext is returned exactly once and cached strictly in memory/sessionStorage.
+                      Credential types are bound to separate API namespaces. The plaintext secret is returned once and kept only in this page&apos;s memory.
                     </p>
 
-                    <Button onClick={() => void issueCredential()} disabled={busy || selected.status !== "active"}>
-                      Issue New Scoped Credential
-                    </Button>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-md border border-primary/40 bg-primary/5 p-3 text-xs">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold">Machine API Credential</span>
+                          <Badge>Recommended</Badge>
+                        </div>
+                        <p className="mt-2 text-muted-foreground">For autonomous clients using only <code>/api/agent/v1/*</code>.</p>
+                        <details className="mt-2">
+                          <summary className="cursor-pointer font-medium">Technical scopes</summary>
+                          <code className="mt-2 block break-words text-[11px] text-muted-foreground">{credentialPermissions.machine_api.join(", ")}</code>
+                        </details>
+                        <Button className="mt-3 w-full" onClick={() => void issueCredential("machine_api")} disabled={busy || selected.status !== "active"}>
+                          Create Machine Credential
+                        </Button>
+                      </div>
+                      <div className="rounded-md border p-3 text-xs">
+                        <span className="font-semibold">BYOA Workflow Credential</span>
+                        <p className="mt-2 text-muted-foreground">For the hosted BYOA workflow flow using only <code>/api/byoa/*</code>.</p>
+                        <details className="mt-2">
+                          <summary className="cursor-pointer font-medium">Technical scopes</summary>
+                          <code className="mt-2 block break-words text-[11px] text-muted-foreground">{credentialPermissions.byoa_workflow.join(", ")}</code>
+                        </details>
+                        <Button className="mt-3 w-full" variant="outline" onClick={() => void issueCredential("byoa_workflow")} disabled={busy || selected.status !== "active"}>
+                          Create BYOA Credential
+                        </Button>
+                      </div>
+                    </div>
 
-                    {newCredentialToken ? (
+                    {oneTimeCredential?.agentId === selected.id ? (
                       <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-xs grid gap-2">
                         <div className="flex items-center justify-between">
-                          <span className="font-semibold text-amber-500">API Credential (Displayed Once)</span>
-                          <Button size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(newCredentialToken)}>
+                          <span className="font-semibold text-amber-500">
+                            {oneTimeCredential.credentialType === "machine_api" ? "Machine API" : "BYOA Workflow"} secret (displayed once)
+                          </span>
+                          <Button size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(oneTimeCredential.token)}>
                             <Copy className="mr-1 size-3" /> Copy once
                           </Button>
                         </div>
-                        <code className="block break-all bg-black/40 p-2 rounded font-mono text-[11px]">{newCredentialToken}</code>
+                        <code className="block break-all bg-black/40 p-2 rounded font-mono text-[11px]">{oneTimeCredential.token}</code>
                       </div>
                     ) : null}
 
@@ -1133,13 +1173,15 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                       {detail.credentials.map((cred) => (
                         <div key={cred.id} className="rounded-md border p-3 text-xs flex flex-col gap-1">
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold">{cred.label} ({cred.prefix})</span>
+                            <span className="font-semibold">{cred.label} · …{cred.id.slice(-8)}</span>
                             <Badge variant={cred.revokedAt ? "destructive" : "outline"}>
                               {cred.revokedAt ? "Revoked" : "Active"}
                             </Badge>
                           </div>
+                          <span className="text-muted-foreground">Type: {cred.credentialType === "machine_api" ? "Machine API" : "BYOA Workflow"}</span>
                           <span className="text-muted-foreground">Scopes: {cred.scopes.join(", ")}</span>
                           <span className="text-muted-foreground">Created: {new Date(cred.createdAt).toLocaleString()}</span>
+                          <span className="text-muted-foreground">Expires: {new Date(cred.expiresAt).toLocaleString()}</span>
                           {!cred.revokedAt ? (
                             <div className="mt-2 flex gap-2">
                               <Button size="sm" variant="outline" onClick={() => void rotateCredential(cred.id)} disabled={busy}>Rotate</Button>

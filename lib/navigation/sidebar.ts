@@ -28,7 +28,7 @@ export const publicSidebarNavigation = [
 
 export const consoleSidebarNavigation = [
   {
-    label: "Developer Console",
+    label: "Agent Developer Console",
     items: [
       { href: "/console", label: "Console Home", icon: "console" },
       { href: "/console/agents", label: "Agents", icon: "my-agents" },
@@ -46,4 +46,3 @@ export const sidebarNavigation = publicSidebarNavigation;
 
 export const DESKTOP_SIDEBAR_SCROLL_CLASS = "overflow-y-auto overscroll-contain";
 export const MOBILE_SIDEBAR_SCROLL_CLASS = "overflow-y-auto overscroll-contain";
-

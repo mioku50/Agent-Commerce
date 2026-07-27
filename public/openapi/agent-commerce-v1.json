@@ -191,7 +191,7 @@
     "/api/agent/v1/runs/{runId}": {
       "get": {
         "summary": "Poll run execution status",
-        "description": "Retrieves the current execution status, stage, progress, and reportId upon completion. Scoped to credential owner. Requires `runs:read` scope.",
+        "description": "Retrieves the current execution status, stage, progress, and reportId upon completion. Scoped to credential owner. Requires `results:read` scope.",
         "operationId": "getRunStatus",
         "parameters": [
           {
@@ -233,7 +233,7 @@
     "/api/agent/v1/reports/{reportId}": {
       "get": {
         "summary": "Retrieve structured report",
-        "description": "Returns the completed structured report and Arc verification proofs. Supports `Accept: application/json` or `Accept: text/markdown`. Requires `reports:read` scope.",
+        "description": "Returns the completed structured report and Arc verification proofs. Supports `Accept: application/json` or `Accept: text/markdown`. Requires `results:read` scope.",
         "operationId": "getReport",
         "parameters": [
           {

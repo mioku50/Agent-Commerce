@@ -83,6 +83,8 @@ assert.equal(hashApiCredential(credentialGen.token), credentialGen.hash);
 const credentialRow: ByoaCredentialRow = {
   id: "22222222-2222-4222-8222-222222222222",
   agent_id: "11111111-1111-4111-8111-111111111111",
+  owner_wallet: ownerAccount.address,
+  credential_type: "byoa_workflow",
   label: "Test Credential",
   token_prefix: credentialGen.prefix,
   credential_hash: credentialGen.hash,

@@ -4,19 +4,31 @@ import type {
   HostedWorkflowType,
 } from "../agent/hosted-workflows.ts";
 
-export const BYOA_SCOPES = [
+export const BYOA_WORKFLOW_SCOPES = [
+  "manifest:read",
   "quotes:create",
   "workflows:execute",
   "results:read",
+] as const;
+
+export const MACHINE_API_SCOPES = [
+  "workflows:read",
+  "quotes:create",
+  "runs:create",
+  "results:read",
+] as const;
+
+export const BYOA_SCOPES = [
   "manifest:read",
+  "quotes:create",
+  "workflows:execute",
+  "results:read",
   "workflows:read",
   "runs:create",
-  "runs:read",
-  "reports:read",
-  "*",
 ] as const;
 
 export type ByoaScope = (typeof BYOA_SCOPES)[number];
+export type CredentialType = "byoa_workflow" | "machine_api";
 export type ByoaServiceType =
   | "internal_deterministic"
   | "live_provider"
@@ -43,6 +55,8 @@ export type ByoaAgentRow = {
 export type ByoaCredentialRow = {
   id: string;
   agent_id: string;
+  owner_wallet: string;
+  credential_type: CredentialType;
   label: string;
   token_prefix: string;
   credential_hash: string;

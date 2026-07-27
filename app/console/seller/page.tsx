@@ -13,7 +13,7 @@ import {
 } from "@/lib/services/store-service-persistence";
 
 export const metadata = {
-  title: "Services / Seller | Developer Console | Arc Agent Commerce",
+  title: "Services / Seller | Agent Developer Console | Arc Agent Commerce",
   description: "Manage official system services, provider endpoints, and custom seller listings.",
 };
 
@@ -188,7 +188,7 @@ export default function ConsoleSellerPage() {
           <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
             <div>
               <div className="mb-4 flex flex-wrap items-center gap-2">
-                <Badge variant="secondary">Developer Console</Badge>
+                <Badge variant="secondary">Agent Developer Console</Badge>
                 <Badge variant="outline">Service Registry & Seller Creator</Badge>
               </div>
               <h1 className="text-4xl font-bold tracking-normal text-foreground sm:text-5xl">

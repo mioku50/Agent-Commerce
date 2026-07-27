@@ -106,7 +106,7 @@ function buildReportFromJob(
 }
 
 export async function GET(request: NextRequest, { params }: RouteContext) {
-  const authResult = await authenticateMachineRequest(request, "reports:read");
+  const authResult = await authenticateMachineRequest(request, "results:read");
   if (!authResult.ok) {
     return authResult.response;
   }
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   if (!reportId || typeof reportId !== "string" || !reportId.trim()) {
     return createMachineErrorResponse(
       "report_not_found",
-      "The specified workflow report could not be found.",
+      "The requested report was not found.",
       404,
     );
   }
@@ -132,7 +132,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     console.error("[reports/[reportId]/route] Job query error:", err);
     return createMachineErrorResponse(
       "report_not_found",
-      "The specified workflow report could not be found.",
+      "The requested report was not found.",
       404,
     );
   }
@@ -140,7 +140,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   if (!job) {
     return createMachineErrorResponse(
       "report_not_found",
-      "The specified workflow report could not be found.",
+      "The requested report was not found.",
       404,
     );
   }
@@ -153,7 +153,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   if (!isOwner) {
     return createMachineErrorResponse(
       "report_not_found",
-      "The specified workflow report could not be found.",
+      "The requested report was not found.",
       404,
     );
   }
