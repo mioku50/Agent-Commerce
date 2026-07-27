@@ -17,6 +17,7 @@ const CONFIRMATION = "--confirm-production";
 const REFERENCE_WORKFLOW = "seller_project_update_intelligence";
 const RUN_TIMEOUT_MS = 180_000;
 const PROOF_TIMEOUT_MS = 120_000;
+const SMOKE_USER_AGENT = `agent-commerce-p21-production-smoke/${randomUUID()}`;
 
 type CredentialHandle = {
   agentId: string;
@@ -49,6 +50,7 @@ async function requestJson(
     ...init,
     headers: {
       Accept: "application/json",
+      "User-Agent": SMOKE_USER_AGENT,
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init.headers ?? {}),
     },
