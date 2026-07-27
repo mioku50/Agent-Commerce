@@ -5,7 +5,7 @@
 
 import { notFound } from "next/navigation";
 import { HostedJobResult } from "../hosted-job-result";
-import { getHostedAgentJobView } from "@/lib/agent/hosted-jobs";
+import { getHostedAgentJobView, redactPublicSellerAccounting } from "@/lib/agent/hosted-jobs";
 import { isByoaHostedJob } from "@/lib/byoa/service";
 
 export const dynamic = "force-dynamic";
@@ -18,5 +18,5 @@ export default async function HostedJobResultPage({ params }: PageProps) {
   if (await isByoaHostedJob(jobId).catch(() => true)) notFound();
   const view = await getHostedAgentJobView(jobId).catch(() => null);
   if (!view) notFound();
-  return <HostedJobResult initialView={view} />;
+  return <HostedJobResult initialView={redactPublicSellerAccounting(view)} />;
 }

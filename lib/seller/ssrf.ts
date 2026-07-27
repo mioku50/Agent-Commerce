@@ -99,7 +99,11 @@ export function isRestrictedIpAddress(ip: string, allowLocalhost = false): boole
   }
 
   // Loopback / 0.0.0.0 / localhost
-  if (cleanIp === "localhost" || cleanIp === "0.0.0.0" || cleanIp.startsWith("0.") || cleanIp.startsWith("127.") || cleanIp === "::1") {
+  if (
+    cleanIp === "localhost" || cleanIp === "0.0.0.0" || cleanIp.startsWith("0.") ||
+    cleanIp.startsWith("127.") || cleanIp === "::" || cleanIp === "::1" ||
+    cleanIp === "0:0:0:0:0:0:0:0" || cleanIp === "0:0:0:0:0:0:0:1"
+  ) {
     return true;
   }
 
@@ -114,6 +118,10 @@ export function isRestrictedIpAddress(ip: string, allowLocalhost = false): boole
 
   // Link-local
   if (cleanIp.startsWith("169.254.") || cleanIp.startsWith("fe80:")) {
+    return true;
+  }
+
+  if (/^fe[89ab][0-9a-f]:/i.test(cleanIp)) {
     return true;
   }
 
@@ -138,10 +146,24 @@ export function isRestrictedIpAddress(ip: string, allowLocalhost = false): boole
     }
   }
 
+  // Carrier-grade NAT, benchmark, multicast, and reserved IPv4 ranges must
+  // never be used as seller egress targets.
+  const ipv4 = cleanIp.split(".").map(Number);
+  if (ipv4.length === 4 && ipv4.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    const [first, second] = ipv4;
+    if (
+      (first === 100 && second >= 64 && second <= 127) ||
+      (first === 198 && (second === 18 || second === 19)) ||
+      first >= 224
+    ) return true;
+  }
+
   // Private IPv6: Unique Local Address (ULA) fc00::/7 (fc00 - fdff)
   if (cleanIp.startsWith("fc") || cleanIp.startsWith("fd")) {
     return true;
   }
+
+  if (cleanIp.startsWith("ff")) return true;
 
   return false;
 }
@@ -177,7 +199,11 @@ export function validateUrlSsrf(
     hostname === "metadata.google.internal" ||
     hostname.includes("169.254.169.254") ||
     hostname.endsWith(".internal") ||
-    hostname.endsWith(".local")
+    hostname.endsWith(".local") ||
+    hostname.endsWith(".vercel-internal.com") ||
+    hostname === "host.docker.internal" ||
+    hostname === "kubernetes.default" ||
+    hostname.endsWith(".svc.cluster.local")
   ) {
     throw new SSRFProtectionError(
       `SSRF protection: forbidden metadata or internal hostname "${hostname}"`,

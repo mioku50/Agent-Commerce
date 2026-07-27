@@ -85,7 +85,10 @@ async function run() {
   let calls = 0;
   setSellerRequestAdapterForTests(async () => {
     calls += 1;
-    return new Response(JSON.stringify({ ignoredPayment: true }), { status: 200 });
+    return new Response(JSON.stringify({ ignoredPayment: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
   });
   await assert.rejects(
     () => prepareExternalSellerRequest({ service: baseService, method: "POST", body: { input: "test" } }),
@@ -120,7 +123,10 @@ async function run() {
     assert(headers["Payment-Signature"], "Actual request must carry the signed exact acceptance");
     return new Response(JSON.stringify({ riskScore: 12 }), {
       status: 200,
-      headers: { "PAYMENT-RESPONSE": paymentResponse() },
+      headers: {
+        "Content-Type": "application/json",
+        "PAYMENT-RESPONSE": paymentResponse(),
+      },
     });
   });
   const paid = await executeExternalSellerProxy({

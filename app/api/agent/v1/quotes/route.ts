@@ -9,6 +9,7 @@ import {
   authenticateMachineRequest,
   enforceQuoteCreationPolicy,
   enforceQuoteSpendingPolicy,
+  type MachineAuthContext,
 } from "../../../../../lib/api/machine-auth.ts";
 import {
   createMachineErrorResponse,
@@ -42,9 +43,132 @@ import {
   InvalidGitHubRepositoryError,
 } from "../../../../../lib/providers/github-repository-ref.ts";
 import { ARC_TESTNET_CHAIN_ID } from "../../../../../lib/wallet/arc.ts";
+import {
+  getSellerServiceRowByWorkflowType,
+  isSellerWorkflowType,
+} from "../../../../../lib/seller/marketplace.ts";
+import {
+  createSellerWorkflowQuote,
+  sellerWorkflowAllowed,
+} from "../../../../../lib/seller/workflow.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+async function createMachineSellerQuote(input: {
+  request: NextRequest;
+  context: MachineAuthContext;
+  body: Record<string, unknown>;
+  workflow: string;
+  idempotencyKey: string;
+}) {
+  if (
+    !sellerWorkflowAllowed(input.context.allowedWorkflows, input.workflow) ||
+    !input.context.spendingPolicy.allowed_service_types.includes("external_seller")
+  ) {
+    return createMachineErrorResponse(
+      "workflow_disabled",
+      `Workflow '${input.workflow}' is not enabled for this credential policy.`,
+      403,
+    );
+  }
+  const service = await getSellerServiceRowByWorkflowType(input.workflow);
+  if (!service || service.status !== "active") {
+    return createMachineErrorResponse("provider_unavailable", "Seller workflow is unavailable.", 503, true);
+  }
+  const payload = input.body.input;
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return createMachineErrorResponse("invalid_repository", "Seller workflow input must be a JSON object.", 400);
+  }
+  const policy = await enforceQuoteCreationPolicy(input.context);
+  if (!policy.ok) return policy.response;
+  const spend = await enforceQuoteSpendingPolicy(input.context, Number(service.price_usdc));
+  if (!spend.ok) return spend.response;
+
+  const reservation = await resolveMachineIdempotency(
+    input.idempotencyKey,
+    input.context.credential.id,
+    input.body,
+    "/api/agent/v1/quotes",
+    input.context.agentId,
+  );
+  if (reservation.unavailable) {
+    return createMachineErrorResponse(
+      "idempotency_store_unavailable",
+      "The request cannot be safely processed right now.",
+      503,
+      true,
+    );
+  }
+  if (reservation.conflict) {
+    return createMachineErrorResponse("idempotency_conflict", "This Idempotency-Key is already bound to a different workflow input.", 409);
+  }
+  if (reservation.pending) {
+    return createMachineErrorResponse("idempotency_in_progress", "A request with this Idempotency-Key is already being processed.", 409, true);
+  }
+  if (reservation.cachedResponse?.body) {
+    return NextResponse.json(reservation.cachedResponse.body, {
+      status: reservation.cachedResponse.status,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  const config = getHostedRunnerConfig();
+  const quoteResult = await createSellerWorkflowQuote({
+    service,
+    payload,
+    idempotencyKey: input.idempotencyKey,
+    requesterFingerprint: hostedRequesterFingerprint({
+      secret: config.rateLimitSecret,
+      forwardedFor: input.request.headers.get("x-forwarded-for"),
+      userAgent: input.request.headers.get("user-agent"),
+    }),
+    requesterWallet: input.context.ownerWallet as Address,
+    byoaAgentId: input.context.agentId,
+    machineCredentialId: input.context.credential.id,
+    ownerWallet: input.context.ownerWallet,
+  });
+  const quote = quoteResult.quote;
+  const responsePayload = {
+    quoteId: quote.id,
+    workflow: quote.workflowType,
+    serviceId: quote.sellerSnapshot?.serviceId,
+    serviceVersion: quote.sellerSnapshot?.serviceVersion,
+    totalUsdc: quote.pricing.listPriceUsdc,
+    sponsored: quote.paymentMode === "sponsored",
+    checkout: {
+      mode: quote.paymentMode === "sponsored" ? "sponsored" : "arc_transaction",
+      asset: "USDC",
+      network: "arc-testnet",
+    },
+    downstreamSettlement: "server_side_x402",
+    expiresAt: quote.expiresAt,
+    requiredPayment: {
+      network: "arc-testnet",
+      asset: "USDC",
+      amount: quote.pricing.amountDueUsdc,
+      treasuryAddress: quote.treasuryAddress,
+      chainId: quote.chainId || ARC_TESTNET_CHAIN_ID,
+    },
+  };
+  await saveMachineIdempotency(
+    input.idempotencyKey,
+    input.context.credential.id,
+    input.body,
+    responsePayload,
+    {
+      agentId: input.context.agentId,
+      route: "/api/agent/v1/quotes",
+      responseStatus: quoteResult.created ? 201 : 200,
+      resourceType: "quote",
+      resourceId: quote.id,
+    },
+  );
+  return NextResponse.json(responsePayload, {
+    status: quoteResult.created ? 201 : 200,
+    headers: { "Cache-Control": "no-store" },
+  });
+}
 
 export async function POST(request: NextRequest) {
   const authResult = await authenticateMachineRequest(request, "quotes:create");
@@ -123,6 +247,29 @@ export async function POST(request: NextRequest) {
     (body.workflow as string) ||
     (body.workflowType as string) ||
     "github_due_diligence";
+
+  if (isSellerWorkflowType(workflow)) {
+    try {
+      return await createMachineSellerQuote({
+        request,
+        context,
+        body,
+        workflow,
+        idempotencyKey,
+      });
+    } catch (error) {
+      if (error instanceof HostedCheckoutPolicyError) {
+        return createMachineErrorResponse(
+          error.reason === "idempotency_conflict" ? "idempotency_conflict" : "rate_limited",
+          error.reason === "idempotency_conflict"
+            ? "This Idempotency-Key is already bound to a different workflow input."
+            : "Hosted checkout rate policy is temporarily limiting this requester.",
+          error.reason === "idempotency_conflict" ? 409 : 429,
+        );
+      }
+      return handleMachineInternalError(error, "/api/agent/v1/quotes", context.agentId);
+    }
+  }
 
   if (!isHostedWorkflowType(workflow)) {
     return createMachineErrorResponse(

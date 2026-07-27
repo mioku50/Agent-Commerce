@@ -590,7 +590,8 @@ export async function getHostedAgentJobView(jobId: string) {
       const sourceType = (
         step.service_source_type === "provider_backed" ||
         step.service_source_type === "seller_mock" ||
-        step.service_source_type === "external_placeholder"
+        step.service_source_type === "external_placeholder" ||
+        step.service_source_type === "external_seller"
           ? step.service_source_type
           : "static"
       ) as ServiceSourceType;
@@ -630,6 +631,17 @@ export async function getHostedAgentJobView(jobId: string) {
         .map((proof) => proof.transactionUrl as string),
     },
   };
+}
+
+export function redactPublicSellerAccounting<T extends {
+  job: { workflowType: string };
+  userPayment: object | null;
+}>(view: T): T {
+  if (!view.job.workflowType.startsWith("seller_") || !view.userPayment) return view;
+  const safePayment = { ...view.userPayment } as Record<string, unknown>;
+  delete safePayment.platformFeeUsdc;
+  delete safePayment.netRevenueUsdc;
+  return { ...view, userPayment: safePayment } as T;
 }
 
 export async function listRecentHostedAgentJobs(
@@ -732,4 +744,3 @@ export async function countHostedFinalReports(): Promise<number> {
   if (error) throw new Error("Unable to count hosted Final Reports.");
   return count ?? 0;
 }
-

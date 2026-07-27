@@ -1,20 +1,8 @@
-import { NextResponse } from "next/server";
-import { getSellerAnalytics } from "@/lib/seller/analytics";
-import { getHostedWorkflowCheckoutAnalytics } from "@/lib/commerce/workflow-checkout";
-import { requireSellerAuth } from "@/lib/seller/session";
+import { NextRequest } from "next/server";
+import { GET as getSellerRevenue } from "../revenue/route";
 
-export async function GET(request: Request) {
-  const authReject = requireSellerAuth(request);
-  if (authReject) return authReject;
+export const dynamic = "force-dynamic";
 
-  try {
-    const [analytics, workflowCheckout] = await Promise.all([
-      getSellerAnalytics(),
-      getHostedWorkflowCheckoutAnalytics(),
-    ]);
-    return NextResponse.json({ ...analytics, workflowCheckout });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+export async function GET(request: NextRequest) {
+  return getSellerRevenue(request);
 }

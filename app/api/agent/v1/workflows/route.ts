@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from "next/server.js";
 import { authenticateMachineRequest } from "../../../../../lib/api/machine-auth.ts";
 import { hostedWorkflowTemplates } from "../../../../../lib/agent/workflow-templates.ts";
 import { ARC_TESTNET_CHAIN_ID, ARC_TESTNET_USDC_ADDRESS } from "../../../../../lib/wallet/arc.ts";
+import { listPublicSellerWorkflows } from "../../../../../lib/seller/marketplace.ts";
+import { sellerWorkflowAllowed } from "../../../../../lib/seller/workflow.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -82,10 +84,16 @@ export async function GET(request: NextRequest) {
       },
     }));
 
+  const sellerWorkflows = context.spendingPolicy.allowed_service_types.includes("external_seller")
+    ? (await listPublicSellerWorkflows()).filter((workflow) =>
+        sellerWorkflowAllowed(context.allowedWorkflows, workflow.workflowType)
+      )
+    : [];
+
   return NextResponse.json(
     {
       version: "1",
-      workflows: templates,
+      workflows: [...templates, ...sellerWorkflows],
     },
     {
       status: 200,

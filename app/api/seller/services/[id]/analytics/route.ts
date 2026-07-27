@@ -1,24 +1,21 @@
-import { NextResponse } from "next/server";
-import { getSellerAnalytics } from "@/lib/seller/analytics";
-import { requireSellerAuth } from "@/lib/seller/session";
+import { NextRequest, NextResponse } from "next/server";
+import { requireOwnerSession, byoaErrorResponse } from "@/lib/byoa/http";
+import { getOwnedSellerService, listSellerRevenue } from "@/lib/seller/marketplace";
 
-type RouteContext = {
-  params: Promise<{
-    id: string;
-  }>;
-};
+type RouteContext = { params: Promise<{ id: string }> };
 
-export async function GET(request: Request, { params }: RouteContext) {
-  const authReject = requireSellerAuth(request);
-  if (authReject) return authReject;
-
-  const { id } = await params;
-
+export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
-    const analytics = await getSellerAnalytics({ serviceId: id });
-    return NextResponse.json(analytics);
+    const session = requireOwnerSession(request);
+    const { id } = await params;
+    if (!await getOwnedSellerService(session.wallet, id)) {
+      return NextResponse.json({ error: "Service not found" }, { status: 404 });
+    }
+    const ledger = await listSellerRevenue(session.wallet);
+    return NextResponse.json({ ledger: ledger.filter((row) => row.service_id === id) }, {
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return byoaErrorResponse(error);
   }
 }

@@ -17,6 +17,7 @@ import {
   type HostedWorkflowArcProofItem,
   type HostedWorkflowReceiptItem,
 } from "../../../../../../lib/reports/github-public-report.ts";
+import { isSellerWorkflowType } from "../../../../../../lib/seller/marketplace.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -165,6 +166,64 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       "Report execution is not ready yet.",
       400,
     );
+  }
+
+  if (isSellerWorkflowType(job.workflow_type)) {
+    const structured = job.structured_result as any;
+    const workflowData = structured?.workflowData ?? {};
+    const sellerReport = {
+      reportId: job.id,
+      workflowType: job.workflow_type,
+      workflowName: (job.planner_snapshot as any)?.workflowLabel ?? "External Seller Workflow",
+      status: job.status,
+      providerType: "external_seller",
+      service: {
+        serviceId: workflowData.serviceId ?? null,
+        serviceVersion: workflowData.serviceVersion ?? null,
+      },
+      result: job.status === "completed" ? workflowData.result ?? null : null,
+      summary: structured?.summary ?? (job.status === "failed" ? "External seller execution failed safely." : null),
+      input: { preview: job.input_preview, sha256: job.input_hash },
+      generatedAt: structured?.generatedAt ?? job.completed_at ?? job.updated_at,
+      receipts: (jobView?.services ?? []).flatMap((service) => service.receiptId ? [{
+        receiptId: service.receiptId,
+        serviceId: workflowData.serviceId ?? null,
+        serviceVersion: workflowData.serviceVersion ?? null,
+        status: service.status,
+      }] : []),
+      arcProofs: (jobView?.proofs ?? []).map((proof) => ({
+        receiptId: proof.receiptId,
+        status: proof.status,
+        transactionHash: proof.transactionHash,
+        explorerUrl: proof.transactionUrl,
+      })),
+      payment: jobView?.userPayment ? {
+        mode: jobView.userPayment.paymentMode,
+        status: jobView.userPayment.status,
+        transactionHash: jobView.userPayment.transactionHash,
+        transactionUrl: jobView.userPayment.transactionUrl,
+        settledAt: jobView.userPayment.settledAt,
+      } : null,
+    };
+    const accept = request.headers.get("accept") ?? "";
+    if (accept.toLowerCase().includes("text/markdown")) {
+      return new NextResponse([
+        `# ${sellerReport.workflowName}`,
+        "",
+        `Status: ${sellerReport.status}`,
+        `Provider: External Service`,
+        `Service version: ${sellerReport.service.serviceVersion ?? "n/a"}`,
+        "",
+        "## Result",
+        "",
+        "```json",
+        JSON.stringify(sellerReport.result, null, 2),
+        "```",
+      ].join("\n"), {
+        headers: { "Content-Type": "text/markdown; charset=utf-8", "Cache-Control": "no-store" },
+      });
+    }
+    return NextResponse.json(sellerReport, { headers: { "Cache-Control": "no-store" } });
   }
 
   const report = buildReportFromJob(job, jobView);

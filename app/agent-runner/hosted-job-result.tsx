@@ -280,6 +280,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
 
   const activeStage = view.job.progressStage;
   const isGithubWorkflow = view.job.workflowType === "github_due_diligence";
+  const isSellerWorkflow = String(view.job.workflowType).startsWith("seller_");
   const consumerStages = isGithubWorkflow ? GITHUB_CONSUMER_STAGES : DEFAULT_CONSUMER_STAGES;
   const currentIndex = DEFAULT_CONSUMER_STAGES.findIndex((stage) =>
     (stage.matches as readonly string[]).includes(activeStage),
@@ -401,6 +402,12 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                 isGithubWorkflow={isGithubWorkflow}
                 jobStatus={view.job.status}
               />
+              {!isGithubWorkflow && view.job.status === "completed" ? (
+                <Button variant="outline" onClick={copyShareLink}>
+                  {copied ? <Check className="size-4 text-emerald-500" /> : <Share2 className="size-4" />}
+                  {copied ? "Copied!" : "Share Report"}
+                </Button>
+              ) : null}
               <Button asChild variant="outline">
                 <Link href="/agent-runner">
                   <RotateCcw className="size-4" />
@@ -1215,7 +1222,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   </div>
                 </CardHeader>
                 <CardContent className="grid gap-4 text-sm">
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className={`grid gap-3 sm:grid-cols-2 ${isSellerWorkflow ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
                     <div>
                       <p className="text-xs text-muted-foreground">User payment</p>
                       <p className="font-mono font-medium">{view.userPayment.grossAmountUsdc} USDC</p>
@@ -1224,14 +1231,23 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                       <p className="text-xs text-muted-foreground">Provider cost</p>
                       <p className="font-mono font-medium">{view.userPayment.providerCostUsdc} USDC</p>
                     </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Quoted platform fee</p>
-                      <p className="font-mono font-medium">{view.userPayment.platformFeeUsdc} USDC</p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted-foreground">Net revenue</p>
-                      <p className="font-mono font-medium">{view.userPayment.netRevenueUsdc} USDC</p>
-                    </div>
+                    {isSellerWorkflow ? (
+                      <div>
+                        <p className="text-xs text-muted-foreground">Service version</p>
+                        <p className="font-mono font-medium">v{String((report?.workflowData as any)?.serviceVersion ?? "n/a")}</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Quoted platform fee</p>
+                          <p className="font-mono font-medium">{view.userPayment.platformFeeUsdc} USDC</p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">Net revenue</p>
+                          <p className="font-mono font-medium">{view.userPayment.netRevenueUsdc} USDC</p>
+                        </div>
+                      </>
+                    )}
                   </div>
                   {Number(view.userPayment.creditAmountUsdc) > 0 ? (
                     <div className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3">

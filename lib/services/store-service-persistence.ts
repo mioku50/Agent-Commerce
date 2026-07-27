@@ -483,7 +483,9 @@ export async function listDynamicStoreServices() {
   const result = await listDynamicStoreServiceRows({ publicOnly: true });
 
   return {
-    services: result.services.map(rowToApiService),
+    services: result.services
+      .filter((row) => row.source_type !== "external_seller")
+      .map(rowToApiService),
     warning: result.warning,
   };
 }
@@ -518,6 +520,7 @@ export async function getDynamicStoreServiceRowBySlug(
   for (const row of mockStoreServicesById.values()) {
     if (row.slug === slug) {
       if (publicOnly && !publicDynamicStatuses.includes(row.status)) continue;
+      if (publicOnly && row.source_type === "external_seller") continue;
       return row;
     }
   }
@@ -552,7 +555,9 @@ export async function getDynamicStoreServiceRowBySlug(
     return null;
   }
 
-  return (data as unknown as StoreServiceRow | null) ?? null;
+  const row = (data as unknown as StoreServiceRow | null) ?? null;
+  if (publicOnly && row?.source_type === "external_seller") return null;
+  return row;
 }
 
 export async function getDynamicStoreServiceBySlug(slug: string) {

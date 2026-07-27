@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { getHostedAgentJobView } from "@/lib/agent/hosted-jobs";
+import { getHostedAgentJobView, redactPublicSellerAccounting } from "@/lib/agent/hosted-jobs";
 import { safeHostedError } from "@/lib/agent/hosted-policy";
 import { isByoaHostedJob } from "@/lib/byoa/service";
 
@@ -29,7 +29,7 @@ export async function GET(_request: Request, { params }: RouteContext) {
     if (!view) {
       return NextResponse.json({ error: "Hosted job not found." }, { status: 404 });
     }
-    return NextResponse.json(view, {
+    return NextResponse.json(redactPublicSellerAccounting(view), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

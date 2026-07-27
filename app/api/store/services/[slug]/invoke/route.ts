@@ -24,7 +24,7 @@ async function invokeSellerService(
   method: "GET" | "POST",
 ) {
   const { slug } = await params;
-  const row = await getDynamicStoreServiceRowBySlug(slug);
+  const row = await getDynamicStoreServiceRowBySlug(slug, { publicOnly: false });
 
   if (!row) {
     return NextResponse.json({ error: "Service not found" }, { status: 404 });

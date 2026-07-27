@@ -70,7 +70,7 @@ export type ByoaCredentialRow = {
 
 export type ByoaPolicyRow = {
   agent_id: string;
-  allowed_workflows: HostedWorkflowType[];
+  allowed_workflows: string[];
   allowed_service_types: ByoaServiceType[];
   max_price_per_run_usdc: string;
   daily_spend_limit_usdc: string;

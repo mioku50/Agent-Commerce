@@ -40,6 +40,10 @@ async function runTests() {
   assert.equal(isRestrictedIpAddress("192.168.1.1"), true, "192.168.1.1 must be restricted");
   assert.equal(isRestrictedIpAddress("172.16.0.1"), true, "172.16.0.1 must be restricted");
   assert.equal(isRestrictedIpAddress("169.254.169.254"), true, "169.254.169.254 metadata must be restricted");
+  assert.equal(isRestrictedIpAddress("100.100.100.200"), true, "100.100.100.200 metadata must be restricted");
+  assert.equal(isRestrictedIpAddress("100.64.0.1"), true, "carrier-grade NAT must be restricted");
+  assert.equal(isRestrictedIpAddress("fe90::1"), true, "the full IPv6 link-local range must be restricted");
+  assert.equal(isRestrictedIpAddress("0:0:0:0:0:0:0:1"), true, "expanded IPv6 loopback must be restricted");
   assert.equal(isRestrictedIpAddress("8.8.8.8"), false, "8.8.8.8 must not be restricted");
   assert.equal(isRestrictedIpAddress("127.0.0.1", true), false, "127.0.0.1 allowed when allowLocalhost is true");
 
