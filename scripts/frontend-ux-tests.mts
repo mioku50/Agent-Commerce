@@ -48,6 +48,10 @@ assert(existsSync(new URL("../docs/agent-api.md", import.meta.url)));
 assert(existsSync(new URL("../public/openapi/agent-commerce-v1.json", import.meta.url)));
 
 const homeSource = readFileSync(new URL("../app/page.tsx", import.meta.url), "utf8");
+const proofsSource = readFileSync(
+  new URL("../app/proofs/page.tsx", import.meta.url),
+  "utf8",
+);
 assert(homeSource.includes("Verified workflows for people and AI agents"));
 assert(homeSource.includes("Agent Commerce on Arc Testnet"));
 assert(homeSource.includes("Built for humans and autonomous agents"));
@@ -55,6 +59,10 @@ assert(homeSource.includes("Agent Machine API"));
 assert.match(
   homeSource,
   /sanitizePublicReportText\(\s*report\.inputPreview \|\| report\.workflowLabel/,
+);
+assert(
+  proofsSource.includes("grid-cols-[minmax(0,1fr)]"),
+  "Proof cards must constrain real hash/error payloads to the viewport",
 );
 for (const [type, label] of [
   ["github_due_diligence", "GitHub Project Due Diligence"],

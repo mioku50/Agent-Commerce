@@ -111,7 +111,7 @@ export default async function ProofsPage() {
         ))}
       </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-4 px-4 py-8 sm:px-6">
+      <section className="mx-auto grid w-full max-w-7xl grid-cols-[minmax(0,1fr)] gap-4 px-4 py-8 sm:px-6">
         {warning ? (
           <Card className="rounded-lg">
             <CardContent className="flex gap-3 p-5 text-sm text-muted-foreground">
@@ -168,7 +168,7 @@ export default async function ProofsPage() {
                     </div>
                   </dl>
                   {proof.error ? (
-                    <p className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+                    <p className="break-words rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
                       {proof.error}
                     </p>
                   ) : null}
