@@ -133,6 +133,9 @@ console.log("✔ Determinism test passed.");
 // Test 2: Healthy snapshot evaluation
 console.log("Test 2: Testing healthy snapshot assessment...");
 assert.equal(result1.overallStatus, "healthy_signals");
+assert.equal(result1.verdict.code, "proceed_with_standard_review");
+assert.equal(result1.verdict.label, "Proceed with standard review");
+assert(result1.verdict.evidenceCoverage.assessedCategories > 0);
 assert.equal(result1.categories.activity.status, "strong");
 assert.equal(result1.categories.maintenance.status, "strong");
 assert.equal(result1.categories.documentation.status, "strong");
@@ -257,6 +260,8 @@ fallbackSnapshot.source.upstreamStatus = "fallback";
 
 const fallbackResult = analyzeGitHubDueDiligence(fallbackSnapshot);
 assert.equal(fallbackResult.overallStatus, "limited_data");
+assert.equal(fallbackResult.verdict.code, "insufficient_evidence");
+assert.equal(fallbackResult.verdict.confidence, "low");
 
 const partialSnapshot = createBaseSnapshot();
 partialSnapshot.source.partial = true;
@@ -365,6 +370,11 @@ assert.equal(
   noReleaseNoLicenseResult.overallStatus,
   "review_needed",
   "Missing license MUST force overall status to review_needed"
+);
+assert.equal(noReleaseNoLicenseResult.verdict.code, "proceed_with_conditions");
+assert(
+  noReleaseNoLicenseResult.verdict.blockingFindings.includes("Missing Open Source License"),
+  "Missing license must be explicit in verdict blocking findings",
 );
 console.log("✔ 0 releases + missing license calibration test passed.");
 
@@ -591,6 +601,5 @@ assert.ok(
 console.log("✔ magda-agent comprehensive fixture test suite passed.");
 
 console.log("\n[github-due-diligence-test] ALL TEST SUITES PASSED SUCCESSFULLY!");
-
 
 

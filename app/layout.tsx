@@ -29,9 +29,9 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Arc Agent Commerce | Hosted Paid API Workflows",
+  title: "Arc Agent Commerce | Verifiable Paid Workflows",
   description:
-    "Submit real input to a hosted agent that purchases paid APIs through x402, generates a Final Report, and verifies receipts on Arc.",
+    "Run verifiable paid workflows for people and AI agents, receive structured reports, and verify receipts on Arc Testnet.",
 };
 
 const dmSans = DM_Sans({

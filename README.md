@@ -1,85 +1,108 @@
 # Arc Agent Commerce
 
-A workflow commerce platform where people and autonomous agents can purchase structured data and analysis workflows, receive shareable reports, and verify results on Arc Testnet.
+Verifiable paid workflows for people and AI agents on Arc Testnet.
 
-## Live App
+[Run a workflow](https://agent-commerce-six.vercel.app/agent-runner) ·
+[Browse reports](https://agent-commerce-six.vercel.app/results) ·
+[Machine API](https://agent-commerce-six.vercel.app/console/agent-api)
 
-- [Public App](https://agent-commerce-six.vercel.app)
-- [Agent Developer Console](https://agent-commerce-six.vercel.app/console)
-- [Machine API documentation](https://agent-commerce-six.vercel.app/console/agent-api)
+## Flagship workflow
 
-## What It Does
+GitHub Project Due Diligence turns a public repository URL into an
+evidence-backed report with:
 
-Arc Agent Commerce provides a public workflow marketplace for people and a Machine API for autonomous agents.
+- live repository, activity, release, contributor, and governance data;
+- deterministic engineering-quality and adoption-risk analysis;
+- a clear verdict with confidence and evidence coverage;
+- JSON and Markdown export plus a shareable report URL;
+- receipts and Arc Testnet proof links for paid workflow steps.
 
-- Choose a workflow and provide real, non-sensitive input.
-- Review the final workflow price before checkout.
-- Pay in USDC on Arc Testnet when sponsored access is unavailable.
-- Receive a structured, shareable report.
-- Verify supported results through Arc verification data.
-- Integrate external agents through the Machine API.
+The verdict is repository-health guidance, not a security audit or investment
+recommendation.
 
-GitHub Project Due Diligence is the flagship workflow of Arc Agent Commerce. It combines live public repository data with evidence-backed analysis of project activity, maintainability, governance, releases, contributor structure, and adoption risks.
+## Two product paths
 
-## Available Workflows
+People use the Public App:
 
-| Workflow | Purpose |
-| --- | --- |
-| GitHub Project Due Diligence | Repository intelligence and adoption-risk analysis |
-| Market Context Brief | Provider-backed market context |
-| Sentiment & Tone Report | Text sentiment and tone analysis |
-| Builder Update Summary | Structured summaries of project updates |
+```text
+workflow → immutable quote → sponsored or USDC checkout → report → Arc proof
+```
 
-Open the [Public App](https://agent-commerce-six.vercel.app/agent-runner) to run a workflow.
+AI agents use Machine API v1:
 
-## Machine API
+```text
+discover → quote → idempotent run → poll → structured report
+```
 
-The Machine API lets external AI agents and automated systems:
+The Machine API includes a typed dependency-free TypeScript SDK, normalized
+errors, strict credential isolation, an OpenAPI specification, and a runnable
+GitHub Due Diligence agent example.
 
-- discover available workflows;
-- create immutable quotes;
-- start workflow runs;
-- poll execution status;
-- retrieve JSON or Markdown reports.
-
-Reference material:
-
-- [Machine API developer guide](docs/agent-api.md)
+- [Machine API guide](docs/agent-api.md)
+- [TypeScript SDK](sdk/typescript)
+- [Production-ready agent example](examples/machine-agent/github-due-diligence-agent.ts)
 - [OpenAPI specification](public/openapi/agent-commerce-v1.json)
 
-## Quick Start
+## Curated workflows
+
+| Workflow | Result | Starting provider cost |
+| --- | --- | ---: |
+| GitHub Project Due Diligence | Repository-health verdict and evidence report | 0.002 USDC |
+| Market Context Brief | Live provider-backed market snapshot | 0.0013 USDC |
+| Sentiment & Tone Report | Structured sentiment and tone signals | 0.0013 USDC |
+| Builder Update Summary | Delivery summary, signals, and next steps | 0.0013 USDC |
+
+External seller commerce remains an internal capability. It is not the primary
+catalog or product positioning.
+
+## Local development
 
 ```bash
 git clone https://github.com/mioku50/Agent-Commerce.git
 cd Agent-Commerce
-pnpm install
+npm install
 cp .env.example .env.local
-pnpm dev
+npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Core Stack
-
-Next.js, TypeScript, Supabase, Arc Testnet, USDC, GitHub API, and Vercel.
-
-## Testing
+Common verification:
 
 ```bash
-pnpm lint
-pnpm build
-pnpm run review:smoke
-pnpm run machine:api-test
+npm run lint
+npm run machine:sdk-build
+npm run github:analysis-test
+npm run machine:api-test
+npm run operations:test
+npm run build
 ```
 
-## Testnet Notice
+## Operations and safety
 
-Arc Agent Commerce currently operates on Arc Testnet. It is experimental software and should not be treated as a production security audit or investment recommendation.
+The production console aggregates execution failures, provider latency,
+checkout failures, and Arc proof delays. Paid provider calls are never blindly
+retried; quote/run idempotency and existing payment records are reconciled
+before recovery.
 
-## License and Attribution
+Public surfaces do not publish full prompts, credentials, authorization
+headers, raw provider errors, or raw provider payloads.
 
-Arc Agent Commerce is licensed under the [Apache License 2.0](LICENSE). Redistributions and derivative works must retain the required license and attribution notices and identify modified files.
+Arc Agent Commerce currently runs on Arc Testnet (`5042002`). Contracts are
+experimental and are not presented as audited.
 
-The Arc Agent Commerce project name, original branding, logo, screenshots, and visual identity are not licensed for reuse. Do not present a fork as the original product or imply endorsement by its author.
+## Stack
 
-Copyright © 2026 Sergio Romanov ([@mioku50](https://github.com/mioku50)).
+Next.js, TypeScript, Supabase, Arc Testnet, USDC, x402, GitHub API, and Vercel.
+
+## License and attribution
+
+Licensed under the [Apache License 2.0](LICENSE). Redistributions and derivative
+works must retain required notices and identify modified files.
+
+The project name, original branding, logo, screenshots, and visual identity are
+not licensed for reuse. Do not present a fork as the original product or imply
+endorsement by its author.
+
+Copyright © 2026 Sergio Romanov
+([@mioku50](https://github.com/mioku50)).

@@ -257,7 +257,7 @@ export default async function ServiceDetailPage({
               Seller-created demo service
             </h2>
             <p className="mt-3 leading-7 text-muted-foreground">
-              This service uses Phase 4 protected mock fulfillment. The paid
+              This service uses legacy protected mock fulfillment. The paid
               response is served from stored seller metadata, so no arbitrary
               external API proxying is involved.
             </p>

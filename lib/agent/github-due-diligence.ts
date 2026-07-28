@@ -15,6 +15,27 @@ export type DueDiligenceOverallStatus =
 
 export type RiskSeverity = "high" | "medium" | "low" | "info";
 
+export type DueDiligenceVerdictCode =
+  | "proceed_with_standard_review"
+  | "proceed_with_conditions"
+  | "pause_for_review"
+  | "insufficient_evidence";
+
+export interface GitHubDueDiligenceVerdict {
+  code: DueDiligenceVerdictCode;
+  label: string;
+  confidence: DataConfidence;
+  summary: string;
+  reasons: string[];
+  blockingFindings: string[];
+  evidenceCoverage: {
+    assessedCategories: number;
+    highConfidenceCategories: number;
+    totalCategories: number;
+    ratio: number;
+  };
+}
+
 export type GitHubDueDiligenceRiskCode =
   | "repository_archived"
   | "stale_development"
@@ -60,6 +81,7 @@ export interface GitHubDueDiligenceCategories {
 export interface GitHubDueDiligenceAssessment {
   overallStatus: DueDiligenceOverallStatus;
   overallSummary: string;
+  verdict: GitHubDueDiligenceVerdict;
   categories: GitHubDueDiligenceCategories;
   risks: GitHubDueDiligenceRisk[];
   strengths: string[];
@@ -776,9 +798,90 @@ export function analyzeGitHubDueDiligence(
     "What is the project roadmap and breaking change policy for future releases?",
   );
 
+  const categoryValues = Object.values(categories);
+  const assessedCategories = categoryValues.filter(
+    (category) => category.status !== "unknown",
+  ).length;
+  const highConfidenceCategories = categoryValues.filter(
+    (category) => category.confidence === "high",
+  ).length;
+  const totalCategories = categoryValues.length;
+  const evidenceRatio =
+    totalCategories > 0
+      ? Math.round((assessedCategories / totalCategories) * 100) / 100
+      : 0;
+  const verdictConfidence: DataConfidence =
+    isPartialOrIncomplete || evidenceRatio < 0.6
+      ? "low"
+      : highConfidenceCategories >= Math.ceil(totalCategories * 0.6)
+        ? "high"
+        : "medium";
+
+  let verdictCode: DueDiligenceVerdictCode;
+  let verdictLabel: string;
+  if (overallStatus === "limited_data") {
+    verdictCode = "insufficient_evidence";
+    verdictLabel = "Insufficient evidence";
+  } else if (overallStatus === "high_attention") {
+    verdictCode = "pause_for_review";
+    verdictLabel = "Pause for manual review";
+  } else if (overallStatus === "review_needed") {
+    verdictCode = "proceed_with_conditions";
+    verdictLabel = "Proceed only with conditions";
+  } else {
+    verdictCode = "proceed_with_standard_review";
+    verdictLabel = "Proceed with standard review";
+  }
+
+  const verdictReasons = [
+    ...highRisks.map((risk) => `${risk.title}: ${risk.impact}`),
+    ...mediumRisks.slice(0, Math.max(0, 3 - highRisks.length)).map(
+      (risk) => `${risk.title}: ${risk.impact}`,
+    ),
+    ...strengths.slice(0, 2),
+  ].slice(0, 4);
+  if (verdictReasons.length === 0) {
+    verdictReasons.push(
+      overallStatus === "limited_data"
+        ? "The available public GitHub evidence is too incomplete for a reliable repository-health conclusion."
+        : "No high- or medium-severity repository-health findings were detected in the collected evidence.",
+    );
+  }
+
+  const blockingFindings = highRisks.map((risk) => risk.title);
+  if (!hasLicense && !blockingFindings.includes("Missing Open Source License")) {
+    blockingFindings.push("Missing Open Source License");
+  }
+  if (overallStatus === "limited_data") {
+    blockingFindings.push("Incomplete GitHub evidence");
+  }
+
+  const verdict: GitHubDueDiligenceVerdict = {
+    code: verdictCode,
+    label: verdictLabel,
+    confidence: verdictConfidence,
+    summary:
+      verdictCode === "proceed_with_standard_review"
+        ? "The collected repository-health evidence supports continuing normal technical and legal review."
+        : verdictCode === "proceed_with_conditions"
+          ? "Resolve or explicitly accept the listed conditions before relying on this repository."
+          : verdictCode === "pause_for_review"
+            ? "Do not rely on this repository until the high-severity findings receive manual review."
+            : "Collect complete repository evidence before making an adoption decision.",
+    reasons: verdictReasons,
+    blockingFindings,
+    evidenceCoverage: {
+      assessedCategories,
+      highConfidenceCategories,
+      totalCategories,
+      ratio: evidenceRatio,
+    },
+  };
+
   return {
     overallStatus,
     overallSummary,
+    verdict,
     categories,
     risks,
     strengths,

@@ -1,15 +1,15 @@
 import Link from "next/link";
-import { ArrowRight, Bot, Code2, Store, Wrench, ShieldCheck } from "lucide-react";
+import { Activity, ArrowRight, Bot, Code2, Wrench, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
   title: "Agent Developer Console | Arc Agent Commerce",
-  description: "Manage agents, seller services, Machine API, developer utilities, and audit verification.",
+  description: "Manage Machine API credentials, inspect workflow operations, and verify Arc proof trails.",
   openGraph: {
     title: "Agent Developer Console | Arc Agent Commerce",
-    description: "Manage agents, seller services, Machine API, developer utilities, and audit verification.",
+    description: "Manage Machine API credentials, inspect workflow operations, and verify Arc proof trails.",
   },
 };
 
@@ -31,12 +31,12 @@ const consoleSections = [
     badge: "Machine-to-Machine API v1",
   },
   {
-    title: "Services / Seller",
-    href: "/console/seller",
-    icon: Store,
+    title: "Production Operations",
+    href: "/console/operations",
+    icon: Activity,
     description:
-      "Seller services management, mock service listing creation, protected endpoints, and API credentials.",
-    badge: "Seller Creator Mode",
+      "Execution failures, provider latency, payment health, Arc proof delays, active alerts, and retry policy.",
+    badge: "Observability",
   },
   {
     title: "Developer Tools",
@@ -67,7 +67,7 @@ export default function ConsoleDashboardPage() {
           </div>
           <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">Agent Developer Console</h1>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Manage your autonomous AI agents, register custom seller services, access developer tools, and inspect complete audit and verification trails.
+            Build with the Machine API, manage agent credentials, inspect production workflow health, and verify complete Arc proof trails.
           </p>
         </div>
       </section>

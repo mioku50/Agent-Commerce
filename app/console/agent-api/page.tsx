@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AgentApiInteractiveClient } from "./agent-api-interactive-client";
-import { MachineCredentialsClient, ProductionSmokeInstructions } from "./machine-credentials-client";
+import { MachineCredentialsClient } from "./machine-credentials-client";
 
 export const metadata = {
   title: "Agent API | Agent Developer Console | Arc Agent Commerce",
@@ -63,7 +63,7 @@ export default function AgentApiConsolePage() {
             <Badge variant="secondary">Arc Testnet · Chain 5042002</Badge>
           </div>
           <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">
-            Agent Machine API v1
+            Machine API v1
           </h1>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
             Allow external AI agents and automated microservices to discover workflows, create binding quotes, launch sponsored or paid runs, poll status, and retrieve verified structured reports with Arc proof trails.
@@ -77,9 +77,9 @@ export default function AgentApiConsolePage() {
               </a>
             </Button>
             <Button asChild variant="outline" className="gap-2">
-              <Link href="/console/agents">
+              <Link href="#credentials">
                 <Key className="size-4" />
-                Manage API Credentials
+                Create API Credential
               </Link>
             </Button>
           </div>
@@ -92,10 +92,23 @@ export default function AgentApiConsolePage() {
           <CardHeader>
             <CardTitle>Machine API Credentials</CardTitle>
             <CardDescription>
-              Select an agent, create a namespace-bound credential, and manage rotation or revocation. Secrets are shown only once.
+              Complete the three onboarding steps, then create a namespace-bound credential. Secrets are shown only once.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="grid gap-6">
+            <ol className="grid gap-3 md:grid-cols-3">
+              {[
+                ["1", "Verify owner", "Connect and verify the owner wallet in Agent Credentials."],
+                ["2", "Activate namespace", "Register an agent and enable only the workflows it may run."],
+                ["3", "Create credential", "Copy the one-time secret into your agent secret manager."],
+              ].map(([number, title, description]) => (
+                <li key={number} className="rounded-md border p-4 text-sm">
+                  <Badge variant="outline" className="mb-3 font-mono">{number}</Badge>
+                  <p className="font-semibold">{title}</p>
+                  <p className="mt-2 text-xs leading-5 text-muted-foreground">{description}</p>
+                </li>
+              ))}
+            </ol>
             <MachineCredentialsClient />
           </CardContent>
         </Card>
@@ -147,10 +160,10 @@ export default function AgentApiConsolePage() {
                 <Key className="size-5 text-primary" />
                 <CardTitle>Credential Scopes & Endpoints</CardTitle>
               </div>
-              <Badge variant="outline">OAuth 2.0 / Bearer Style</Badge>
+              <Badge variant="outline">Scoped bearer credential</Badge>
             </div>
             <CardDescription>
-              Each API credential can be restricted to specific permissions. Requests with missing scopes return 403 <code className="text-xs">scope_denied</code>.
+              Machine credentials use a closed scope set bound to one active agent namespace. A mismatched credential returns 403 <code className="text-xs">scope_denied</code>.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -201,8 +214,6 @@ export default function AgentApiConsolePage() {
             <AgentApiInteractiveClient />
           </CardContent>
         </Card>
-
-        <ProductionSmokeInstructions />
 
         {/* OpenAPI Specification Card */}
         <Card className="rounded-lg bg-secondary/10">

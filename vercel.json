@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/internal/operations/monitor",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/internal/seller/availability",
       "schedule": "17 3 * * *"
     }

@@ -1,136 +1,85 @@
-/**
- * Copyright 2026 Circle Internet Group, Inc.  All rights reserved.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- *
- * SPDX-License-Identifier: Apache-2.0
- */
-
 import Link from "next/link";
-import { ArrowRight, Globe, LockKeyhole, ReceiptText, Sparkles, Zap } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { ArrowRight, Bot, FileCheck2, KeyRound, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const metadata = {
   title: "About | Arc Agent Commerce",
-  description: "Learn how AI agents buy data directly from web APIs without subscriptions.",
+  description:
+    "Arc Agent Commerce runs verifiable paid workflows for people and AI agents.",
 };
+
+const paths = [
+  {
+    title: "Public App",
+    icon: FileCheck2,
+    body: "Choose a curated workflow, submit non-sensitive input, confirm one immutable quote, and receive a shareable report.",
+    href: "/agent-runner",
+    action: "Run a workflow",
+  },
+  {
+    title: "Machine API",
+    icon: Bot,
+    body: "External agents discover schemas, create idempotent quotes and runs, then retrieve structured reports and Arc proofs.",
+    href: "/console/agent-api",
+    action: "Open Machine API",
+  },
+];
 
 export default function AboutPage() {
   return (
     <main className="min-h-screen bg-background">
-      {/* Hero Section - The Hook */}
-      <section className="relative overflow-hidden border-b bg-secondary/20 py-20 sm:py-32">
-        <div className="mx-auto flex max-w-7xl flex-col items-center gap-6 px-4 text-center sm:px-6">
-          <Badge variant="outline" className="bg-background px-4 py-1 text-sm text-muted-foreground shadow-sm">
-            <Sparkles className="mr-2 size-4 text-primary" />
-            Designed for Humans & Machines
-          </Badge>
-          <h1 className="max-w-4xl text-5xl font-extrabold tracking-tight text-foreground sm:text-7xl">
-            What is Arc Agent Commerce?
+      <section className="border-b bg-secondary/20">
+        <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
+          <Badge className="mb-5">Verifiable paid workflows</Badge>
+          <h1 className="max-w-4xl text-4xl font-bold tracking-normal sm:text-6xl">
+            A report product built on agent commerce
           </h1>
-          <p className="max-w-2xl text-xl leading-8 text-muted-foreground">
-            It is a platform where AI agents can buy data directly from web APIs using micro-amounts of digital currency (USDC), without needing credit cards, user accounts, or monthly subscriptions.
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
+            Arc Agent Commerce turns real input into a priced workflow, purchases
+            only allowlisted x402 services, and returns a structured result with
+            receipts and an Arc Testnet proof trail.
           </p>
-          <div className="mt-6 flex flex-col gap-4 sm:flex-row">
-            <Button asChild size="lg" className="h-12 px-8 text-base">
-              <Link href="/demo">
-                See the Demo
-                <ArrowRight className="ml-2" />
-              </Link>
-            </Button>
-            <Button asChild size="lg" variant="outline" className="h-12 px-8 text-base bg-background">
-              <Link href="/store">
-                Browse APIs
-              </Link>
-            </Button>
-          </div>
         </div>
       </section>
 
-      {/* How It Works Section */}
-      <section className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
-        <div className="mb-16 text-center">
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">How It Works</h2>
-          <p className="mt-4 text-lg text-muted-foreground">A seamless, 3-step process for machine-to-machine commerce.</p>
-        </div>
-
-        <div className="grid gap-8 md:grid-cols-3">
-          {/* Step 1 */}
-          <Card className="relative overflow-hidden border-slate-100 shadow-sm">
-            <div className="absolute top-0 h-1 w-full bg-primary/20"></div>
-            <CardContent className="pt-8">
-              <div className="mb-6 flex size-14 items-center justify-center rounded-2xl bg-secondary text-primary">
-                <Globe size={28} />
-              </div>
-              <h3 className="mb-3 text-2xl font-bold">Step 1: Discover</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Agents scan our public catalog to find machine-readable endpoints that provide the exact data or capability they need right now.
-              </p>
+      <section className="mx-auto grid w-full max-w-6xl gap-5 px-4 py-10 sm:px-6 md:grid-cols-2">
+        {paths.map(({ title, icon: Icon, body, href, action }) => (
+          <Card key={title} className="rounded-lg">
+            <CardHeader>
+              <Icon className="size-6 text-primary" />
+              <CardTitle>{title}</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-5">
+              <p className="leading-7 text-muted-foreground">{body}</p>
+              <Button asChild className="w-fit">
+                <Link href={href}>
+                  {action}
+                  <ArrowRight />
+                </Link>
+              </Button>
             </CardContent>
           </Card>
-
-          {/* Step 2 */}
-          <Card className="relative overflow-hidden border-slate-100 shadow-sm">
-            <div className="absolute top-0 h-1 w-full bg-primary/50"></div>
-            <CardContent className="pt-8">
-              <div className="mb-6 flex size-14 items-center justify-center rounded-2xl bg-secondary text-primary">
-                <Zap size={28} />
-              </div>
-              <h3 className="mb-3 text-2xl font-bold">Step 2: Pay-per-Request</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                Instead of asking a human for a credit card, the agent instantly signs a tiny, sub-cent payment on the Arc blockchain network.
-              </p>
-            </CardContent>
-          </Card>
-
-          {/* Step 3 */}
-          <Card className="relative overflow-hidden border-slate-100 shadow-sm">
-            <div className="absolute top-0 h-1 w-full bg-primary"></div>
-            <CardContent className="pt-8">
-              <div className="mb-6 flex size-14 items-center justify-center rounded-2xl bg-secondary text-primary">
-                <LockKeyhole size={28} />
-              </div>
-              <h3 className="mb-3 text-2xl font-bold">Step 3: Access</h3>
-              <p className="text-muted-foreground leading-relaxed">
-                The API verifies the payment, unlocks instantly, and returns the requested data while creating an immutable, public receipt.
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        ))}
       </section>
 
-      {/* Why It Matters Section */}
-      <section className="border-t bg-secondary/10 py-20">
-        <div className="mx-auto max-w-3xl px-4 text-center sm:px-6">
-          <ReceiptText className="mx-auto mb-6 size-12 text-muted-foreground opacity-50" />
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">Why does this matter?</h2>
-          <div className="mt-8 space-y-6 text-lg leading-relaxed text-muted-foreground">
-            <p>
-              The current internet is built for humans holding credit cards. When automated AI software tries to solve complex problems, it frequently hits paywalls or requires humans to preemptively create accounts and buy expensive SaaS subscriptions.
-            </p>
-            <p>
-              By giving agents their own programmatic wallets and an open marketplace that accepts instant, tiny payments, we enable software to act autonomously. Agents can now &quot;hire&quot; other specialized tools on the fly, paying exactly for what they use, unlocking a new economy of machine-to-machine commerce.
-            </p>
-          </div>
-          <div className="mt-10">
-             <Button asChild variant="outline" className="bg-background">
-              <Link href="/">
-                Return to Home
-              </Link>
-            </Button>
-          </div>
+      <section className="border-y bg-secondary/10">
+        <div className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-10 sm:px-6 md:grid-cols-3">
+          {[
+            [KeyRound, "Immutable quote", "Input hash, selected services, total price, and expiry are fixed before execution."],
+            [ShieldCheck, "Fail-closed safety", "Durable idempotency, tenant isolation, budget limits, and single-attempt paid calls prevent unsafe replay."],
+            [FileCheck2, "Verifiable result", "Reports link evidence, receipts, payment records, and Arc Testnet proof transactions."],
+          ].map(([Icon, title, body]) => {
+            const FeatureIcon = Icon as typeof KeyRound;
+            return (
+              <div key={String(title)} className="rounded-lg border bg-background p-5">
+                <FeatureIcon className="size-5 text-primary" />
+                <h2 className="mt-4 font-semibold">{String(title)}</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{String(body)}</p>
+              </div>
+            );
+          })}
         </div>
       </section>
     </main>

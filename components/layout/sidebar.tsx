@@ -207,7 +207,7 @@ export function MobileSidebar({
               {isConsole ? "Agent Developer Console" : "Arc Agent Commerce"}
             </p>
             <p className="text-xs text-muted-foreground">
-              {isConsole ? "Developer & Operator tools" : "Hosted workflow reports"}
+              {isConsole ? "Developer & Operator tools" : "Verifiable paid workflows"}
             </p>
           </div>
         </div>

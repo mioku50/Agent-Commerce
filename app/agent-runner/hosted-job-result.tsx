@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { BadgeCheck, Check, Circle, CreditCard, ExternalLink, LoaderCircle, ReceiptText, RotateCcw, Share2 } from "lucide-react";
+import { BadgeCheck, Check, CheckCircle2, Circle, CreditCard, Download, ExternalLink, LoaderCircle, ReceiptText, RotateCcw, Share2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,7 +31,10 @@ import type {
   RiskSeverity,
 } from "@/lib/agent/github-due-diligence";
 import type { GitHubRepositorySnapshot, DataConfidence } from "@/lib/providers/github-types";
-import { buildGitHubPublicReport } from "@/lib/reports/github-public-report";
+import {
+  buildGitHubPublicReport,
+  formatGitHubPublicReportAsMarkdown,
+} from "@/lib/reports/github-public-report";
 import type { HostedJobView } from "./types";
 
 const DEFAULT_CONSUMER_STAGES = [
@@ -276,6 +279,30 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
+  }
+
+  function downloadGitHubReport(format: "json" | "markdown") {
+    const content =
+      format === "json"
+        ? `${JSON.stringify(publicReport, null, 2)}\n`
+        : formatGitHubPublicReportAsMarkdown(publicReport);
+    const blob = new Blob([content], {
+      type:
+        format === "json"
+          ? "application/json;charset=utf-8"
+          : "text/markdown;charset=utf-8",
+    });
+    const href = URL.createObjectURL(blob);
+    const repositoryName =
+      publicReport.repository?.fullName.replace(/[^a-z0-9._-]+/gi, "-") ??
+      publicReport.reportId;
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = `${repositoryName}-due-diligence.${format === "json" ? "json" : "md"}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(href);
   }
 
   const activeStage = view.job.progressStage;
@@ -589,10 +616,63 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                       {copied ? <Check className="size-4 text-emerald-500" /> : <Share2 className="size-4" />}
                       {copied ? "Copied!" : "Share Report"}
                     </Button>
+                    {view.job.status === "completed" ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadGitHubReport("json")}
+                          className="gap-1.5"
+                        >
+                          <Download className="size-4" />
+                          JSON
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadGitHubReport("markdown")}
+                          className="gap-1.5"
+                        >
+                          <Download className="size-4" />
+                          Markdown
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
 
                 {/* 12 P1.4 GitHub Report Sections */}
+
+                {publicReport.verdict ? (
+                  <div>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Final verdict
+                    </h3>
+                    <div className="grid gap-3 rounded-md border border-primary/25 bg-primary/5 p-4">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className={overallStatusBadge(publicReport.overallStatus).color}>
+                          {publicReport.verdict.label}
+                        </Badge>
+                        <Badge variant="outline">
+                          {publicReport.verdict.confidence} confidence
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {publicReport.verdict.evidenceCoverage.assessedCategories}/
+                          {publicReport.verdict.evidenceCoverage.totalCategories} evidence areas assessed
+                        </span>
+                      </div>
+                      <p className="text-sm leading-6">{publicReport.verdict.summary}</p>
+                      <ul className="grid gap-2 text-sm text-muted-foreground">
+                        {publicReport.verdict.reasons.slice(0, 4).map((reason) => (
+                          <li key={reason} className="flex gap-2">
+                            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+                            <span>{sanitizePublicReportText(reason)}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
 
                 {/* 1. Executive Summary */}
                 <div>

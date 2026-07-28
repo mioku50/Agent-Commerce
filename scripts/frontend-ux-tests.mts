@@ -31,13 +31,17 @@ import {
 } from "../lib/navigation/sidebar.ts";
 import { humanizeError } from "../lib/errors/humanize-error.ts";
 import { sanitizePublicReportText } from "../lib/agent/public-report-copy.ts";
-import { hostedWorkflowTemplates } from "../lib/agent/workflow-templates.ts";
+import {
+  curatedHostedWorkflowTemplates,
+  hostedWorkflowTemplates,
+} from "../lib/agent/workflow-templates.ts";
 
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 assert(readme.split(/\r?\n/).length <= 220, "README must remain under 220 lines");
 assert(readme.trim().split(/\s+/).length <= 1_500, "README must remain under 1,500 words");
 assert(!/FreeModel|Phase\s+\d+|Canary deployment|treasury address|HMAC implementation/i.test(readme));
-assert(readme.includes("A workflow commerce platform where people and autonomous agents"));
+assert(readme.includes("Verifiable paid workflows for people and AI agents"));
+assert(readme.includes("External seller commerce remains an internal capability"));
 assert(readme.includes("docs/agent-api.md"));
 assert(readme.includes("public/openapi/agent-commerce-v1.json"));
 assert(existsSync(new URL("../docs/agent-api.md", import.meta.url)));
@@ -59,7 +63,7 @@ for (const [type, label] of [
 }
 assert(!homeSource.includes("Understand any GitHub project before you build on it"));
 
-for (const template of hostedWorkflowTemplates) {
+for (const template of curatedHostedWorkflowTemplates) {
   assert(typeof template.benefitLabel === "string" && template.benefitLabel.length > 0);
   assert(template.benefitLabel.includes("Arc verification"));
   const formattedPrice = `From ${template.estimatedSpendUsdc.toFixed(4)} USDC`;
@@ -171,10 +175,11 @@ assert.deepEqual(
   consoleSidebarNavigation[0].items.map(({ label, href }) => ({ label, href })),
   [
     { label: "Console Home", href: "/console" },
-    { label: "Agents", href: "/console/agents" },
-    { label: "Services / Seller", href: "/console/seller" },
-    { label: "Developer Tools", href: "/console/developer-tools" },
+    { label: "Machine API", href: "/console/agent-api" },
+    { label: "Agent Credentials", href: "/console/agents" },
+    { label: "Operations", href: "/console/operations" },
     { label: "Audit & Verification", href: "/console/audit" },
+    { label: "Developer Tools", href: "/console/developer-tools" },
   ],
 );
 

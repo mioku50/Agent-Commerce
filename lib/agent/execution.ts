@@ -232,6 +232,7 @@ type PreflightResult = {
   requestId?: string;
   paymentRequired?: unknown;
   responseBody?: string;
+  latencyMs: number;
 };
 
 type GatewayBalanceDiagnostic = {
@@ -1106,6 +1107,7 @@ export async function executeBuyerAgent(
     body: unknown,
   ): Promise<PreflightResult> {
     const url = serviceUrl(baseUrl, service);
+    const startedAt = Date.now();
     const response = await fetchWithRetry(
       url,
       requestInitForService(service, body),
@@ -1133,6 +1135,7 @@ export async function executeBuyerAgent(
         exchange?.requestId,
       paymentRequired: exchange?.paymentRequired,
       responseBody: responseBody.slice(0, 800),
+      latencyMs: Math.max(0, Date.now() - startedAt),
     };
   }
 
@@ -1198,7 +1201,8 @@ export async function executeBuyerAgent(
       }),
     }, `persist payment requirement step ${stepIndex}`);
 
-    const paymentStartedAt = new Date(Date.now() - 5000);
+    const paidCallStartedMs = Date.now();
+    const paymentStartedAt = new Date(paidCallStartedMs - 5000);
     let result: PayResult<unknown>;
     try {
       result = await withRetry(
@@ -1224,7 +1228,11 @@ export async function executeBuyerAgent(
         status: "failed",
         request_id: requestId,
         error: toErrorMessage(error),
-        raw: safeRaw({ diagnostics: exchanges }),
+        raw: safeRaw({
+          diagnostics: exchanges,
+          preflightLatencyMs: preflight.latencyMs,
+          providerLatencyMs: Math.max(0, Date.now() - paidCallStartedMs),
+        }),
       }, `persist failed step ${stepIndex}`);
       if (runFilePath) printPaymentHttpDiagnostics(exchanges, runFilePath);
       if (isInsufficientBalanceError(error)) {
@@ -1277,6 +1285,8 @@ export async function executeBuyerAgent(
         transaction: result.transaction,
         status: result.status,
         paymentResponse: paidExchange?.paymentResponse,
+        preflightLatencyMs: preflight.latencyMs,
+        providerLatencyMs: Math.max(0, Date.now() - paidCallStartedMs),
       }),
     }, `persist paid step ${stepIndex}`);
     await safeUpdateRun({

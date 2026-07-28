@@ -1,316 +1,239 @@
-# Arc Agent Commerce — Machine API v1 Developer Guide
+# Arc Agent Commerce Machine API v1
 
-The **Machine API v1** allows autonomous AI agents and automated external systems to interact directly with Arc Agent Commerce on Arc Testnet. 
+Machine API v1 is the agent-native path for running the same curated,
+verifiable paid workflows available in the Public App.
 
-Without needing browser user interfaces, external agents can discover available workflow templates, generate binding quotes, launch sponsored or paid workflow runs via x402, poll execution progress, and retrieve structured JSON reports with verifiable Arc testnet proof trails.
+An external agent can:
 
----
+1. discover curated workflows and input schemas;
+2. create an immutable quote;
+3. launch exactly one sponsored or paid run;
+4. poll until the run reaches a terminal state;
+5. retrieve structured JSON or Markdown with Arc Testnet proof metadata.
 
-## Key Features
+Production base URL:
 
-- **Standardized Machine Auth:** Bearer credential tokens (`aac_...`) bound specifically to Machine API operations.
-- **Idempotency Safeguards:** Mandatory `Idempotency-Key` headers on mutating requests (`POST /quotes`, `POST /runs`) preventing duplicate charges or accidental re-executions.
-- **Dual Checkout Modes:** Native support for both sponsored daily quota and explicit paid x402 USDC transactions.
-- **Format Negotiation:** Retrieve reports in high-fidelity structured JSON (`application/json`) or clean human-readable Markdown (`text/markdown`).
-- **Verifiable Proof Trails:** Every report is backed by Arc Testnet transaction proofs linked to allowlisted x402 service purchases.
+```text
+https://agent-commerce-six.vercel.app
+```
 
----
+OpenAPI:
 
-## Authentication & Credential Scopes
+```text
+https://agent-commerce-six.vercel.app/openapi/agent-commerce-v1.json
+```
 
-Include your API credential token in the `Authorization` header of all HTTP requests:
+## Credential onboarding
+
+Credentials are created in the Agent Developer Console and shown once.
+
+1. Open `/console/agents`, connect the owner wallet, and complete owner
+   verification.
+2. Register and activate an agent namespace. Enable only the curated workflows
+   that the agent is allowed to run.
+3. Open `/console/agent-api#credentials`.
+4. Select the active agent and choose **Create Machine API Credential**.
+5. Copy the `aac_...` secret immediately and store it in a secret manager.
+
+The credential is bound to one agent namespace and one closed scope set:
+
+| Scope | Purpose |
+| --- | --- |
+| `workflows:read` | Discover workflow schemas and prices |
+| `quotes:create` | Create immutable, idempotent quotes |
+| `runs:create` | Launch a quoted run |
+| `results:read` | Poll runs and retrieve reports |
+
+Machine credentials are separate from legacy BYOA workflow credentials. Never
+send a credential in a query string or commit it to the repository.
+
+## TypeScript SDK
+
+The dependency-free SDK lives in `sdk/typescript`. Build it with:
+
+```bash
+npm run machine:sdk-build
+```
+
+Minimal usage:
+
+```ts
+import { AgentCommerceClient } from "@arc-agent-commerce/sdk";
+
+const client = new AgentCommerceClient({
+  baseUrl: "https://agent-commerce-six.vercel.app",
+  credential: process.env.ARC_AGENT_COMMERCE_API_KEY!,
+});
+
+const { report } = await client.executeWorkflow({
+  workflow: "github_due_diligence",
+  repository: "circlefin/developer-controlled-wallets-web-sdk",
+});
+
+console.log(report.verdict);
+console.log(report.verification);
+```
+
+The complete production-ready agent example is
+`examples/machine-agent/github-due-diligence-agent.ts`:
+
+```bash
+ARC_AGENT_COMMERCE_API_KEY='aac_...' \
+  npm run machine:agent-example -- circlefin/developer-controlled-wallets-web-sdk
+```
+
+The example never prints the credential. Persist explicit quote and run
+idempotency keys when an agent process must survive restarts.
+
+## HTTP quickstart
+
+Every request uses:
 
 ```http
-Authorization: Bearer aac_your_credential_secret_here
+Authorization: Bearer aac_your_secret
 ```
 
-Machine API credentials are distinct from BYOA Workflow credentials and cannot be used under `/api/byoa/*`. Their permission set is fixed:
+Mutating requests also require:
 
-### Machine Credential Scopes
-
-| Scope | Description | Allowed Endpoints |
-| :--- | :--- | :--- |
-| `workflows:read` | Inspect available workflows, list prices, and schemas | `GET /api/agent/v1/workflows` |
-| `quotes:create` | Generate binding execution quotes | `POST /api/agent/v1/quotes` |
-| `runs:create` | Launch sponsored or paid workflow executions | `POST /api/agent/v1/runs` |
-| `results:read` | Poll runs and download reports with Arc proofs | `GET /api/agent/v1/runs/[runId]`, `GET /api/agent/v1/reports/[reportId]` |
-
-> **Note:** Machine API credentials can be generated and managed in **Agent Developer Console -> Agent API**. The full secret is shown once.
-
----
-
-## API Endpoints Reference
-
-### 1. List Available Workflows
-**`GET /api/agent/v1/workflows`**
-
-Returns active workflow templates, input schemas, estimated prices in USDC, and Arc Testnet chain metadata.
-
-**Headers:**
-- `Authorization: Bearer <token>`
-
-**Response (`200 OK`):**
-```json
-{
-  "version": "1",
-  "workflows": [
-    {
-      "id": "github_due_diligence",
-      "name": "GitHub Due Diligence",
-      "shortName": "GitHub Diligence",
-      "description": "Comprehensive technical due diligence for open-source GitHub repositories.",
-      "task": "Evaluate repository health, architecture, security, activity, and risks",
-      "estimatedUsdc": 0.05,
-      "inputSchema": {
-        "type": "object",
-        "properties": {
-          "repository": {
-            "type": "string",
-            "description": "GitHub repository in owner/repo format or full URL"
-          }
-        },
-        "required": ["repository"]
-      },
-      "arc": {
-        "chainId": 5042002,
-        "network": "arc-testnet",
-        "asset": "USDC",
-        "tokenAddress": "0x36F174a7A8dCA44E72dF88fE8C349C3eDFAe61A7"
-      }
-    }
-  ]
-}
+```http
+Idempotency-Key: a-stable-key-for-this-exact-operation
 ```
 
----
+### 1. Discover
 
-### 2. Create Workflow Quote
-**`POST /api/agent/v1/quotes`**
-
-Generates an immutable quote containing list pricing and payment requirements.
-
-**Headers:**
-- `Authorization: Bearer <token>`
-- `Idempotency-Key: <unique-uuid-or-hash>` *(Required)*
-
-**Request Body:**
-```json
-{
-  "workflow": "github_due_diligence",
-  "repository": "circlefin/agent-commerce"
-}
+```bash
+curl 'https://agent-commerce-six.vercel.app/api/agent/v1/workflows' \
+  -H "Authorization: Bearer $ARC_AGENT_COMMERCE_API_KEY"
 ```
 
-**Response (`201 Created` / `200 OK`):**
-```json
-{
-  "quoteId": "qte_9f81a2b3c4d5",
-  "workflow": "github_due_diligence",
-  "repository": {
-    "fullName": "circlefin/agent-commerce",
-    "canonicalUrl": "https://github.com/circlefin/agent-commerce"
-  },
-  "totalUsdc": 0.05,
-  "sponsored": true,
-  "expiresAt": "2026-07-24T22:15:00.000Z",
-  "requiredPayment": {
-    "network": "arc-testnet",
-    "asset": "USDC",
-    "amount": 0.0,
-    "treasuryAddress": "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
-    "chainId": 5042002
-  }
-}
+### 2. Quote
+
+```bash
+curl -X POST \
+  'https://agent-commerce-six.vercel.app/api/agent/v1/quotes' \
+  -H "Authorization: Bearer $ARC_AGENT_COMMERCE_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: github-quote-2026-07-28-001' \
+  -d '{
+    "workflow": "github_due_diligence",
+    "repository": "circlefin/developer-controlled-wallets-web-sdk"
+  }'
 ```
 
----
+The response freezes workflow, normalized input, selected services, total USDC
+price, checkout mode, and expiry.
 
-### 3. Launch Workflow Run
-**`POST /api/agent/v1/runs`**
+### 3. Run
 
-Launches workflow execution for a valid quote.
+Sponsored:
 
-**Headers:**
-- `Authorization: Bearer <token>`
-- `Idempotency-Key: <unique-uuid-or-hash>` *(Required)*
-
-**Request Body (Sponsored Mode):**
-```json
-{
-  "quoteId": "qte_9f81a2b3c4d5"
-}
+```bash
+curl -X POST \
+  'https://agent-commerce-six.vercel.app/api/agent/v1/runs' \
+  -H "Authorization: Bearer $ARC_AGENT_COMMERCE_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: github-run-2026-07-28-001' \
+  -d '{"quoteId":"QUOTE_ID"}'
 ```
 
-**Request Body (Paid Mode):**
+Paid:
+
 ```json
 {
-  "quoteId": "qte_9f81a2b3c4d5",
+  "quoteId": "QUOTE_ID",
   "paymentAuthorization": {
     "type": "arc_transaction",
-    "payload": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+    "payload": "0x..."
   }
 }
 ```
 
-**Response (`201 Created`):**
-```json
-{
-  "runId": "job_01h9a8b7c6d5",
-  "status": "queued",
-  "pollAfterMs": 2000
-}
+The transaction must be the exact Arc Testnet checkout described by the quote.
+The project-owned hosted payer performs downstream x402 purchases separately.
+
+### 4. Poll
+
+```bash
+curl \
+  'https://agent-commerce-six.vercel.app/api/agent/v1/runs/RUN_ID' \
+  -H "Authorization: Bearer $ARC_AGENT_COMMERCE_API_KEY"
 ```
 
----
+Terminal statuses are `completed`, `completed_with_warnings`, `failed`, and
+`expired`.
 
-### 4. Poll Run Status
-**`GET /api/agent/v1/runs/[runId]`**
+### 5. Report
 
-Checks the progress of a running workflow job.
+JSON:
 
-**Headers:**
-- `Authorization: Bearer <token>`
-
-**Response (`200 OK` - In Progress):**
-```json
-{
-  "runId": "job_01h9a8b7c6d5",
-  "status": "running",
-  "progress": 0.6,
-  "stage": "purchasing",
-  "pollAfterMs": 2000
-}
+```bash
+curl \
+  'https://agent-commerce-six.vercel.app/api/agent/v1/reports/REPORT_ID' \
+  -H "Authorization: Bearer $ARC_AGENT_COMMERCE_API_KEY" \
+  -H 'Accept: application/json'
 ```
 
-**Response (`200 OK` - Completed):**
-```json
-{
-  "runId": "job_01h9a8b7c6d5",
-  "status": "completed",
-  "progress": 1.0,
-  "stage": "completed",
-  "pollAfterMs": 0,
-  "reportId": "job_01h9a8b7c6d5",
-  "verification": {
-    "status": "verified",
-    "verifiedSteps": 2,
-    "requiredSteps": 2
-  }
-}
+Markdown:
+
+```bash
+curl \
+  'https://agent-commerce-six.vercel.app/api/agent/v1/reports/REPORT_ID' \
+  -H "Authorization: Bearer $ARC_AGENT_COMMERCE_API_KEY" \
+  -H 'Accept: text/markdown'
 ```
 
-Possible status values: `queued`, `running`, `completed`, `completed_with_warnings`, `failed`, `expired`.
+GitHub reports include a deterministic verdict, evidence coverage, strengths,
+risks, adoption questions, receipts, and Arc proof links.
 
----
+## Idempotency contract
 
-### 5. Retrieve Final Report
-**`GET /api/agent/v1/reports/[reportId]`**
+- Reusing a key with the same request returns the same resource and response.
+- Reusing a key with different input returns `idempotency_conflict`.
+- An in-flight duplicate returns `idempotency_in_progress` and is retryable.
+- If durable idempotency storage is unavailable, the API returns
+  `idempotency_store_unavailable` before creating a quote, job, or payment.
+- Do not generate a new run key merely because a client timed out. Retry the
+  same request with the same key first.
 
-Downloads the final structured evaluation report and Arc verification proof metadata.
+## Error model
 
-**Headers:**
-- `Authorization: Bearer <token>`
-- `Accept: application/json` *(default)* or `Accept: text/markdown`
-
-**Response (`200 OK` - `application/json`):**
-```json
-{
-  "reportId": "job_01h9a8b7c6d5",
-  "workflow": "github_due_diligence",
-  "repository": {
-    "fullName": "circlefin/agent-commerce",
-    "canonicalUrl": "https://github.com/circlefin/agent-commerce"
-  },
-  "status": "completed",
-  "executiveSummary": "Repository due diligence completed with strong governance and regular commit activity.",
-  "projectPurpose": "Hosted AI Agent Commerce layer on Arc Testnet.",
-  "technology": {
-    "primaryLanguage": "TypeScript",
-    "frameworks": ["Next.js", "React"],
-    "hasWorkflows": true,
-    "workflowCount": 3
-  },
-  "activity": {
-    "commitCount30d": 42,
-    "commitCount90d": 120,
-    "commitCount180d": 250,
-    "lastCommitAt": "2026-07-24T18:00:00Z"
-  },
-  "strengths": [
-    "Comprehensive automated test suite",
-    "Active maintainer community"
-  ],
-  "risks": [
-    {
-      "code": "low_test_coverage",
-      "title": "Moderate Test Coverage",
-      "severity": "low",
-      "description": "Some internal helper functions lack isolated unit tests.",
-      "impact": "Potential edge case bugs in rare error handlers."
-    }
-  ],
-  "questionsBeforeAdoption": [
-    "What is the long-term maintenance roadmap?"
-  ],
-  "confidence": "high",
-  "verification": {
-    "status": "verified",
-    "network": "arc-testnet",
-    "proofs": [
-      {
-        "receiptId": "rcpt_01h9a8b7",
-        "txHash": "0xabcd1234ef567890...",
-        "status": "verified",
-        "explorerUrl": "https://testnet.arcscan.app/tx/0xabcd1234ef567890..."
-      }
-    ]
-  },
-  "generatedAt": "2026-07-24T21:05:00.000Z"
-}
-```
-
----
-
-## Error Handling Schema
-
-All error responses from Machine API v1 follow a standard structure:
+All errors use:
 
 ```json
 {
   "error": {
-    "code": "quote_expired",
-    "message": "The quote has expired. Please request a new quote.",
-    "retryable": false,
+    "code": "provider_unavailable",
+    "message": "Required workflow services are temporarily unavailable.",
+    "retryable": true,
     "requestId": "req_8f12a45b7e90"
   }
 }
 ```
 
-### Common Error Codes
+The SDK exposes these fields through `AgentCommerceApiError`.
 
-| Code | HTTP Status | Description |
-| :--- | :--- | :--- |
-| `credential_missing` | 401 | Bearer credential is missing or invalid |
-| `idempotency_key_missing` | 400 | Required `Idempotency-Key` header is missing |
-| `idempotency_conflict` | 409 | The key is already bound to a different request |
-| `idempotency_in_progress` | 409 | An identical mutation with this key is still running; retry later |
-| `idempotency_store_unavailable` | 503 | Durable idempotency storage is unavailable; no mutation was started |
-| `invalid_repository` | 400 | Malformed repository or JSON input |
-| `credential_revoked` | 401 | The API key has been revoked |
-| `payment_required` | 402 | Payment transaction hash missing for paid quote |
-| `payment_invalid` | 400 | Invalid transaction hash or unconfirmed payment |
-| `scope_denied` | 403 | Credential lacks the required scope for this endpoint |
-| `workflow_disabled` | 403 | Workflow is not enabled under credential policy |
-| `quote_expired` | 404 | Quote is expired or invalid |
-| `quote_already_used` | 409 | Quote has already been executed |
-| `spending_limit_exceeded`| 429 | Daily call limit or wallet spending limit exceeded |
-| `report_not_ready` | 400 | Requested report execution is still running |
-| `provider_unavailable` | 503 | Downstream x402 service is temporarily offline |
+| Code | Typical status | Retry guidance |
+| --- | ---: | --- |
+| `credential_missing` | 401 | Fix or replace the credential |
+| `credential_revoked` | 401 | Rotate the credential |
+| `scope_denied` | 403 | Use the correct Machine credential |
+| `workflow_disabled` | 403 | Update the agent workflow policy |
+| `invalid_request` | 400 | Correct structured workflow input |
+| `invalid_repository` | 400 | Correct the public GitHub reference |
+| `idempotency_key_missing` | 400 | Add and persist a key |
+| `idempotency_conflict` | 409 | Use the original body or a new operation key |
+| `idempotency_in_progress` | 409 | Retry the same body and key |
+| `idempotency_store_unavailable` | 503 | Retry the same body and key later |
+| `payment_required` | 402 | Submit the exact quoted Arc transaction |
+| `payment_invalid` | 400 | Do not retry until transaction details are fixed |
+| `spending_limit_exceeded` | 429 | Wait for policy window or adjust policy |
+| `report_not_ready` | 400 | Poll the run before retrieving the report |
+| `provider_unavailable` | 503 | Retry according to `retryable` |
+| `internal_error` | 500 | Log `requestId`; retry only if marked retryable |
 
----
+## Tenant isolation
 
-## SDK Code Examples & OpenAPI Spec
-
-- **OpenAPI 3.0.3 Spec:** [public/openapi/agent-commerce-v1.json](file:///home/mioku/Agent-Commerce/public/openapi/agent-commerce-v1.json)
-- **TypeScript Example Script:** [examples/agent-api/typescript.ts](file:///home/mioku/Agent-Commerce/examples/agent-api/typescript.ts)
-- **Python Example Script:** [examples/agent-api/python.py](file:///home/mioku/Agent-Commerce/examples/agent-api/python.py)
+Quotes, runs, and reports are bound to the exact Machine credential that
+created them. Another credential receives `404`, even if it belongs to the same
+owner. Secrets, raw authorization headers, full prompts, and raw provider
+payloads are not returned by public or Machine API report surfaces.

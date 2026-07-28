@@ -33,7 +33,10 @@ import {
   validateHostedWorkflowRequest,
 } from "../../../../../lib/agent/hosted-workflows.ts";
 import { previewHostedWorkflow } from "../../../../../lib/agent/hosted-jobs.ts";
-import { getHostedWorkflowTemplate } from "../../../../../lib/agent/workflow-templates.ts";
+import {
+  getHostedWorkflowTemplate,
+  isCuratedHostedWorkflowType,
+} from "../../../../../lib/agent/workflow-templates.ts";
 import {
   createHostedWorkflowQuote,
   HostedCheckoutPolicyError,
@@ -195,7 +198,7 @@ export async function POST(request: NextRequest) {
     body = (await request.json()) as Record<string, unknown>;
   } catch {
     return createMachineErrorResponse(
-      "invalid_repository",
+      "invalid_request",
       "Invalid JSON request body.",
       400,
     );
@@ -272,7 +275,7 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  if (!isHostedWorkflowType(workflow)) {
+  if (!isHostedWorkflowType(workflow) || !isCuratedHostedWorkflowType(workflow)) {
     return createMachineErrorResponse(
       "workflow_disabled",
       `Unsupported workflow type '${workflow}'.`,
@@ -300,6 +303,7 @@ export async function POST(request: NextRequest) {
 
   let inputText = "";
   let repositoryRef = null;
+  let marketSymbol: unknown = null;
 
   if (workflow === "github_due_diligence") {
     const rawRepo =
@@ -327,10 +331,15 @@ export async function POST(request: NextRequest) {
       return createMachineErrorResponse("invalid_repository", msg, 400);
     }
   } else {
+    const inputObject =
+      body.input && typeof body.input === "object" && !Array.isArray(body.input)
+        ? (body.input as Record<string, unknown>)
+        : {};
     inputText =
-      (body.input as Record<string, unknown>)?.text as string ||
+      inputObject.text as string ||
       (body.text as string) ||
       "";
+    marketSymbol = inputObject.marketSymbol ?? body.marketSymbol ?? null;
   }
 
   let workflowRequest;
@@ -339,12 +348,15 @@ export async function POST(request: NextRequest) {
       workflowType: workflow,
       inputText,
       repositoryUrl: repositoryRef?.canonicalUrl,
+      marketSymbol,
       task: template.task,
       budgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
     });
   } catch (err) {
     return createMachineErrorResponse(
-      "invalid_repository",
+      workflow === "github_due_diligence"
+        ? "invalid_repository"
+        : "invalid_request",
       err instanceof Error ? err.message : "Invalid workflow request input.",
       400,
     );

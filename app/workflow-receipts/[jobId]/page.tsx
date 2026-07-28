@@ -47,7 +47,7 @@ export default async function WorkflowReceiptPage({ params }: PageProps) {
               <div className="rounded-md bg-secondary/30 p-3 text-xs"><p>Requested by</p><p className="mt-1 break-all font-mono">{payment.requesterWallet}</p></div>
               {Number(payment.creditAmountUsdc) > 0 ? <div className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-sm"><p className="font-medium">Workflow credit · {payment.creditAmountUsdc} USDC</p><p className="mt-1 text-muted-foreground">{payment.failureReason}</p></div> : null}
               {payment.transactionHash ? <div><p className="break-all font-mono text-xs">{payment.transactionHash}</p>{payment.transactionUrl ? <Button asChild size="sm" variant="outline" className="mt-3"><a href={payment.transactionUrl} target="_blank" rel="noreferrer">User payment transaction <ExternalLink /></a></Button> : null}</div> : <p className="text-sm text-muted-foreground">Sponsored checkout used no user USDC transaction.</p>}
-            </> : <p className="text-sm text-muted-foreground">Legacy sponsored workflow; no Phase 26 checkout record exists.</p>}
+            </> : <p className="text-sm text-muted-foreground">Legacy sponsored workflow; no checkout record exists.</p>}
           </CardContent>
         </Card>
 

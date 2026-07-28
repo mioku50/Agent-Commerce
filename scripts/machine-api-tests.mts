@@ -985,6 +985,16 @@ async function testWorkflowsEndpoint() {
     assert.equal(ghWf.arc.network, "arc-testnet");
     assert.equal(ghWf.arc.asset, "USDC");
     assert.deepEqual(ghWf.inputSchema.required, ["repository"]);
+    assert.equal(
+      json.workflows.some((workflow: any) => workflow.id === "custom_task"),
+      false,
+      "Machine discovery must expose curated workflows only",
+    );
+    assert.equal(
+      json.workflows.some((workflow: any) => String(workflow.id).startsWith("seller:")),
+      false,
+      "Seller workflows must remain outside the core Machine API catalog",
+    );
   }
 
   console.log("✔ GET /api/agent/v1/workflows tests passed.");
@@ -1034,6 +1044,26 @@ async function testQuotesEndpoint() {
     assert.equal(res.status, 400);
     const json = await res.json();
     assert.equal(json.error.code, "invalid_repository");
+  }
+
+  // Hidden legacy custom execution is not part of the curated Machine API.
+  {
+    const req = new NextRequest("http://localhost:3000/api/agent/v1/quotes", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${fullCred.token}`,
+        "Idempotency-Key": `ik-custom-${Date.now()}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        workflow: "custom_task",
+        input: { text: "A sufficiently long custom workflow request." },
+      }),
+    });
+    const res = await quotesPOST(req);
+    assert.equal(res.status, 400);
+    const json = await res.json();
+    assert.equal(json.error.code, "workflow_disabled");
   }
 
   {

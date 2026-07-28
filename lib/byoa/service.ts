@@ -273,11 +273,11 @@ export async function createRegisteredAgent(input: {
   agentWallet: unknown;
 }) {
   if (!isCanaryOwnerAllowed(input.ownerWallet)) {
-    throw new ByoaError("BYOA registration is restricted to the canary allowlist.", "registration_closed", 403);
+    throw new ByoaError("Agent registration is restricted to the private access list.", "registration_closed", 403);
   }
   const agentWallet = asAddress(input.agentWallet, "Agent wallet");
   if (!isCanaryAgentAllowed(agentWallet)) {
-    throw new ByoaError("Agent wallet is not on the BYOA canary allowlist.", "agent_not_allowlisted", 403);
+    throw new ByoaError("Agent wallet is not on the private access list.", "agent_not_allowlisted", 403);
   }
   const publicId = `agt_${randomBytes(10).toString("hex")}`;
   const client = getByoaClient();
@@ -388,7 +388,7 @@ async function insertChallenge(input: {
 export async function createOwnerSessionChallenge(walletValue: unknown, origin: string) {
   const wallet = asAddress(walletValue, "Owner wallet");
   if (!isCanaryOwnerAllowed(wallet)) {
-    throw new ByoaError("BYOA management is restricted to the canary allowlist.", "registration_closed", 403);
+    throw new ByoaError("Agent management is restricted to the private access list.", "registration_closed", 403);
   }
   return insertChallenge({ wallet, action: "owner_session", origin });
 }
@@ -400,7 +400,7 @@ export async function createAgentBindingChallenge(ownerWallet: Address, agentId:
   }
   const wallet = getAddress(agent.agent_wallet);
   if (!isCanaryAgentAllowed(wallet)) {
-    throw new ByoaError("Agent wallet is not on the BYOA canary allowlist.", "agent_not_allowlisted", 403);
+    throw new ByoaError("Agent wallet is not on the private access list.", "agent_not_allowlisted", 403);
   }
   return insertChallenge({
     wallet,
@@ -446,7 +446,7 @@ export async function consumeWalletChallenge(input: {
 export async function activateAgentWallet(ownerWallet: Address, agentId: string) {
   const agent = await getOwnerAgent(ownerWallet, agentId);
   if (!agent.agent_wallet || !isAddress(agent.agent_wallet) || !isCanaryAgentAllowed(getAddress(agent.agent_wallet))) {
-    throw new ByoaError("Agent wallet is not eligible for canary activation.", "agent_not_allowlisted", 403);
+    throw new ByoaError("Agent wallet is not eligible for private-access activation.", "agent_not_allowlisted", 403);
   }
   const { data, error } = await getByoaClient()
     .from("byoa_agents")

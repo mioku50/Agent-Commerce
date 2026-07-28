@@ -68,8 +68,8 @@ export default function DeveloperToolsPage() {
           <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">Developer Tools</h1>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
             The browser-hosted workflow is the primary product. These tools keep
-            the original API marketplace, planner inspection, wallet funding,
-            and local CLI available for developers who want direct control.
+            the underlying service registry, planner inspection, wallet funding,
+            and local CLI available for developers who need direct control.
           </p>
         </div>
       </section>

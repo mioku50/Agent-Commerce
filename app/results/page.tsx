@@ -26,7 +26,7 @@ import {
   hasActiveResultsFilters,
   parseResultsFilters,
 } from "@/lib/agent/results-filters";
-import { hostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
+import { curatedHostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
 
 export const metadata = {
   title: "Reports | Arc Agent Commerce",
@@ -117,7 +117,7 @@ export default async function ResultsPage({ searchParams }: ResultsPageProps) {
                 <span className="font-medium">Workflow</span>
                 <select name="workflow" defaultValue={filters.workflowType ?? "all"} className="h-10 rounded-md border bg-background px-3 text-sm">
                   <option value="all">All workflows</option>
-                  {hostedWorkflowTemplates.map((workflow) => <option key={workflow.value} value={workflow.value}>{workflow.label}</option>)}
+                  {curatedHostedWorkflowTemplates.map((workflow) => <option key={workflow.value} value={workflow.value}>{workflow.label}</option>)}
                 </select>
               </label>
               <label className="grid gap-2 text-sm">

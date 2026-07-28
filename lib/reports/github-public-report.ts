@@ -9,6 +9,7 @@ import {
   type GitHubDueDiligenceAssessment,
   type GitHubCategoryAssessment,
   type DueDiligenceOverallStatus,
+  type GitHubDueDiligenceVerdict,
   type RiskSeverity,
   LIMITATIONS_DISCLAIMER,
 } from "../agent/github-due-diligence.ts";
@@ -60,6 +61,7 @@ export interface GitHubPublicReport {
     canonicalUrl: string;
   } | null;
   overallStatus: DueDiligenceOverallStatus;
+  verdict: GitHubDueDiligenceVerdict | null;
   executiveSummary: string;
   confidence: DataConfidence;
   generatedAt: string;
@@ -213,11 +215,18 @@ export function buildGitHubPublicReport(
 ): GitHubPublicReport {
   const snapshot = input.snapshot;
   const assessment =
-    input.assessment ??
-    (snapshot ? analyzeGitHubDueDiligence(snapshot) : null);
+    input.assessment?.verdict
+      ? input.assessment
+      : snapshot
+        ? analyzeGitHubDueDiligence(snapshot)
+        : input.assessment;
 
   const globalConfidence: DataConfidence =
-    !snapshot || snapshot.source?.upstreamStatus === "fallback" ? "low" : "high";
+    !snapshot ||
+    snapshot.source?.upstreamStatus === "fallback" ||
+    snapshot.source?.partial
+      ? "low"
+      : "high";
 
   // 1. Repository Info & Purpose
   const repoFullName =
@@ -494,6 +503,7 @@ export function buildGitHubPublicReport(
     status: input.status || "completed",
     repository,
     overallStatus,
+    verdict: assessment?.verdict ?? null,
     executiveSummary,
     confidence: globalConfidence,
     generatedAt,
@@ -576,6 +586,13 @@ export function formatGitHubPublicReportAsMarkdown(
 **Generated At:** ${report.generatedAt}
 
 ---
+
+## Verdict
+${report.verdict ? `**${report.verdict.label}** (\`${report.verdict.code}\`, ${report.verdict.confidence} confidence)
+
+${report.verdict.summary}
+
+${report.verdict.reasons.map((reason) => `- ${reason}`).join("\n")}` : "A verdict could not be produced from the available evidence."}
 
 ## Executive Summary
 ${report.executiveSummary}

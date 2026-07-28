@@ -149,8 +149,8 @@ export function MachineCredentialsClient() {
     return (
       <div className="rounded-md border p-4 text-sm">
         <p className="font-medium">A verified owner session is required.</p>
-        <p className="mt-1 text-muted-foreground">Connect and verify the owner wallet on the Agents page first.</p>
-        <Button asChild className="mt-3"><Link href="/console/agents">Open Agents</Link></Button>
+        <p className="mt-1 text-muted-foreground">Connect and verify the owner wallet in Agent Credentials first.</p>
+        <Button asChild className="mt-3"><Link href="/console/agents">Open Agent Credentials</Link></Button>
       </div>
     );
   }
@@ -178,7 +178,11 @@ export function MachineCredentialsClient() {
       </div>
 
       {agents.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Register and activate an agent before creating a Machine API credential.</p>
+        <div className="rounded-md border p-4 text-sm">
+          <p className="font-medium">Create an active agent namespace first.</p>
+          <p className="mt-1 text-muted-foreground">The namespace owns workflow policy, limits, and all quotes, runs, and reports created by its credential.</p>
+          <Button asChild className="mt-3" variant="outline"><Link href="/console/agents">Register agent namespace</Link></Button>
+        </div>
       ) : (
         <Button onClick={() => void createCredential()} disabled={busy || selectedAgent?.status !== "active"}>
           <KeyRound className="mr-2 size-4" /> Create Machine API Credential

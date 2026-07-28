@@ -226,6 +226,129 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json(sellerReport, { headers: { "Cache-Control": "no-store" } });
   }
 
+  if (job.workflow_type !== "github_due_diligence") {
+    const structured = job.structured_result as any;
+    const proofs = (jobView?.proofs ?? []).map((proof) => ({
+      receiptId: proof.receiptId,
+      txHash: proof.transactionHash,
+      status: proof.status,
+      explorerUrl: proof.transactionUrl,
+    }));
+    const receipts = (jobView?.services ?? []).flatMap((service) =>
+      service.receiptId
+        ? [{
+            receiptId: service.receiptId,
+            serviceSlug: service.serviceSlug,
+            serviceName: service.serviceName,
+            priceUsdc: service.priceUsdc,
+            status: service.status,
+          }]
+        : [],
+    );
+    const verifiedSteps = proofs.filter(
+      (proof) => proof.status === "verified" && Boolean(proof.txHash),
+    ).length;
+    const requiredSteps = receipts.length || Math.max(proofs.length, 1);
+    const hasFailedProof = proofs.some((proof) => proof.status === "failed");
+    const verificationStatus = hasFailedProof
+      ? "verification_failed"
+      : verifiedSteps >= requiredSteps
+        ? "verified"
+        : verifiedSteps > 0
+          ? "partially_verified"
+          : "verification_pending";
+    const genericReport = {
+      reportId: job.id,
+      workflow: job.workflow_type,
+      workflowName:
+        (job.planner_snapshot as any)?.workflowLabel ?? job.workflow_type,
+      status:
+        job.status === "completed" && structured?.completedWithWarnings
+          ? "completed_with_warnings"
+          : job.status,
+      summary:
+        structured?.summary ??
+        (job.status === "failed"
+          ? "Workflow execution failed safely."
+          : "Workflow report completed."),
+      keyFindings: Array.isArray(structured?.keyFindings)
+        ? structured.keyFindings
+        : [],
+      input: {
+        preview: job.input_preview,
+        sha256: job.input_hash,
+      },
+      result: structured?.workflowData ?? null,
+      services: Array.isArray(structured?.apiResults)
+        ? structured.apiResults.map((result: any) => ({
+            serviceSlug: result.serviceSlug,
+            serviceName: result.serviceName,
+            status: result.status,
+            amountUsdc: result.amountUsdc,
+            response: result.response,
+            error: result.error,
+          }))
+        : [],
+      spentUsdc: job.spent_usdc,
+      receipts,
+      verification: {
+        status: verificationStatus,
+        network: "arc-testnet" as const,
+        proofs,
+        verifiedSteps,
+        requiredSteps,
+      },
+      generatedAt:
+        structured?.generatedAt ??
+        job.completed_at ??
+        job.updated_at ??
+        job.created_at,
+    };
+    const accept = request.headers.get("accept") ?? "";
+    if (accept.toLowerCase().includes("text/markdown")) {
+      const findings = genericReport.keyFindings.length
+        ? genericReport.keyFindings.map((finding: string) => `- ${finding}`).join("\n")
+        : "- No additional findings.";
+      const proofLines = proofs.length
+        ? proofs
+            .map((proof) =>
+              `- ${proof.txHash ? `\`${proof.txHash}\`` : `Receipt \`${proof.receiptId}\``} (${proof.status})${proof.explorerUrl ? ` — [Arcscan](${proof.explorerUrl})` : ""}`,
+            )
+            .join("\n")
+        : "- No Arc proof metadata recorded.";
+      return new NextResponse(
+        [
+          `# ${genericReport.workflowName}`,
+          "",
+          `**Report ID:** \`${genericReport.reportId}\`  `,
+          `**Status:** \`${genericReport.status}\`  `,
+          `**Generated At:** ${genericReport.generatedAt}`,
+          "",
+          "## Summary",
+          genericReport.summary,
+          "",
+          "## Key Findings",
+          findings,
+          "",
+          "## Arc Verification",
+          `Status: \`${genericReport.verification.status}\``,
+          "",
+          proofLines,
+          "",
+        ].join("\n"),
+        {
+          headers: {
+            "Content-Type": "text/markdown; charset=utf-8",
+            "Cache-Control": "no-store",
+          },
+        },
+      );
+    }
+    return NextResponse.json(genericReport, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
   const report = buildReportFromJob(job, jobView);
 
   // Content negotiation (Accept header)

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, LogIn, LogOut, Wrench } from "lucide-react";
+import { Menu, LogOut, Wrench } from "lucide-react";
 import { logout } from "@/app/actions";
 import { ActivityDropdown } from "@/components/activity/ActivityDropdown";
 import { Button } from "@/components/ui/button";
@@ -42,7 +42,7 @@ export function Topbar({
               </span>
               <span className="mt-1 inline-flex max-w-full items-center gap-2 text-xs text-muted-foreground">
                 <span className="truncate">
-                  {isConsole ? "Developer & Operator tools" : "Hosted paid API workflows"}
+                  {isConsole ? "Developer & Operator tools" : "Verifiable paid workflows"}
                 </span>
                 {isConsole ? (
                   <span className="hidden rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 font-semibold text-amber-300 sm:inline-flex">
@@ -75,14 +75,7 @@ export function Topbar({
                     Logout
                   </Button>
                 </form>
-              ) : (
-                <Button asChild size="sm" variant="outline" className="hidden lg:inline-flex">
-                  <Link href="/login">
-                    <LogIn />
-                    Seller Login
-                  </Link>
-                </Button>
-              )}
+              ) : null}
             </>
           ) : (
             <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">

@@ -15,6 +15,22 @@ export const HOSTED_WORKFLOW_TYPES = [
 
 export type HostedWorkflowType = (typeof HOSTED_WORKFLOW_TYPES)[number];
 
+export const CURATED_HOSTED_WORKFLOW_TYPES = [
+  "github_due_diligence",
+  "market_context",
+  "sentiment_tone",
+  "builder_update",
+] as const satisfies readonly HostedWorkflowType[];
+
+export type CuratedHostedWorkflowType =
+  (typeof CURATED_HOSTED_WORKFLOW_TYPES)[number];
+
+export function isCuratedHostedWorkflowType(
+  value: string,
+): value is CuratedHostedWorkflowType {
+  return (CURATED_HOSTED_WORKFLOW_TYPES as readonly string[]).includes(value);
+}
+
 export type HostedWorkflowTemplate = {
   value: HostedWorkflowType;
   label: string;
@@ -224,7 +240,10 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
   },
 ];
 
+export const curatedHostedWorkflowTemplates = hostedWorkflowTemplates.filter(
+  (template) => isCuratedHostedWorkflowType(template.value),
+);
+
 export function getHostedWorkflowTemplate(type: HostedWorkflowType) {
   return hostedWorkflowTemplates.find((template) => template.value === type);
 }
-

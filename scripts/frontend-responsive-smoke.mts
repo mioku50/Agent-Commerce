@@ -56,7 +56,8 @@ try {
   assert.equal(await page.evaluate(() => document.activeElement?.id), "hosted-input");
 
   await page.goto(`${baseUrl()}/workflows`, { waitUntil: "load" });
-  await page.locator('a[href="/agent-runner?workflow=custom"]').waitFor();
+  assert.equal(await page.locator('a[href="/agent-runner?workflow=custom"]').count(), 0);
+  await page.locator('a[href="/agent-runner?workflow=github"]').waitFor();
   const provider = page.locator('[data-provider-type="live_provider"]').first();
   await provider.getByText("Live Provider · GitHub API", { exact: true }).waitFor();
   await provider.getByText("USDC pays Arc Agent Commerce", { exact: false }).waitFor();
@@ -88,8 +89,9 @@ try {
   await desktopSidebar.getByRole("link", { name: "Reports", exact: true }).waitFor();
 
   await page.goto(`${baseUrl()}/console`, { waitUntil: "load" });
-  await desktopSidebar.getByRole("link", { name: "Services / Seller", exact: true }).scrollIntoViewIfNeeded();
-  await desktopSidebar.getByRole("link", { name: "Services / Seller", exact: true }).waitFor();
+  await desktopSidebar.getByRole("link", { name: "Operations", exact: true }).scrollIntoViewIfNeeded();
+  await desktopSidebar.getByRole("link", { name: "Operations", exact: true }).waitFor();
+  assert.equal(await desktopSidebar.getByRole("link", { name: "Services / Seller", exact: true }).count(), 0);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${baseUrl()}/`, { waitUntil: "load" });
@@ -100,7 +102,7 @@ try {
   await page.waitForURL(`${baseUrl()}/results`);
   assert.equal(await mobileSidebar.getAttribute("aria-hidden"), "true");
 
-  console.log("[frontend-responsive-smoke] passed: deep links, query-backed Results controls, helper/requester/provider copy, keyboard labels, desktop/125%/150%/tablet/mobile overflow, scrollable console links, and mobile close-on-navigation");
+  console.log("[frontend-responsive-smoke] passed: curated deep links, query-backed Results controls, helper/requester/provider copy, keyboard labels, desktop/125%/150%/tablet/mobile overflow, operations navigation, and mobile close-on-navigation");
 } finally {
   await browser.close();
 }

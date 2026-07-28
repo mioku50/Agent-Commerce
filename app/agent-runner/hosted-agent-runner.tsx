@@ -24,7 +24,7 @@ import {
 } from "@/lib/agent/hosted-ui";
 import {
   getHostedWorkflowTemplate,
-  hostedWorkflowTemplates,
+  curatedHostedWorkflowTemplates,
 } from "@/lib/agent/workflow-templates";
 import { parseGitHubRepositoryInput } from "@/lib/providers/github-repository-ref";
 import type {
@@ -51,7 +51,10 @@ export function HostedAgentRunner({
 }) {
   const router = useRouter();
   const wallet = useArcWallet();
-  const initial = getHostedWorkflowTemplate(initialWorkflowType) ?? hostedWorkflowTemplates[0];
+  const initial =
+    curatedHostedWorkflowTemplates.find(
+      (workflow) => workflow.value === initialWorkflowType,
+    ) ?? curatedHostedWorkflowTemplates[0];
   const [workflowType, setWorkflowType] = useState<HostedWorkflowType>(initial.value);
   const [task, setTask] = useState(initial.task);
   const [inputText, setInputText] = useState(initialRepository ?? "");
@@ -99,7 +102,10 @@ export function HostedAgentRunner({
   }
 
   function selectWorkflow(value: HostedWorkflowType) {
-    const workflow = getHostedWorkflowTemplate(value) ?? hostedWorkflowTemplates[0];
+    const workflow =
+      curatedHostedWorkflowTemplates.find(
+        (template) => template.value === value,
+      ) ?? curatedHostedWorkflowTemplates[0];
     setWorkflowType(workflow.value);
     setTask(workflow.task);
     invalidatePlan();
@@ -243,7 +249,7 @@ export function HostedAgentRunner({
                 onChange={(event) => selectWorkflow(event.target.value as HostedWorkflowType)}
                 className="h-10 rounded-md border bg-background px-3 text-sm"
               >
-                {hostedWorkflowTemplates.map((workflow) => (
+                {curatedHostedWorkflowTemplates.map((workflow) => (
                   <option key={workflow.value} value={workflow.value}>{workflow.label}</option>
                 ))}
               </select>
@@ -576,4 +582,3 @@ export function HostedAgentRunner({
     </main>
   );
 }
-

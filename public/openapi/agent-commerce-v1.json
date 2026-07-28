@@ -2,12 +2,12 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Arc Agent Commerce Machine API",
-    "version": "1.0.0",
-    "description": "Hosted AI Agent Commerce Machine API v1 on Arc Testnet. Enables external autonomous AI agents to discover workflows, obtain binding quotes, launch sponsored or paid runs, poll execution status, and retrieve structured verified JSON reports with Arc proof trails."
+    "version": "1.1.0",
+    "description": "Arc Agent Commerce Machine API v1 for curated verifiable paid workflows on Arc Testnet. External agents can discover workflows, obtain immutable quotes, launch idempotent sponsored or paid runs, poll status, and retrieve structured reports with Arc proof trails."
   },
   "servers": [
     {
-      "url": "https://agent-commerce.vercel.app",
+      "url": "https://agent-commerce-six.vercel.app",
       "description": "Arc Testnet Production Server"
     },
     {
@@ -375,7 +375,7 @@
           },
           "estimatedUsdc": {
             "type": "number",
-            "example": 0.05
+            "example": 0.002
           },
           "inputSchema": {
             "type": "object",
@@ -391,7 +391,7 @@
               "chainId": { "type": "number", "example": 5042002 },
               "network": { "type": "string", "example": "arc-testnet" },
               "asset": { "type": "string", "example": "USDC" },
-              "tokenAddress": { "type": "string", "example": "0x36F174a7A8dCA44E72dF88fE8C349C3eDFAe61A7" }
+              "tokenAddress": { "type": "string", "example": "0x3600000000000000000000000000000000000000" }
             }
           }
         }
@@ -438,7 +438,7 @@
           },
           "totalUsdc": {
             "type": "number",
-            "example": 0.05
+            "example": 0.002
           },
           "sponsored": {
             "type": "boolean",
@@ -577,8 +577,42 @@
             }
           },
           "status": { "type": "string", "example": "completed" },
+          "verdict": {
+            "type": "object",
+            "nullable": true,
+            "required": ["code", "label", "confidence", "summary", "reasons", "blockingFindings", "evidenceCoverage"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": ["proceed_with_standard_review", "proceed_with_conditions", "pause_for_review", "insufficient_evidence"]
+              },
+              "label": { "type": "string", "example": "Proceed with standard review" },
+              "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+              "summary": { "type": "string" },
+              "reasons": { "type": "array", "items": { "type": "string" } },
+              "blockingFindings": { "type": "array", "items": { "type": "string" } },
+              "evidenceCoverage": {
+                "type": "object",
+                "properties": {
+                  "assessedCategories": { "type": "number" },
+                  "highConfidenceCategories": { "type": "number" },
+                  "totalCategories": { "type": "number" },
+                  "ratio": { "type": "number" }
+                }
+              }
+            }
+          },
           "executiveSummary": { "type": "string", "example": "Repository due diligence completed with strong governance and regular commit activity." },
-          "projectPurpose": { "type": "string", "example": "Hosted AI Agent Commerce layer on Arc Testnet." },
+          "projectPurpose": {
+            "type": "object",
+            "properties": {
+              "summary": { "type": "string" },
+              "primaryInterface": { "type": "string" },
+              "developmentStage": { "type": "string" },
+              "targetUsers": { "type": "string" },
+              "capabilities": { "type": "array", "items": { "type": "string" } }
+            }
+          },
           "technology": {
             "type": "object",
             "properties": {

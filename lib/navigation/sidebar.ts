@@ -31,10 +31,11 @@ export const consoleSidebarNavigation = [
     label: "Agent Developer Console",
     items: [
       { href: "/console", label: "Console Home", icon: "console" },
-      { href: "/console/agents", label: "Agents", icon: "my-agents" },
-      { href: "/console/seller", label: "Services / Seller", icon: "seller" },
-      { href: "/console/developer-tools", label: "Developer Tools", icon: "tools" },
+      { href: "/console/agent-api", label: "Machine API", icon: "agent" },
+      { href: "/console/agents", label: "Agent Credentials", icon: "my-agents" },
+      { href: "/console/operations", label: "Operations", icon: "activity" },
       { href: "/console/audit", label: "Audit & Verification", icon: "proof" },
+      { href: "/console/developer-tools", label: "Developer Tools", icon: "tools" },
     ],
   },
 ] as const satisfies ReadonlyArray<{

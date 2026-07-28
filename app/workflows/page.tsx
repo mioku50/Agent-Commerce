@@ -14,7 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { hostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
+import { curatedHostedWorkflowTemplates } from "@/lib/agent/workflow-templates";
 import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
 import { ServicePresentation } from "@/components/services/service-presentation";
 
@@ -62,7 +62,7 @@ export default function WorkflowsPage() {
       </section>
 
       <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6 lg:grid-cols-2">
-        {hostedWorkflowTemplates.map((template) => (
+        {curatedHostedWorkflowTemplates.map((template) => (
           <Card key={template.value} className="command-card rounded-lg">
             <CardHeader>
               <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
