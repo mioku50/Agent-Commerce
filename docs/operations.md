@@ -14,8 +14,11 @@ payloads, and raw errors.
 
 ## Monitor
 
-Vercel invokes `/api/internal/operations/monitor` every ten minutes with
-`CRON_SECRET`. The route returns `404` to unauthorized requests.
+Vercel invokes `/api/internal/operations/monitor` daily at 04:07 UTC with
+`CRON_SECRET`, which is the maximum native cadence supported by the current
+Vercel plan. The dashboard calculates a fresh snapshot on every request. The
+same monitor endpoint can be called more frequently by an external scheduler
+without a code change. The route returns `404` to unauthorized requests.
 
 Threshold alerts are emitted as structured Vercel error logs. If
 `OPERATIONS_ALERT_WEBHOOK_URL` is configured, the same aggregate alert payload
