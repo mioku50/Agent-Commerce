@@ -18,7 +18,7 @@ assert.match(workflow, /finalize_seller_workflow_success_v1/);
 assert.match(workflow, /finalizeHostedWorkflowUserPayment/);
 const jobRunner = workflow.slice(workflow.indexOf("export async function runSellerAgentJob"));
 assert.ok(
-  jobRunner.indexOf("await claimSellerJob") < jobRunner.indexOf('service.status !== "active"'),
+  jobRunner.indexOf("await claimSellerJob") < jobRunner.indexOf("!isSellerServiceRunnable(service)"),
   "A paid seller job must be claimed before version/status validation so failures enter credit reconciliation",
 );
 assert.match(workflow, /structured_result: null/);

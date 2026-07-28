@@ -1,10 +1,15 @@
 import { getAddress, isAddress } from "viem";
 import {
+  completeSellerOnboarding,
   createSellerService,
   getSellerServiceRowByWorkflowType,
   getOwnedSellerService,
   updateSellerService,
 } from "../lib/seller/marketplace.ts";
+import {
+  checkOwnedSellerServiceAvailability,
+  submitSellerServiceReview,
+} from "../lib/seller/lifecycle.ts";
 
 const sellerAddressValue = process.env.SELLER_ADDRESS?.trim();
 if (!sellerAddressValue || !isAddress(sellerAddressValue)) {
@@ -45,6 +50,10 @@ const serviceInput = {
     required: ["projectName", "updateText"],
     additionalProperties: false,
   },
+  healthCheckInput: {
+    projectName: "Agent Commerce Reference",
+    updateText: "Availability review confirms the production reference seller can issue an exact Arc Testnet x402 challenge.",
+  },
   outputSchema: {
     type: "object",
     properties: {
@@ -59,16 +68,36 @@ const serviceInput = {
   },
 };
 
+await completeSellerOnboarding(ownerWallet, {
+  displayName: "Agent Commerce Reference Seller",
+  termsAccepted: true,
+});
+
 const existing = await getSellerServiceRowByWorkflowType("seller_project_update_intelligence");
+let service;
 if (!existing) {
-  const created = await createSellerService(ownerWallet, { ...serviceInput, status: "draft" });
-  const activated = await updateSellerService(ownerWallet, created.id, serviceInput);
-  if (!activated) throw new Error("Reference seller service activation failed.");
-  console.log(`Reference seller workflow ready: ${activated.publicId} v${activated.serviceVersion}`);
+  service = await createSellerService(ownerWallet, { ...serviceInput, status: "draft" });
 } else {
   const owned = await getOwnedSellerService(ownerWallet, existing.id);
   if (!owned) throw new Error("Reference seller slug is owned by another seller account.");
-  const updated = await updateSellerService(ownerWallet, existing.id, serviceInput);
-  if (!updated) throw new Error("Reference seller service update failed.");
-  console.log(`Reference seller workflow ready: ${updated.publicId} v${updated.serviceVersion}`);
+  service = await updateSellerService(ownerWallet, existing.id, {
+    ...serviceInput,
+    status: owned.reviewStatus === "approved" ? "active" : "draft",
+  });
+  if (!service) throw new Error("Reference seller service update failed.");
 }
+
+if (service.reviewStatus !== "approved") {
+  const review = await submitSellerServiceReview(ownerWallet, service.id);
+  if (!review || review.reviewStatus !== "approved") {
+    throw new Error(`Reference seller review failed (${review?.reason ?? "unknown"}).`);
+  }
+} else {
+  const health = await checkOwnedSellerServiceAvailability(ownerWallet, service.id);
+  if (!health?.healthy) throw new Error(`Reference seller health check failed (${health?.errorCode ?? "unknown"}).`);
+}
+const ready = await getOwnedSellerService(ownerWallet, service.id);
+if (!ready || ready.status !== "active" || ready.reviewStatus !== "approved" || ready.availabilityStatus !== "healthy") {
+  throw new Error("Reference seller service did not pass the P2.2 lifecycle gate.");
+}
+console.log(`Reference seller workflow ready: ${ready.publicId} v${ready.serviceVersion}`);

@@ -28,6 +28,9 @@ type ManagementService = {
   maxResponseSizeBytes: number;
   sellerWallet: string;
   hasAuthorizationSecret: boolean;
+  healthCheckInput: Record<string, unknown>;
+  reviewStatus: "draft" | "pending" | "approved" | "changes_requested" | "rejected";
+  availabilityStatus: "unknown" | "healthy" | "degraded" | "unavailable";
 };
 
 const textareaClass = "min-h-36 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring";
@@ -60,6 +63,7 @@ function defaultState() {
       required: ["result"],
       additionalProperties: false,
     }, null, 2),
+    healthCheckInput: JSON.stringify({ text: "Agent Commerce seller availability check" }, null, 2),
     authorizationSecret: "",
     clearAuthorizationSecret: false,
   };
@@ -98,6 +102,7 @@ export function SellerServiceForm({ serviceId }: { serviceId?: string }) {
           timeoutMs: String(value.timeoutMs),
           inputSchema: JSON.stringify(value.inputSchema, null, 2),
           outputSchema: JSON.stringify(value.outputSchema, null, 2),
+          healthCheckInput: JSON.stringify(value.healthCheckInput, null, 2),
           authorizationSecret: "",
           clearAuthorizationSecret: false,
         });
@@ -137,6 +142,7 @@ export function SellerServiceForm({ serviceId }: { serviceId?: string }) {
         status: serviceId ? form.status : "draft",
         inputSchema: parseSchema(form.inputSchema, "Input schema"),
         outputSchema: parseSchema(form.outputSchema, "Output schema"),
+        healthCheckInput: parseSchema(form.healthCheckInput, "Health check input"),
         fulfillmentUrl: form.fulfillmentUrl,
         timeoutMs: Number(form.timeoutMs),
         maxResponseSizeBytes: service?.maxResponseSizeBytes ?? 262144,
@@ -183,6 +189,8 @@ export function SellerServiceForm({ serviceId }: { serviceId?: string }) {
           <span>Public ID: <code>{service.publicId}</code></span>
           <span>Current immutable version: <strong>v{service.serviceVersion}</strong></span>
           <span>Seller wallet: <code>{service.sellerWallet}</code></span>
+          <span>Review: <strong>{service.reviewStatus}</strong></span>
+          <span>Availability: <strong>{service.availabilityStatus}</strong></span>
         </div>
       ) : (
         <p className="rounded-md border bg-secondary/10 p-4 text-sm text-muted-foreground">The verified owner wallet becomes the seller wallet. New services start as drafts.</p>
@@ -200,7 +208,7 @@ export function SellerServiceForm({ serviceId }: { serviceId?: string }) {
             <div className="grid gap-2"><Label htmlFor="category">Service Category</Label><Input id="category" value={form.category} onChange={(event) => update("category", event.target.value)} required /></div>
             <div className="grid gap-2"><Label>Request Method</Label><Select value={form.method} onValueChange={(value) => update("method", value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="POST">POST</SelectItem><SelectItem value="GET">GET</SelectItem></SelectContent></Select></div>
             <div className="grid gap-2"><Label htmlFor="price">Price in USDC</Label><Input id="price" inputMode="decimal" value={form.priceUsdc} onChange={(event) => update("priceUsdc", event.target.value)} required /></div>
-            <div className="grid gap-2"><Label>Status</Label><Select value={form.status} onValueChange={(value) => update("status", value)} disabled={!serviceId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem><SelectItem value="active">Active</SelectItem><SelectItem value="paused">Paused</SelectItem><SelectItem value="unavailable">Unavailable</SelectItem></SelectContent></Select></div>
+            <div className="grid gap-2"><Label>Status</Label><Select value={form.status} onValueChange={(value) => update("status", value)} disabled={!serviceId}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="draft">Draft</SelectItem>{service?.reviewStatus === "approved" && ["healthy", "degraded"].includes(service.availabilityStatus) ? <SelectItem value="active">Active</SelectItem> : null}<SelectItem value="paused">Paused</SelectItem></SelectContent></Select><p className="text-xs text-muted-foreground">A reviewed, available service may be activated. Configuration changes create a new draft version.</p></div>
           </div>
         </CardContent>
       </Card>
@@ -220,6 +228,7 @@ export function SellerServiceForm({ serviceId }: { serviceId?: string }) {
         <CardContent className="grid gap-4 lg:grid-cols-2">
           <div className="grid gap-2"><Label htmlFor="input-schema">Input JSON Schema</Label><textarea id="input-schema" className={`${textareaClass} min-h-72 font-mono`} value={form.inputSchema} onChange={(event) => update("inputSchema", event.target.value)} spellCheck={false} /></div>
           <div className="grid gap-2"><Label htmlFor="output-schema">Output JSON Schema</Label><textarea id="output-schema" className={`${textareaClass} min-h-72 font-mono`} value={form.outputSchema} onChange={(event) => update("outputSchema", event.target.value)} spellCheck={false} /></div>
+          <div className="grid gap-2 lg:col-span-2"><Label htmlFor="health-input">Health-check JSON input</Label><textarea id="health-input" className={`${textareaClass} min-h-40 font-mono`} value={form.healthCheckInput} onChange={(event) => update("healthCheckInput", event.target.value)} spellCheck={false} /><p className="text-xs text-muted-foreground">Stored with the immutable version and used only for unpaid review and availability preflight. Do not include secrets.</p></div>
         </CardContent>
       </Card>
       <div className="flex flex-wrap justify-end gap-3">

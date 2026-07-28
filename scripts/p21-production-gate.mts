@@ -306,6 +306,7 @@ function fixtureServiceInput(
       required: ["ok"],
       additionalProperties: false,
     },
+    healthCheckInput: { message: `Review the controlled ${scenario} production fixture.` },
     fulfillmentUrl: new URL(
       `/api/reference-seller/p21-negative/${scenario}`,
       baseUrl,
@@ -334,23 +335,21 @@ async function createFixture(
   );
   const id = String(created.body.service?.id ?? "");
   assert(id, "Negative seller fixture creation returned no service ID.");
-  const { authorizationSecret: _secret, ...activeInput } = input;
-  const activated = await requestJson(
+  const reviewed = await requestJson(
     baseUrl,
-    `/api/seller/services/${id}`,
+    `/api/seller/services/${id}/review`,
     {
-      method: "PATCH",
+      method: "POST",
       headers,
-      body: JSON.stringify({ ...activeInput, status: "active" }),
     },
   );
   assert(
-    activated.body.service?.status === "active",
-    "Negative seller fixture did not become active.",
+    reviewed.body.review?.reviewStatus === "approved",
+    "Negative seller fixture did not pass the review preflight.",
   );
   assert(
-    !JSON.stringify(activated.body).includes(authorizationSecret),
-    "Seller service update response exposed its authorization secret.",
+    !JSON.stringify(reviewed.body).includes(authorizationSecret),
+    "Seller review response exposed its authorization secret.",
   );
   return {
     id,

@@ -169,9 +169,17 @@ async function eligibleAgents(workflowType: string, priceUsdc: number, sellerOwn
 
 async function sellerLedgerForJob(jobId: string) {
   const result = await getByoaClient().from("seller_revenue_ledger")
-    .select("id,seller_id,service_id,service_version,quote_id,job_id,receipt_id,gross_amount_usdc,platform_fee_usdc,seller_net_amount_usdc,settlement_status")
+    .select("id,seller_id,service_id,service_version,quote_id,job_id,receipt_id,gross_amount_usdc,platform_fee_usdc,seller_net_amount_usdc,settlement_status,settlement_mode,settlement_reference,destination_wallet")
     .eq("job_id", jobId);
   assert(!result.error, "Unable to verify the seller revenue ledger.");
+  return result.data ?? [];
+}
+
+async function settlementsForLedger(ledgerId: string) {
+  const result = await getByoaClient().from("seller_settlements")
+    .select("id,ledger_id,payment_event_id,settlement_mode,amount_usdc,destination_wallet,gateway_transaction,status,confirmed_at")
+    .eq("ledger_id", ledgerId);
+  assert(!result.error, "Unable to verify direct seller settlement.");
   return result.data ?? [];
 }
 
@@ -186,16 +194,18 @@ async function userPaymentsForJob(jobId: string) {
 async function referenceSellerIdentity(publicServiceId: string) {
   const client = getByoaClient();
   const service = await client.from("store_services")
-    .select("id,seller_id,source_type,status")
+    .select("id,seller_id,source_type,status,review_status,availability_status")
     .eq("public_id", publicServiceId)
     .eq("source_type", "external_seller")
     .maybeSingle();
   assert(!service.error && service.data?.seller_id, "The reference workflow is not linked to a seller account.");
+  assert(service.data.status === "active" && service.data.review_status === "approved" && ["healthy", "degraded"].includes(service.data.availability_status), "The reference service did not pass the P2.2 review and availability gate.");
   const seller = await client.from("seller_accounts")
-    .select("id,owner_wallet,status")
+    .select("id,owner_wallet,status,onboarding_status,settlement_mode")
     .eq("id", service.data.seller_id)
     .maybeSingle();
-  assert(!seller.error && seller.data?.status === "active", "The reference seller account is unavailable.");
+  assert(!seller.error && seller.data?.status === "active" && seller.data.onboarding_status === "active", "The reference seller account is not fully onboarded.");
+  assert(seller.data.settlement_mode === "direct_x402", "The reference seller settlement mode is invalid.");
   return { serviceId: service.data.id as string, sellerId: seller.data.id as string, ownerWallet: seller.data.owner_wallet as Address };
 }
 
@@ -332,21 +342,29 @@ async function run(baseUrl: URL) {
     ]);
     assert(ledger.length === 1, `Expected exactly one seller revenue entry, found ${ledger.length}.`);
     assert(ledger[0].service_version === serviceVersion && ledger[0].receipt_id, "Seller revenue is not linked to the immutable version and receipt.");
-    assert(["earned", "settlement_pending", "settled"].includes(ledger[0].settlement_status), "Seller revenue did not reach an earned state.");
+    assert(ledger[0].settlement_status === "settled" && ledger[0].settlement_mode === "direct_x402", "Seller revenue was not reconciled as a direct x402 settlement.");
+    assert(typeof ledger[0].settlement_reference === "string" && ledger[0].settlement_reference.length > 0, "Seller settlement has no Gateway reference.");
+    assert(String(ledger[0].destination_wallet).toLowerCase() === referenceSeller.ownerWallet.toLowerCase(), "Seller settlement destination does not match the registered wallet.");
     assert(
       Math.abs(Number(ledger[0].gross_amount_usdc) - Number(ledger[0].platform_fee_usdc) - Number(ledger[0].seller_net_amount_usdc)) < 0.0000001,
       "Seller gross, platform fee, and net revenue do not reconcile.",
     );
     assert(payments.length === 1, `Expected exactly one buyer payment record, found ${payments.length}.`);
+    const settlements = await settlementsForLedger(ledger[0].id);
+    assert(settlements.length === 1, `Expected exactly one direct seller settlement, found ${settlements.length}.`);
+    assert(settlements[0].status === "confirmed" && settlements[0].settlement_mode === "direct_x402", "Direct seller settlement is not confirmed.");
+    assert(String(settlements[0].destination_wallet).toLowerCase() === referenceSeller.ownerWallet.toLowerCase(), "Direct settlement destination wallet is invalid.");
 
     const finalReplay = await requestJson(baseUrl, "/api/agent/v1/runs", credentialA.token, runRequest);
     assert((finalReplay.status === 200 || finalReplay.status === 201) && finalReplay.body.runId === runId, "Completed run replay did not return the original run.");
-    const [ledgerAfterReplay, paymentsAfterReplay] = await Promise.all([
+    const [ledgerAfterReplay, paymentsAfterReplay, settlementsAfterReplay] = await Promise.all([
       sellerLedgerForJob(runId),
       userPaymentsForJob(runId),
+      settlementsForLedger(ledger[0].id),
     ]);
     assert(ledgerAfterReplay.length === 1, "Idempotent replay created duplicate seller revenue.");
     assert(paymentsAfterReplay.length === 1, "Idempotent replay created a duplicate buyer payment.");
+    assert(settlementsAfterReplay.length === 1, "Idempotent replay created a duplicate seller settlement.");
     console.log(`[p21-production-smoke] completed report=ok receipt=ok Arc proof=verified ledger=${ledger[0].settlement_status}`);
     console.log("[p21-production-smoke] PASSED: one run, one payment record, one seller revenue entry");
   } finally {

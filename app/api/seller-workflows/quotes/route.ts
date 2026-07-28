@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { optionalRequesterWallet, hostedRequesterFingerprint, validateIdempotencyKey, safeHostedError, getHostedRunnerConfig } from "@/lib/agent/hosted-policy";
-import { getSellerServiceRowByPublicId } from "@/lib/seller/marketplace";
+import { getSellerServiceRowByPublicId, isSellerServiceRunnable } from "@/lib/seller/marketplace";
 import { createSellerWorkflowQuote } from "@/lib/seller/workflow";
 import { HostedCheckoutPolicyError, sponsoredWorkflowAuthorizationMessage } from "@/lib/commerce/workflow-checkout";
 
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Seller workflow was not found." }, { status: 404 });
     }
     const service = await getSellerServiceRowByPublicId(body.serviceId);
-    if (!service || service.status !== "active") {
+    if (!service || !isSellerServiceRunnable(service)) {
       return NextResponse.json({ error: "Seller workflow was not found." }, { status: 404 });
     }
     const idempotencyKey = validateIdempotencyKey(request.headers.get("idempotency-key"));

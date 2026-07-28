@@ -25,6 +25,8 @@ import {
   getSellerMarketplaceClient,
   getSellerServiceRowById,
   getSellerServiceVersion,
+  isSellerAccountRunnable,
+  isSellerServiceRunnable,
   safeSellerResult,
   sellerWorkflowType,
   validateSellerWorkflowInput,
@@ -115,14 +117,14 @@ export async function createSellerWorkflowQuote(input: {
   machineCredentialId?: string;
   ownerWallet?: string;
 }) {
-  if (input.service.status !== "active" || input.service.archived_at) {
+  if (!isSellerServiceRunnable(input.service)) {
     throw new Error("Seller workflow is unavailable.");
   }
   const [version, seller] = await Promise.all([
     getSellerServiceVersion(input.service.id, input.service.service_version),
     getSellerAccountById(input.service.seller_id),
   ]);
-  if (!version || !seller || seller.status !== "active") {
+  if (!version || !seller || !isSellerAccountRunnable(seller)) {
     throw new Error("Seller workflow is unavailable.");
   }
   validateSellerWorkflowInput(input.payload, version.input_schema);
@@ -291,7 +293,7 @@ export async function runSellerAgentJob(jobId: string, payload: unknown) {
     if (!service || !version || !seller || service.seller_id !== quote.seller_id) {
       throw new Error("Immutable seller service version is unavailable.");
     }
-    if (service.status !== "active" || service.archived_at || seller.status !== "active") {
+    if (!isSellerServiceRunnable(service) || !isSellerAccountRunnable(seller)) {
       throw new Error("Seller workflow is paused or unavailable.");
     }
     validateSellerWorkflowInput(payload, version.input_schema);

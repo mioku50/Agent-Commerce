@@ -45,6 +45,7 @@ import {
 import { ARC_TESTNET_CHAIN_ID } from "../../../../../lib/wallet/arc.ts";
 import {
   getSellerServiceRowByWorkflowType,
+  isSellerServiceRunnable,
   isSellerWorkflowType,
 } from "../../../../../lib/seller/marketplace.ts";
 import {
@@ -73,7 +74,7 @@ async function createMachineSellerQuote(input: {
     );
   }
   const service = await getSellerServiceRowByWorkflowType(input.workflow);
-  if (!service || service.status !== "active") {
+  if (!service || !isSellerServiceRunnable(service)) {
     return createMachineErrorResponse("provider_unavailable", "Seller workflow is unavailable.", 503, true);
   }
   const payload = input.body.input;

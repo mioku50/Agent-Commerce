@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireOwnerSession, byoaErrorResponse } from "@/lib/byoa/http";
-import { listSellerRevenue } from "@/lib/seller/marketplace";
+import { listSellerRevenue, listSellerSettlements } from "@/lib/seller/marketplace";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
     const session = requireOwnerSession(request);
+    const [ledger, settlements] = await Promise.all([
+      listSellerRevenue(session.wallet),
+      listSellerSettlements(session.wallet),
+    ]);
     return NextResponse.json(
-      { ledger: await listSellerRevenue(session.wallet) },
+      { ledger, settlements },
       { headers: { "Cache-Control": "no-store" } },
     );
   } catch (error) {

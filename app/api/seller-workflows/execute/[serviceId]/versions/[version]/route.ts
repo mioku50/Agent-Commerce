@@ -7,6 +7,8 @@ import {
   getSellerAccountById,
   getSellerServiceRowByPublicId,
   getSellerServiceVersion,
+  isSellerAccountRunnable,
+  isSellerServiceRunnable,
   safeSellerResult,
   validateSellerWorkflowInput,
   validateSellerWorkflowOutput,
@@ -105,7 +107,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     ) {
       return NextResponse.json({ error: "seller_workflow_not_found" }, { status: 404 });
     }
-    if (service.status !== "active" || service.archived_at) {
+    if (!isSellerServiceRunnable(service)) {
       return NextResponse.json({ error: "seller_service_unavailable" }, { status: 409 });
     }
     const immutableVersion = await getSellerServiceVersion(service.id, serviceVersion);
@@ -113,7 +115,7 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
     if (!immutableVersion) {
       return NextResponse.json({ error: "seller_service_version_mismatch" }, { status: 409 });
     }
-    if (seller?.status !== "active") {
+    if (!seller || !isSellerAccountRunnable(seller)) {
       return NextResponse.json({ error: "seller_service_unavailable" }, { status: 409 });
     }
     validateSellerWorkflowInput(body.input, immutableVersion.input_schema);

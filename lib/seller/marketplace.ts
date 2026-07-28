@@ -14,12 +14,19 @@ import {
 
 export type SellerServiceStatus = "draft" | "active" | "paused" | "unavailable" | "archived";
 export type SellerServiceMethod = "GET" | "POST";
+export type SellerReviewStatus = "draft" | "pending" | "approved" | "changes_requested" | "rejected";
+export type SellerAvailabilityStatus = "unknown" | "healthy" | "degraded" | "unavailable";
 
 export type SellerAccountRow = {
   id: string;
   public_id: string;
   owner_wallet: string;
   status: "active" | "paused";
+  display_name: string | null;
+  onboarding_status: "pending" | "active" | "suspended";
+  terms_accepted_at: string | null;
+  onboarding_completed_at: string | null;
+  settlement_mode: "direct_x402";
   created_at: string;
   updated_at: string;
 };
@@ -47,6 +54,15 @@ export type SellerMarketplaceServiceRow = {
   seller_wallet: string;
   max_timeout_ms: number;
   max_response_size_bytes: number;
+  review_status: SellerReviewStatus;
+  review_submitted_at: string | null;
+  reviewed_at: string | null;
+  review_reason: string | null;
+  availability_status: SellerAvailabilityStatus;
+  last_health_check_at: string | null;
+  last_healthy_at: string | null;
+  consecutive_health_failures: number;
+  health_check_input: Record<string, unknown>;
 };
 
 export type SellerServiceVersionRow = {
@@ -69,6 +85,7 @@ export type SellerServiceVersionRow = {
   expected_asset: string;
   endpoint_auth_scheme: "none" | "bearer";
   endpoint_auth_ciphertext: string | null;
+  health_check_input: Record<string, unknown>;
   created_at: string;
 };
 
@@ -83,6 +100,7 @@ export type SellerServiceInput = {
   status?: SellerServiceStatus;
   inputSchema: JsonSchema;
   outputSchema: JsonSchema;
+  healthCheckInput?: Record<string, unknown>;
   fulfillmentUrl: string;
   timeoutMs: number;
   maxResponseSizeBytes?: number;
@@ -222,7 +240,13 @@ function toPublicWorkflow(row: SellerMarketplaceServiceRow): PublicSellerWorkflo
     category: row.category,
     inputSchema: row.input_schema,
     outputSchema: row.output_schema,
-    availability: row.status === "active" && !row.archived_at ? "available" : "unavailable",
+    availability:
+      row.status === "active" &&
+      row.review_status === "approved" &&
+      ["healthy", "degraded"].includes(row.availability_status) &&
+      !row.archived_at
+        ? "available"
+        : "unavailable",
   };
 }
 
@@ -231,6 +255,9 @@ const SERVICE_COLUMNS = [
   "archived_at", "name", "slug", "short_description", "long_description", "category",
   "method", "price_usdc", "status", "source_type", "input_schema", "output_schema",
   "fulfillment_url", "seller_wallet", "max_timeout_ms", "max_response_size_bytes",
+  "review_status", "review_submitted_at", "reviewed_at", "review_reason",
+  "availability_status", "last_health_check_at", "last_healthy_at",
+  "consecutive_health_failures", "health_check_input",
 ].join(",");
 
 export async function ensureSellerAccount(ownerWallet: Address) {
@@ -245,7 +272,12 @@ export async function ensureSellerAccount(ownerWallet: Address) {
   if (existing.data) return existing.data as SellerAccountRow;
   const created = await client
     .from("seller_accounts")
-    .insert({ owner_wallet: wallet, status: "active" })
+    .insert({
+      owner_wallet: wallet,
+      status: "active",
+      onboarding_status: "pending",
+      settlement_mode: "direct_x402",
+    })
     .select("*")
     .single();
   if (created.error) {
@@ -254,6 +286,89 @@ export async function ensureSellerAccount(ownerWallet: Address) {
     throw new Error("Unable to create seller account.");
   }
   return created.data as SellerAccountRow;
+}
+
+export async function getSellerAccount(ownerWallet: Address) {
+  const seller = await ensureSellerAccount(ownerWallet);
+  return {
+    publicId: seller.public_id,
+    ownerWallet: getAddress(seller.owner_wallet),
+    displayName: seller.display_name,
+    status: seller.status,
+    onboardingStatus: seller.onboarding_status,
+    termsAcceptedAt: seller.terms_accepted_at,
+    onboardingCompletedAt: seller.onboarding_completed_at,
+    settlementMode: seller.settlement_mode,
+  };
+}
+
+export async function completeSellerOnboarding(
+  ownerWallet: Address,
+  input: { displayName: unknown; termsAccepted: unknown },
+) {
+  const seller = await ensureSellerAccount(ownerWallet);
+  if (seller.status !== "active" || seller.onboarding_status === "suspended") {
+    throw new Error("Seller onboarding is suspended.");
+  }
+  if (input.termsAccepted !== true) {
+    throw new Error("Seller terms must be accepted to complete onboarding.");
+  }
+  const displayName = cleanText(input.displayName, "Seller display name", 2, 80);
+  const completedAt = new Date().toISOString();
+  const result = await getSellerMarketplaceClient()
+    .from("seller_accounts")
+    .update({
+      display_name: displayName,
+      onboarding_status: "active",
+      terms_accepted_at: seller.terms_accepted_at ?? completedAt,
+      onboarding_completed_at: seller.onboarding_completed_at ?? completedAt,
+      settlement_mode: "direct_x402",
+    })
+    .eq("id", seller.id)
+    .eq("owner_wallet", seller.owner_wallet)
+    .select("*")
+    .single();
+  if (result.error || !result.data) throw new Error("Unable to complete seller onboarding.");
+  return getSellerAccount(ownerWallet);
+}
+
+function sampleForSchema(schema: JsonSchema, depth = 0): unknown {
+  if (depth > 8) return null;
+  if (Array.isArray(schema.enum) && schema.enum.length > 0) return schema.enum[0];
+  const type = schema.type;
+  if (type === "string") {
+    const minimum = typeof schema.minLength === "number" ? Math.max(1, schema.minLength) : 1;
+    const maximum = typeof schema.maxLength === "number" ? schema.maxLength : 120;
+    return "health-check-input".padEnd(minimum, "x").slice(0, maximum);
+  }
+  if (type === "number" || type === "integer") {
+    const minimum = typeof schema.minimum === "number" ? schema.minimum : 0;
+    return type === "integer" ? Math.ceil(minimum) : minimum;
+  }
+  if (type === "boolean") return true;
+  if (type === "array") return [];
+  if (type === "object" || schema.properties) {
+    const properties = isRecord(schema.properties) ? schema.properties : {};
+    const required = Array.isArray(schema.required)
+      ? schema.required.filter((item): item is string => typeof item === "string")
+      : [];
+    return Object.fromEntries(required.map((key) => [
+      key,
+      isRecord(properties[key]) ? sampleForSchema(properties[key] as JsonSchema, depth + 1) : null,
+    ]));
+  }
+  return null;
+}
+
+function normalizedHealthCheckInput(
+  input: SellerServiceInput,
+): Record<string, unknown> {
+  const candidate = input.healthCheckInput ?? sampleForSchema(input.inputSchema);
+  if (!isRecord(candidate)) throw new Error("Health check input must be a JSON object.");
+  validateSellerWorkflowInput(candidate, input.inputSchema);
+  const serialized = JSON.stringify(candidate);
+  if (serialized.length > 10_000) throw new Error("Health check input must be no larger than 10000 characters.");
+  return candidate;
 }
 
 async function validatedInput(
@@ -307,6 +422,7 @@ async function validatedInput(
     status: normalizeStatus(input.status, fallbackStatus),
     inputSchema: input.inputSchema,
     outputSchema: input.outputSchema,
+    healthCheckInput: normalizedHealthCheckInput(input),
     fulfillmentUrl: fulfillmentUrl.toString(),
     timeoutMs,
     maxResponseSizeBytes,
@@ -342,6 +458,15 @@ function managementService(row: SellerMarketplaceServiceRow, version?: SellerSer
     maxResponseSizeBytes: row.max_response_size_bytes,
     sellerWallet: getAddress(row.seller_wallet),
     hasAuthorizationSecret: Boolean(version?.endpoint_auth_ciphertext),
+    healthCheckInput: version?.health_check_input ?? row.health_check_input,
+    reviewStatus: row.review_status,
+    reviewSubmittedAt: row.review_submitted_at,
+    reviewedAt: row.reviewed_at,
+    reviewReason: row.review_reason,
+    availabilityStatus: row.availability_status,
+    lastHealthCheckAt: row.last_health_check_at,
+    lastHealthyAt: row.last_healthy_at,
+    consecutiveHealthFailures: row.consecutive_health_failures,
   };
 }
 
@@ -380,10 +505,13 @@ export async function getOwnedSellerService(ownerWallet: Address, serviceId: str
 export async function createSellerService(ownerWallet: Address, input: SellerServiceInput) {
   const seller = await ensureSellerAccount(ownerWallet);
   if (seller.status !== "active") throw new Error("Seller account is paused.");
+  if (seller.onboarding_status !== "active" || !seller.terms_accepted_at) {
+    throw new Error("Complete seller onboarding before creating a service.");
+  }
   const value = await validatedInput(input, ownerWallet, "draft");
   if (value.status !== "draft") throw new Error("New seller services must start in draft status.");
   const client = getSellerMarketplaceClient();
-  const created = await client.rpc("create_seller_service_v1", {
+  const created = await client.rpc("create_seller_service_v2", {
     p_seller_id: seller.id,
     p_name: value.name,
     p_slug: value.slug,
@@ -394,6 +522,7 @@ export async function createSellerService(ownerWallet: Address, input: SellerSer
     p_price_usdc: value.priceUsdc,
     p_input_schema: value.inputSchema,
     p_output_schema: value.outputSchema,
+    p_health_check_input: value.healthCheckInput,
     p_fulfillment_url: value.fulfillmentUrl,
     p_seller_wallet: value.sellerWallet,
     p_max_timeout_ms: value.timeoutMs,
@@ -424,6 +553,7 @@ function versionedConfigurationChanged(
     formatUsdc(row.price_usdc) !== value.priceUsdc ||
     JSON.stringify(row.input_schema) !== JSON.stringify(value.inputSchema) ||
     JSON.stringify(row.output_schema) !== JSON.stringify(value.outputSchema) ||
+    JSON.stringify(row.health_check_input) !== JSON.stringify(value.healthCheckInput) ||
     row.fulfillment_url !== value.fulfillmentUrl ||
     row.max_timeout_ms !== value.timeoutMs ||
     row.max_response_size_bytes !== value.maxResponseSizeBytes ||
@@ -433,6 +563,7 @@ function versionedConfigurationChanged(
 export async function updateSellerService(ownerWallet: Address, serviceId: string, input: SellerServiceInput) {
   const seller = await ensureSellerAccount(ownerWallet);
   if (seller.status !== "active") throw new Error("Seller account is paused.");
+  if (seller.onboarding_status !== "active") throw new Error("Complete seller onboarding before editing a service.");
   const client = getSellerMarketplaceClient();
   const currentResult = await client.from("store_services").select(SERVICE_COLUMNS)
     .eq("id", serviceId).eq("seller_id", seller.id).eq("source_type", "external_seller").maybeSingle();
@@ -452,7 +583,7 @@ export async function updateSellerService(ownerWallet: Address, serviceId: strin
       ? value.authorizationCiphertext
       : version.endpoint_auth_ciphertext;
   const status = value.status === "archived" ? "archived" : value.status;
-  const updated = await client.rpc("update_seller_service_v1", {
+  const updated = await client.rpc("update_seller_service_v2", {
     p_service_id: current.id,
     p_seller_id: seller.id,
     p_expected_version: current.service_version,
@@ -466,6 +597,7 @@ export async function updateSellerService(ownerWallet: Address, serviceId: strin
     p_status: status,
     p_input_schema: value.inputSchema,
     p_output_schema: value.outputSchema,
+    p_health_check_input: value.healthCheckInput,
     p_fulfillment_url: value.fulfillmentUrl,
     p_max_timeout_ms: value.timeoutMs,
     p_max_response_size_bytes: value.maxResponseSizeBytes,
@@ -496,13 +628,19 @@ export async function listPublicSellerWorkflows({ includeUnavailable = false } =
   let query = getSellerMarketplaceClient().from("store_services").select(SERVICE_COLUMNS)
     .eq("source_type", "external_seller").not("seller_id", "is", null).is("archived_at", null)
     .order("created_at", { ascending: true });
-  if (!includeUnavailable) query = query.eq("status", "active");
+  if (!includeUnavailable) {
+    query = query
+      .eq("status", "active")
+      .eq("review_status", "approved")
+      .in("availability_status", ["healthy", "degraded"]);
+  }
   const result = await query;
   if (result.error) throw new Error("Seller workflows are temporarily unavailable.");
   const rows = (result.data ?? []) as unknown as SellerMarketplaceServiceRow[];
   if (rows.length === 0) return [];
   const accounts = await getSellerMarketplaceClient().from("seller_accounts")
-    .select("id").in("id", [...new Set(rows.map((row) => row.seller_id))]).eq("status", "active");
+    .select("id").in("id", [...new Set(rows.map((row) => row.seller_id))])
+    .eq("status", "active").eq("onboarding_status", "active");
   if (accounts.error) throw new Error("Seller workflows are temporarily unavailable.");
   const activeSellerIds = new Set((accounts.data ?? []).map((account) => account.id as string));
   return rows.filter((row) => activeSellerIds.has(row.seller_id)).map(toPublicWorkflow);
@@ -519,7 +657,13 @@ export async function getPublicSellerWorkflow(identifier: string) {
   if (!result.data) return null;
   const row = result.data as unknown as SellerMarketplaceServiceRow;
   const seller = await getSellerAccountById(row.seller_id);
-  return seller?.status === "active" ? toPublicWorkflow(row) : null;
+  return seller?.status === "active" &&
+    seller.onboarding_status === "active" &&
+    row.status === "active" &&
+    row.review_status === "approved" &&
+    ["healthy", "degraded"].includes(row.availability_status)
+      ? toPublicWorkflow(row)
+      : null;
 }
 
 export async function getSellerServiceRowByPublicId(publicId: string) {
@@ -559,6 +703,17 @@ export async function getSellerAccountById(sellerId: string) {
   return (result.data as SellerAccountRow | null) ?? null;
 }
 
+export function isSellerServiceRunnable(service: SellerMarketplaceServiceRow) {
+  return service.status === "active" &&
+    !service.archived_at &&
+    service.review_status === "approved" &&
+    ["healthy", "degraded"].includes(service.availability_status);
+}
+
+export function isSellerAccountRunnable(seller: SellerAccountRow) {
+  return seller.status === "active" && seller.onboarding_status === "active";
+}
+
 export function validateSellerWorkflowInput(input: unknown, schema: JsonSchema) {
   const result = validateJsonSchemaValue(input, schema);
   if (!result.ok) throw new Error(`Seller workflow input ${result.path}: ${result.message}.`);
@@ -588,8 +743,39 @@ export function validateSellerWorkflowOutput(output: unknown, schema: JsonSchema
 export async function listSellerRevenue(ownerWallet: Address) {
   const seller = await ensureSellerAccount(ownerWallet);
   const result = await getSellerMarketplaceClient().from("seller_revenue_ledger")
-    .select("id,service_id,service_version,quote_id,job_id,user_payment_id,receipt_id,payment_event_id,buyer_payment_usdc,gross_amount_usdc,platform_fee_usdc,seller_net_amount_usdc,settlement_status,transaction_hash,earned_at,settled_at,created_at,store_services!inner(name,public_id)")
+    .select("id,service_id,service_version,quote_id,job_id,user_payment_id,receipt_id,payment_event_id,buyer_payment_usdc,gross_amount_usdc,platform_fee_usdc,seller_net_amount_usdc,settlement_status,settlement_mode,settlement_reference,destination_wallet,transaction_hash,earned_at,settled_at,created_at,store_services!inner(name,public_id)")
     .eq("seller_id", seller.id).order("created_at", { ascending: false }).limit(250);
   if (result.error) throw new Error("Unable to load seller revenue ledger.");
+  return result.data ?? [];
+}
+
+export async function listSellerSettlements(ownerWallet: Address) {
+  const seller = await ensureSellerAccount(ownerWallet);
+  const result = await getSellerMarketplaceClient().from("seller_settlements")
+    .select("public_id,ledger_id,payment_event_id,settlement_mode,amount_usdc,destination_wallet,gateway_transaction,status,confirmed_at,created_at")
+    .eq("seller_id", seller.id).order("confirmed_at", { ascending: false }).limit(250);
+  if (result.error) throw new Error("Unable to load seller settlements.");
+  return result.data ?? [];
+}
+
+export async function listSellerServiceReviews(ownerWallet: Address, serviceId?: string) {
+  const seller = await ensureSellerAccount(ownerWallet);
+  let query = getSellerMarketplaceClient().from("seller_service_reviews")
+    .select("id,service_id,service_version,status,reviewer_type,checks,reason,created_at")
+    .eq("seller_id", seller.id).order("created_at", { ascending: false }).limit(100);
+  if (serviceId) query = query.eq("service_id", serviceId);
+  const result = await query;
+  if (result.error) throw new Error("Unable to load seller service reviews.");
+  return result.data ?? [];
+}
+
+export async function listSellerHealthChecks(ownerWallet: Address, serviceId?: string) {
+  const seller = await ensureSellerAccount(ownerWallet);
+  let query = getSellerMarketplaceClient().from("seller_service_health_checks")
+    .select("id,service_id,service_version,status,latency_ms,error_code,checked_at")
+    .eq("seller_id", seller.id).order("checked_at", { ascending: false }).limit(100);
+  if (serviceId) query = query.eq("service_id", serviceId);
+  const result = await query;
+  if (result.error) throw new Error("Unable to load seller availability history.");
   return result.data ?? [];
 }

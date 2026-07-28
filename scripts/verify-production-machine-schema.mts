@@ -195,23 +195,31 @@ async function verifyProductionMachineSchema() {
   );
   console.log("  ✓ Explicit credential type and owner relation columns exist.");
 
-  console.log("[verify-machine-schema] Check 4: Verifying P2.1 seller marketplace schema...");
+  console.log("[verify-machine-schema] Check 4: Verifying P2.1/P2.2 seller lifecycle schema...");
   const sellerSchemaChecks = [
     serverClient.from("seller_accounts")
-      .select("id,public_id,owner_wallet,status,created_at,updated_at").limit(0),
+      .select("id,public_id,owner_wallet,status,display_name,onboarding_status,terms_accepted_at,onboarding_completed_at,settlement_mode,created_at,updated_at").limit(0),
     serverClient.from("seller_service_versions")
-      .select("id,service_id,seller_id,service_version,fulfillment_url,endpoint_auth_ciphertext,created_at").limit(0),
+      .select("id,service_id,seller_id,service_version,health_check_input,fulfillment_url,endpoint_auth_ciphertext,created_at").limit(0),
     serverClient.from("seller_revenue_ledger")
-      .select("id,seller_id,service_id,service_version,quote_id,job_id,gross_amount_usdc,platform_fee_usdc,seller_net_amount_usdc,settlement_status").limit(0),
+      .select("id,seller_id,service_id,service_version,quote_id,job_id,gross_amount_usdc,platform_fee_usdc,seller_net_amount_usdc,settlement_status,settlement_mode,settlement_reference,destination_wallet").limit(0),
     serverClient.from("store_services")
-      .select("id,public_id,seller_id,service_version,archived_at").limit(0),
+      .select("id,public_id,seller_id,service_version,review_status,availability_status,last_health_check_at,last_healthy_at,consecutive_health_failures,health_check_input,archived_at").limit(0),
     serverClient.from("hosted_workflow_quotes")
       .select("id,seller_service_id,seller_service_version,seller_id,seller_net_amount_usdc").limit(0),
+    serverClient.from("seller_service_reviews")
+      .select("id,seller_id,service_id,service_version,status,reviewer_type,checks,reason,created_at").limit(0),
+    serverClient.from("seller_service_health_checks")
+      .select("id,seller_id,service_id,service_version,status,latency_ms,error_code,checked_at").limit(0),
+    serverClient.from("seller_settlements")
+      .select("id,public_id,seller_id,ledger_id,payment_event_id,settlement_mode,amount_usdc,destination_wallet,gateway_transaction,status,confirmed_at").limit(0),
+    serverClient.from("seller_withdrawal_requests")
+      .select("id,public_id,seller_id,idempotency_key_hash,amount_usdc,source_chain,destination_chain,destination_wallet,max_fee_usdc,burn_intent,status,expires_at,confirmed_at").limit(0),
   ];
   const sellerSchemaResults = await Promise.all(sellerSchemaChecks);
   const sellerSchemaFailure = sellerSchemaResults.find((result) => result.error)?.error;
-  assert(!sellerSchemaFailure, `P2.1 seller marketplace schema is missing or inaccessible: ${sellerSchemaFailure?.message}`);
-  console.log("  ✓ Seller accounts, immutable versions, quote snapshots, and revenue ledger exist.");
+  assert(!sellerSchemaFailure, `P2.1/P2.2 seller lifecycle schema is missing or inaccessible: ${sellerSchemaFailure?.message}`);
+  console.log("  ✓ Seller onboarding, immutable versions, reviews, health checks, settlements, and withdrawal intents exist.");
 
   // Check 5: Verify server role access works and public/anon client cannot access table without auth
   console.log("[verify-machine-schema] Check 5: Verifying RLS protection (public/anon client blocked)...");
@@ -260,21 +268,31 @@ async function verifyProductionMachineSchema() {
     }
     console.log("  ✓ RLS protection verified: public/anon client blocked from machine_api_idempotency.");
 
-    const [anonVersions, anonRevenue, hiddenStoreColumn] = await Promise.all([
+    const [anonVersions, anonRevenue, anonReviews, anonHealth, anonSettlements, anonWithdrawals, legacyWithdrawals, hiddenStoreColumn] = await Promise.all([
       publicClient.from("seller_service_versions").select("id").limit(1),
       publicClient.from("seller_revenue_ledger").select("id").limit(1),
+      publicClient.from("seller_service_reviews").select("id").limit(1),
+      publicClient.from("seller_service_health_checks").select("id").limit(1),
+      publicClient.from("seller_settlements").select("id").limit(1),
+      publicClient.from("seller_withdrawal_requests").select("id").limit(1),
+      publicClient.from("withdrawals").select("id").limit(1),
       publicClient.from("store_services").select("fulfillment_url").limit(1),
     ]);
     assert(
       (!anonVersions.data || anonVersions.data.length === 0) &&
-        (!anonRevenue.data || anonRevenue.data.length === 0),
-      "Security check failed: anonymous access exposed private seller tables.",
+        (!anonRevenue.data || anonRevenue.data.length === 0) &&
+        (!anonReviews.data || anonReviews.data.length === 0) &&
+        (!anonHealth.data || anonHealth.data.length === 0) &&
+        (!anonSettlements.data || anonSettlements.data.length === 0) &&
+        (!anonWithdrawals.data || anonWithdrawals.data.length === 0) &&
+        (!legacyWithdrawals.data || legacyWithdrawals.data.length === 0),
+      "Security check failed: anonymous access exposed private seller lifecycle tables.",
     );
     assert(
       Boolean(hiddenStoreColumn.error),
       "Security check failed: anonymous access exposed seller fulfillment URLs.",
     );
-    console.log("  ✓ Seller versions, revenue, endpoint URLs, and endpoint secrets are denied to anonymous access.");
+    console.log("  ✓ Seller versions, revenue, review, health, settlement, withdrawal, endpoint URL, and secret data are denied to anonymous access.");
   } else {
     throw new Error(
       "Public Supabase configuration is required to verify anonymous access denial.",
