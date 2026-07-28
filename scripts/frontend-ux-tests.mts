@@ -60,9 +60,10 @@ assert.match(
   homeSource,
   /sanitizePublicReportText\(\s*report\.inputPreview \|\| report\.workflowLabel/,
 );
-assert(
-  proofsSource.includes("grid-cols-[minmax(0,1fr)]"),
-  "Proof cards must constrain real hash/error payloads to the viewport",
+assert.equal(
+  proofsSource.match(/grid-cols-\[minmax\(0,1fr\)\]/g)?.length,
+  2,
+  "Proof cards and their content must constrain real hash/error payloads to the viewport",
 );
 for (const [type, label] of [
   ["github_due_diligence", "GitHub Project Due Diligence"],

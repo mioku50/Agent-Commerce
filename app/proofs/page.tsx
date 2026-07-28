@@ -143,7 +143,7 @@ export default async function ProofsPage() {
                     <Badge variant={statusVariant(proof.status)}>{statusLabel(proof.status)}</Badge>
                   </div>
                 </CardHeader>
-                <CardContent className="grid min-w-0 gap-4">
+                <CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
                   <ProviderResponseDetails value={receipt.responsePreview} />
                   <dl className="grid min-w-0 gap-3 text-sm md:grid-cols-2 xl:grid-cols-4">
                     <div className="min-w-0">
