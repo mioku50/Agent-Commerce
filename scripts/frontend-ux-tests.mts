@@ -52,6 +52,10 @@ assert(homeSource.includes("Verified workflows for people and AI agents"));
 assert(homeSource.includes("Agent Commerce on Arc Testnet"));
 assert(homeSource.includes("Built for humans and autonomous agents"));
 assert(homeSource.includes("Agent Machine API"));
+assert.match(
+  homeSource,
+  /sanitizePublicReportText\(\s*report\.inputPreview \|\| report\.workflowLabel/,
+);
 for (const [type, label] of [
   ["github_due_diligence", "GitHub Project Due Diligence"],
   ["market_context", "Market Context Brief"],

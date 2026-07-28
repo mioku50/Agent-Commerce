@@ -311,7 +311,11 @@ export default async function Home() {
                     {report.completedWithWarnings ? "Completed with warnings" : "Completed"}
                   </Badge>
                 </div>
-                <h3 className="line-clamp-1 font-semibold">{report.inputPreview || report.workflowLabel}</h3>
+                <h3 className="line-clamp-1 font-semibold">
+                  {sanitizePublicReportText(
+                    report.inputPreview || report.workflowLabel,
+                  )}
+                </h3>
                 <p className="line-clamp-2 text-sm leading-6 text-muted-foreground">
                   {sanitizePublicReportText(report.summary)}
                 </p>
