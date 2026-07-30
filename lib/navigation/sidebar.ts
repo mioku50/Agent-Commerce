@@ -2,6 +2,7 @@ export type SidebarIconName =
   | "activity"
   | "agent"
   | "my-agents"
+  | "monitoring"
   | "console"
   | "dashboard"
   | "passport"
@@ -18,6 +19,7 @@ export const publicSidebarNavigation = [
     items: [
       { href: "/", label: "Home", icon: "dashboard" },
       { href: "/agent-runner", label: "New Report", icon: "agent" },
+      { href: "/monitoring", label: "Monitoring", icon: "monitoring" },
       { href: "/results", label: "Reports", icon: "results" },
     ],
   },

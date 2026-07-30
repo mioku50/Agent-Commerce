@@ -75,10 +75,16 @@ export function normalizeAgentTrustInput(
     500,
   );
 
-  if (!agentId && !rawAgentWallet && !rawRepositoryUrl) {
+  if (
+    !agentId &&
+    !rawAgentWallet &&
+    !rawRepositoryUrl &&
+    !rawContractAddress &&
+    !rawServiceEndpoint
+  ) {
     throw new AgentTrustInputError(
       "agent_trust_input_required",
-      "Provide at least one Agent ID, agent wallet, or public GitHub repository.",
+      "Provide an Agent ID, agent wallet, public GitHub repository, Arc contract, or public HTTPS endpoint.",
     );
   }
   if (agentId && !/^agt_[a-z0-9]{20}$/.test(agentId)) {

@@ -47,6 +47,10 @@ import {
   sellerQuoteRequestHash,
   sellerWorkflowAllowed,
 } from "../../../../../lib/seller/workflow.ts";
+import {
+  bindMachineTrustMonitoringJob,
+  executeTrustMonitoringJob,
+} from "../../../../../lib/monitoring/service.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -286,6 +290,10 @@ export async function POST(request: NextRequest) {
   // Strict Quote Ownership Verification
   const quoteAgentId = storedQuote.byoa_agent_id || (storedQuote.planner_snapshot as any)?.metadata?.byoa_agent_id;
   const quoteCredentialId = storedQuote.machine_credential_id || (storedQuote.planner_snapshot as any)?.metadata?.machine_credential_id;
+  const monitoringRecheckId =
+    typeof (storedQuote.planner_snapshot as any)?.metadata?.monitoringRecheckId === "string"
+      ? (storedQuote.planner_snapshot as any).metadata.monitoringRecheckId
+      : null;
 
   if (
     quoteAgentId !== context.agentId ||
@@ -559,6 +567,14 @@ export async function POST(request: NextRequest) {
           `Unable to persist ${BRAND.agentApi} job credential ownership.`,
         );
       }
+      if (monitoringRecheckId) {
+        await bindMachineTrustMonitoringJob({
+          recheckId: monitoringRecheckId,
+          jobId,
+          byoaAgentId: context.agentId,
+          machineCredentialId: context.credential.id,
+        });
+      }
     }
 
     const responsePayload = {
@@ -584,10 +600,21 @@ export async function POST(request: NextRequest) {
     // Launch execution asynchronously
     if (jobId) {
       const inputForRunner = workflowRequest.inputText;
+      const monitoredInput =
+        monitoringRecheckId && workflowRequest.agentTrustInput
+          ? workflowRequest.agentTrustInput
+          : null;
       try {
         after(async () => {
           try {
-            await runHostedAgentJob(jobId!, inputForRunner);
+            if (monitoredInput) {
+              await executeTrustMonitoringJob({
+                jobId: jobId!,
+                reportInput: monitoredInput,
+              });
+            } else {
+              await runHostedAgentJob(jobId!, inputForRunner);
+            }
           } catch (err) {
             console.error(
               `[runs/route] Async execution failed for job=${jobId}:`,
@@ -597,7 +624,13 @@ export async function POST(request: NextRequest) {
         });
       } catch {
         // Fallback for execution outside Next.js request context (e.g. unit tests)
-        runHostedAgentJob(jobId, inputForRunner).catch((err) => {
+        const execution = monitoredInput
+          ? executeTrustMonitoringJob({
+              jobId,
+              reportInput: monitoredInput,
+            })
+          : runHostedAgentJob(jobId, inputForRunner);
+        execution.catch((err) => {
           console.error(
             `[runs/route] Async execution fallback failed for job=${jobId}:`,
             err,

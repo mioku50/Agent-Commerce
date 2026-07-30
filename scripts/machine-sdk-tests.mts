@@ -33,6 +33,67 @@ const mockFetch: typeof fetch = async (input, init = {}) => {
       }],
     });
   }
+  if (url.endsWith("/api/agent/v1/watchlists") && method === "POST") {
+    return Response.json({
+      id: "wtl_0123456789abcdef0123",
+      label: "Example Agent",
+      input: { agentId: "agt_0123456789abcdefghij" },
+      cadence: "weekly",
+      status: "active",
+      nextRecheckAt: "2026-08-06T00:00:00.000Z",
+      lastRecheckAt: null,
+      currentScore: null,
+      trustStatus: null,
+      verificationStatus: null,
+      latestSnapshotId: null,
+      publicHistoryUrl: "/trust/wtl_0123456789abcdef0123",
+      createdAt: "2026-07-30T00:00:00.000Z",
+      updatedAt: "2026-07-30T00:00:00.000Z",
+    }, { status: 201 });
+  }
+  if (url.endsWith("/api/agent/v1/watchlists") && method === "GET") {
+    return Response.json({ watchlists: [] });
+  }
+  if (url.endsWith("/api/agent/v1/watchlists/wtl_0123456789abcdef0123/rechecks")) {
+    return Response.json({
+      watchlistId: "wtl_0123456789abcdef0123",
+      recheckId: "trc_0123456789abcdef0123",
+      quoteId: "quote-1",
+      workflow: "agent_trust_report",
+      totalUsdc: 0.0004,
+      sponsored: true,
+      checkout: {
+        mode: "sponsored",
+        asset: "USDC",
+        network: "arc-testnet",
+      },
+      downstreamSettlement: "server_side_x402",
+      expiresAt: "2026-07-30T12:00:00.000Z",
+      requiredPayment: {
+        network: "arc-testnet",
+        asset: "USDC",
+        amount: 0,
+        treasuryAddress: "0x0000000000000000000000000000000000000001",
+        chainId: 5_042_002,
+      },
+    }, { status: 201 });
+  }
+  if (url.endsWith("/api/agent/v1/watchlists/wtl_0123456789abcdef0123")) {
+    return Response.json({
+      watchlist: {
+        id: "wtl_0123456789abcdef0123",
+        label: "Example Agent",
+        input: { agentId: "agt_0123456789abcdefghij" },
+        cadence: "weekly",
+        status: "active",
+        lastCheckedAt: "2026-07-30T00:00:00.000Z",
+        nextRecheckAt: "2026-08-06T00:00:00.000Z",
+      },
+      currentReport: null,
+      currentDelta: null,
+      history: [],
+    });
+  }
   if (url.endsWith("/api/agent/v1/quotes")) {
     return Response.json({
       quoteId: "quote-1",
@@ -117,11 +178,41 @@ const execution = await client.executeWorkflow(
 assert.equal(execution.report.verdict?.code, "proceed_with_standard_review");
 assert.equal(execution.report.verification.status, "verified");
 
+const watchlist = await client.createWatchlist(
+  {
+    label: "Example Agent",
+    input: { agentId: "agt_0123456789abcdefghij" },
+    cadence: "weekly",
+  },
+  { idempotencyKey: "watchlist-key" },
+);
+assert.equal(watchlist.id, "wtl_0123456789abcdef0123");
+const monitoringExecution = await client.recheckWatchlist(watchlist.id, {
+  recheckIdempotencyKey: "recheck-key",
+  runIdempotencyKey: "recheck-run-key",
+});
+assert.equal(monitoringExecution.quote.recheckId, "trc_0123456789abcdef0123");
+assert.equal(monitoringExecution.history.watchlist.id, watchlist.id);
+
 const quoteRequest = requests.find((request) => request.url.endsWith("/quotes"));
 const runRequest = requests.find((request) => request.url.endsWith("/runs"));
 assert.equal(quoteRequest?.headers.get("idempotency-key"), "quote-key");
 assert.equal(runRequest?.headers.get("idempotency-key"), "run-key");
 assert.equal(quoteRequest?.headers.get("authorization"), "Bearer aac_test_credential_that_is_long_enough");
+assert(
+  requests.some(
+    (request) =>
+      request.url.endsWith("/watchlists") &&
+      request.headers.get("idempotency-key") === "watchlist-key",
+  ),
+);
+assert(
+  requests.some(
+    (request) =>
+      request.url.endsWith("/rechecks") &&
+      request.headers.get("idempotency-key") === "recheck-key",
+  ),
+);
 
 const errorClient = new AgentCommerceClient({
   baseUrl: "https://example.test",

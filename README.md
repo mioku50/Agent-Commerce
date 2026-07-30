@@ -6,6 +6,7 @@ Veyra lets people and autonomous agents run paid data and analysis workflows,
 receive structured reports, and verify results on Arc.
 
 [Run a workflow](https://agent-commerce-six.vercel.app/agent-runner) ·
+[Monitor trust](https://agent-commerce-six.vercel.app/monitoring) ·
 [Browse reports](https://agent-commerce-six.vercel.app/results) ·
 [Veyra Agent API](https://agent-commerce-six.vercel.app/console/agent-api)
 
@@ -22,6 +23,20 @@ evidence-backed report with:
 
 The verdict is repository-health guidance, not a security audit or investment
 recommendation.
+
+## Continuous Trust Monitoring
+
+One report is a snapshot. Veyra watchlists turn public projects and agents into
+an Arc-verifiable history:
+
+```text
+watchlist → manual/daily/weekly recheck → canonical snapshot → delta → Arc proof
+```
+
+Delta reports surface score movement, new and resolved risks, repository
+activity, agent status, endpoint availability, service reliability, contract
+changes, and verification coverage without repeating an unchanged full report.
+The Public App and Veyra Agent API use the same deterministic delta model.
 
 ## Two product paths
 
@@ -77,6 +92,7 @@ Common verification:
 npm run lint
 npm run machine:sdk-build
 npm run github:analysis-test
+npm run monitoring:test
 npm run machine:api-test
 npm run operations:test
 npm run build

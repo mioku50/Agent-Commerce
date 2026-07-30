@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Veyra Agent API",
-    "version": "1.1.0",
-    "description": "Machine API for discovering and executing verified Veyra workflows."
+    "version": "1.2.0",
+    "description": "Machine API for verified Veyra workflows and continuous trust monitoring."
   },
   "servers": [
     {
@@ -299,6 +299,153 @@
           }
         }
       }
+    },
+    "/api/agent/v1/watchlists": {
+      "get": {
+        "summary": "List credential-scoped trust watchlists",
+        "operationId": "listWatchlists",
+        "description": "Lists only watchlists owned by the exact Machine API agent and credential. Requires `results:read` scope.",
+        "responses": {
+          "200": {
+            "description": "Credential-scoped watchlists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["watchlists"],
+                  "properties": {
+                    "watchlists": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/TrustWatchlist" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      },
+      "post": {
+        "summary": "Create a trust watchlist",
+        "operationId": "createWatchlist",
+        "description": "Saves public Agent Trust Report input for manual, daily, or weekly rechecks. Requires `runs:create` scope and `Idempotency-Key`.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["input"],
+                "properties": {
+                  "label": { "type": "string", "minLength": 2, "maxLength": 100 },
+                  "input": { "$ref": "#/components/schemas/AgentTrustReportInput" },
+                  "cadence": {
+                    "type": "string",
+                    "enum": ["manual", "daily", "weekly"],
+                    "default": "manual"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Existing idempotent watchlist",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrustWatchlist" }
+              }
+            }
+          },
+          "201": {
+            "description": "Watchlist created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrustWatchlist" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/agent/v1/watchlists/{watchlistId}": {
+      "get": {
+        "summary": "Retrieve trust history",
+        "operationId": "getWatchlist",
+        "description": "Returns the current report, deterministic delta, and Arc proof for every snapshot. An unowned watchlist returns 404.",
+        "parameters": [{
+          "name": "watchlistId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" }
+        }],
+        "responses": {
+          "200": {
+            "description": "Trust monitoring history",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrustHistory" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/agent/v1/watchlists/{watchlistId}/rechecks": {
+      "post": {
+        "summary": "Create an immutable recheck quote",
+        "operationId": "createWatchlistRecheck",
+        "description": "Creates a credential-owned Agent Trust Report quote linked to the watchlist. Launch the returned `quoteId` through POST `/api/agent/v1/runs`.",
+        "parameters": [
+          {
+            "name": "watchlistId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" }
+          },
+          { "$ref": "#/components/parameters/IdempotencyKey" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Existing idempotent recheck quote",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrustRecheckQuote" }
+              }
+            }
+          },
+          "201": {
+            "description": "Recheck quote created",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/TrustRecheckQuote" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
     }
   },
   "components": {
@@ -399,6 +546,132 @@
           }
         }
       },
+      "TrustWatchlist": {
+        "type": "object",
+        "required": [
+          "id", "label", "input", "cadence", "status", "currentScore",
+          "verificationStatus", "publicHistoryUrl", "createdAt", "updatedAt"
+        ],
+        "properties": {
+          "id": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" },
+          "label": { "type": "string" },
+          "input": { "$ref": "#/components/schemas/AgentTrustReportInput" },
+          "cadence": { "type": "string", "enum": ["manual", "daily", "weekly"] },
+          "status": { "type": "string", "enum": ["active", "paused"] },
+          "nextRecheckAt": { "type": "string", "format": "date-time", "nullable": true },
+          "lastRecheckAt": { "type": "string", "format": "date-time", "nullable": true },
+          "currentScore": { "type": "integer", "minimum": 0, "maximum": 100, "nullable": true },
+          "trustStatus": { "type": "string", "nullable": true },
+          "verificationStatus": { "type": "string", "nullable": true },
+          "latestSnapshotId": { "type": "string", "nullable": true },
+          "publicHistoryUrl": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "updatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "TrustDeltaReport": {
+        "type": "object",
+        "required": ["kind", "version", "previousSnapshotId", "currentSnapshotId", "score", "summary", "changes", "generatedAt"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["trust_delta_report"] },
+          "version": { "type": "integer", "enum": [1] },
+          "previousSnapshotId": { "type": "string", "nullable": true },
+          "currentSnapshotId": { "type": "string" },
+          "score": {
+            "type": "object",
+            "properties": {
+              "before": { "type": "integer", "nullable": true },
+              "after": { "type": "integer", "nullable": true },
+              "change": { "type": "integer", "nullable": true },
+              "direction": { "type": "string", "enum": ["improved", "declined", "unchanged", "unavailable"] }
+            }
+          },
+          "summary": { "type": "object", "additionalProperties": { "type": "integer" } },
+          "changes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["code", "kind", "severity", "category", "title", "summary", "before", "after"],
+              "properties": {
+                "code": { "type": "string" },
+                "kind": { "type": "string", "enum": ["new_risk", "improved", "activity", "status_change", "changed"] },
+                "severity": { "type": "string", "enum": ["critical", "high", "medium", "low", "info"] },
+                "category": { "type": "string" },
+                "title": { "type": "string" },
+                "summary": { "type": "string" },
+                "before": { "nullable": true },
+                "after": { "nullable": true }
+              }
+            }
+          },
+          "generatedAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "TrustHistory": {
+        "type": "object",
+        "required": ["watchlist", "currentReport", "currentDelta", "history"],
+        "properties": {
+          "watchlist": {
+            "type": "object",
+            "required": ["id", "label", "input", "cadence", "status", "lastCheckedAt", "nextRecheckAt"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" },
+              "label": { "type": "string" },
+              "input": { "$ref": "#/components/schemas/AgentTrustReportInput" },
+              "cadence": { "type": "string", "enum": ["manual", "daily", "weekly"] },
+              "status": { "type": "string", "enum": ["active", "paused"] },
+              "lastCheckedAt": { "type": "string", "format": "date-time", "nullable": true },
+              "nextRecheckAt": { "type": "string", "format": "date-time", "nullable": true }
+            }
+          },
+          "currentReport": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/AgentTrustReportResponse" },
+              { "type": "null" }
+            ]
+          },
+          "currentDelta": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/TrustDeltaReport" },
+              { "type": "null" }
+            ]
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["snapshotId", "jobId", "sequence", "score", "trustStatus", "reportHash", "verificationStatus", "proofTransactionHash", "proofUrl", "observedAt", "delta", "reportUrl"],
+              "properties": {
+                "snapshotId": { "type": "string" },
+                "jobId": { "type": "string" },
+                "sequence": { "type": "integer" },
+                "score": { "type": "integer", "nullable": true },
+                "trustStatus": { "type": "string" },
+                "reportHash": { "type": "string", "pattern": "^0x[0-9a-f]{64}$" },
+                "verificationStatus": { "type": "string" },
+                "proofTransactionHash": { "type": "string", "nullable": true },
+                "proofUrl": { "type": "string", "nullable": true },
+                "observedAt": { "type": "string", "format": "date-time" },
+                "delta": { "$ref": "#/components/schemas/TrustDeltaReport" },
+                "reportUrl": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "TrustRecheckQuote": {
+        "allOf": [
+          { "$ref": "#/components/schemas/WorkflowQuoteResponse" },
+          {
+            "type": "object",
+            "required": ["watchlistId", "recheckId"],
+            "properties": {
+              "watchlistId": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" },
+              "recheckId": { "type": "string", "pattern": "^trc_[0-9a-f]{20}$" }
+            }
+          }
+        ]
+      },
       "WorkflowQuoteRequest": {
         "type": "object",
         "required": ["workflow"],
@@ -454,10 +727,12 @@
           }
         },
         "anyOf": [
-          { "required": ["agentId"] },
-          { "required": ["agentWallet"] },
-          { "required": ["repositoryUrl"] }
-        ]
+        { "required": ["agentId"] },
+        { "required": ["agentWallet"] },
+        { "required": ["repositoryUrl"] },
+        { "required": ["contractAddress"] },
+        { "required": ["serviceEndpoint"] }
+      ]
       },
       "WorkflowQuoteResponse": {
         "type": "object",
