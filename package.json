@@ -40,6 +40,7 @@
     "monitoring:test": "node --experimental-transform-types --no-warnings scripts/monitoring-tests.mts",
     "trust-profile:test": "node --experimental-transform-types --no-warnings scripts/public-trust-profile-tests.mts",
     "webhooks:test": "node --experimental-transform-types --no-warnings scripts/webhook-tests.mts && node --experimental-transform-types --no-warnings scripts/trust-badge-tests.mts",
+    "webhooks:production-configure": "node --experimental-transform-types --no-warnings scripts/configure-production-webhook-scheduler.mts",
     "webhooks:production-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/p33-production-smoke.mts",
     "monitoring:production-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-monitoring-schema.mts",
     "monitoring:production-smoke": "node --experimental-transform-types --no-warnings scripts/p30-production-smoke.mts",
