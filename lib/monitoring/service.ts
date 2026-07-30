@@ -33,7 +33,12 @@ import {
 } from "../commerce/workflow-checkout.ts";
 import { getByoaClient } from "../byoa/service.ts";
 import { buildTrustDeltaReport } from "./delta.ts";
+import {
+  createRecheckFailureAlert,
+  createTrustAlertsForSnapshot,
+} from "./alerts.ts";
 import { canonicalTrustSubject } from "./identity.ts";
+import { publicAppUrl } from "../public-url.ts";
 import type {
   TrustMonitoringCadence,
   TrustMonitoringRecheckRow,
@@ -956,10 +961,14 @@ export async function failTrustMonitoringJob(
   const client = monitoringClient();
   const recheckResult = await client
     .from("trust_monitoring_rechecks")
-    .select("id,watchlist_id")
+    .select("*,trust_watchlists!inner(*)")
     .eq("job_id", jobId)
     .maybeSingle();
   if (!recheckResult.data) return;
+  const recheck = recheckResult.data as TrustMonitoringRecheckRow & {
+    trust_watchlists: TrustWatchlistRow;
+  };
+  const watchlist = recheck.trust_watchlists;
   const now = new Date().toISOString();
   await Promise.all([
     client
@@ -970,12 +979,27 @@ export async function failTrustMonitoringJob(
         error_message: message.slice(0, 300),
         completed_at: now,
       })
-      .eq("id", recheckResult.data.id),
+      .eq("id", recheck.id),
     client
       .from("trust_watchlists")
       .update({ last_error_code: code, last_error_at: now })
-      .eq("id", recheckResult.data.watchlist_id),
+      .eq("id", watchlist.id),
   ]);
+  try {
+    await createRecheckFailureAlert({
+      watchlist,
+      profile: await trustProfileById(watchlist.profile_id),
+      recheck,
+      unavailable:
+        code === "subject_unavailable" ||
+        code === "endpoint_unreachable" ||
+        code === "repository_unavailable",
+    });
+  } catch (error) {
+    console.error("[trust-alert] Failure alert could not be persisted.", {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
+  }
 }
 
 export async function captureTrustMonitoringSnapshot(jobId: string) {
@@ -1072,6 +1096,27 @@ export async function captureTrustMonitoringSnapshot(jobId: string) {
         true,
       );
     }
+    try {
+      const previousResult = await client
+        .from("trust_monitoring_snapshots")
+        .select("*")
+        .eq("watchlist_id", watchlist.id)
+        .lt("sequence_number", snapshot.sequence_number)
+        .order("sequence_number", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      await createTrustAlertsForSnapshot({
+        watchlist,
+        profile: await trustProfileById(watchlist.profile_id),
+        previous:
+          (previousResult.data as TrustMonitoringSnapshotRow | null) ?? null,
+        current: snapshot,
+      });
+    } catch (error) {
+      console.error("[trust-alert] Snapshot alert reconciliation failed.", {
+        error: error instanceof Error ? error.message : "unknown_error",
+      });
+    }
     return snapshot;
   }
 
@@ -1158,6 +1203,18 @@ export async function captureTrustMonitoringSnapshot(jobId: string) {
       503,
       true,
     );
+  }
+  try {
+    await createTrustAlertsForSnapshot({
+      watchlist,
+      profile: await trustProfileById(watchlist.profile_id),
+      previous,
+      current: snapshot,
+    });
+  } catch (error) {
+    console.error("[trust-alert] Snapshot alerts could not be persisted.", {
+      error: error instanceof Error ? error.message : "unknown_error",
+    });
   }
   return snapshot;
 }
@@ -1346,6 +1403,19 @@ export async function getPublicTrustProfile(publicId: string) {
     currentReport,
     currentDelta: current?.delta_snapshot ?? null,
     snapshots: snapshots.map(publicSnapshotView),
+  };
+}
+
+export async function getPublicTrustStatus(publicId: string) {
+  const result = await getPublicTrustProfile(publicId);
+  const current = result.snapshots[0] ?? null;
+  return {
+    profileId: result.profile.id,
+    score: result.profile.currentScore,
+    status: result.profile.trustStatus,
+    verifiedOnArc: current?.verifiedOnArc ?? false,
+    lastCheckedAt: result.profile.lastCheckedAt,
+    profileUrl: `${publicAppUrl()}/trust/${result.profile.id}`,
   };
 }
 

@@ -16,6 +16,7 @@ import {
   Minus,
   Play,
   ShieldCheck,
+  Code2,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,6 +25,9 @@ import { getPublicTrustProfile, TrustMonitoringError } from "@/lib/monitoring/se
 import type { TrustDeltaChange, TrustSubjectType } from "@/lib/monitoring/types";
 import { ShareProfileButton } from "./share-profile-button";
 import { TrustScoreChart } from "./trust-score-chart";
+import { TrustBadgeEmbed } from "./trust-badge-embed";
+import { publicAppUrl } from "@/lib/public-url";
+import { BRAND } from "@/lib/brand";
 
 type RouteContext = { params: Promise<{ publicId: string }> };
 
@@ -79,15 +83,15 @@ export async function generateMetadata({ params }: RouteContext): Promise<Metada
     alternates: { canonical: `/trust/${data.profile.id}` },
     openGraph: {
       type: "website",
-      siteName: "Veyra",
-      title: "Veyra Trust Profile",
+      siteName: BRAND.name,
+      title: `${BRAND.name} Trust Profile`,
       description,
       url: `/trust/${data.profile.id}`,
       images: [{ url: `/trust/${data.profile.id}/opengraph-image` }],
     },
     twitter: {
       card: "summary_large_image",
-      title: "Veyra Trust Profile",
+      title: `${BRAND.name} Trust Profile`,
       description,
       images: [`/trust/${data.profile.id}/opengraph-image`],
     },
@@ -267,6 +271,23 @@ export default async function PublicTrustProfilePage({ params }: RouteContext) {
         </Card>
       </section>
 
+      <section className="mx-auto w-full max-w-7xl px-4 pb-8 sm:px-6">
+        <Card className="rounded-lg">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Code2 className="size-5 text-primary" />
+              Embed this Trust Badge
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <TrustBadgeEmbed
+              appUrl={publicAppUrl()}
+              profileId={data.profile.id}
+            />
+          </CardContent>
+        </Card>
+      </section>
+
       <section className="mx-auto w-full max-w-7xl px-4 pb-12 sm:px-6">
         <div className="mb-5 flex items-center justify-between gap-3">
           <div>
@@ -281,7 +302,11 @@ export default async function PublicTrustProfilePage({ params }: RouteContext) {
           {data.snapshots.length === 0 ? (
             <Card><CardContent className="p-8 text-center text-muted-foreground">No snapshots yet.</CardContent></Card>
           ) : data.snapshots.map((snapshot) => (
-            <Card key={snapshot.snapshotId} className="rounded-lg">
+            <Card
+              id={`snapshot-${snapshot.snapshotId}`}
+              key={snapshot.snapshotId}
+              className="scroll-mt-20 rounded-lg"
+            >
               <CardContent className="grid gap-5 p-5 lg:grid-cols-[180px_1fr_auto]">
                 <div>
                   <p className="text-lg font-semibold">{formatDate(snapshot.observedAt, { short: true })}</p>

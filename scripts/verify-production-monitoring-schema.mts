@@ -70,6 +70,36 @@ async function verifyProductionMonitoringSchema() {
         .from("hosted_workflow_user_payments")
         .select("id,sponsorship_source")
         .limit(0),
+      server
+        .from("trust_alert_events")
+        .select(
+          "id,public_id,owner_wallet,profile_id,snapshot_id,event_type,event_fingerprint,message,payload,byoa_agent_id,machine_credential_id,created_at",
+        )
+        .limit(0),
+      server
+        .from("trust_alert_states")
+        .select(
+          "alert_event_id,owner_wallet,state,read_at,archived_at,created_at,updated_at",
+        )
+        .limit(0),
+      server
+        .from("webhook_subscriptions")
+        .select(
+          "id,public_id,owner_wallet,name,endpoint_url,endpoint_domain,profile_ids,event_types,status,secret_ciphertext,previous_secret_ciphertext,previous_secret_expires_at,byoa_agent_id,machine_credential_id,last_success_at,last_failure_at,created_at,updated_at",
+        )
+        .limit(0),
+      server
+        .from("webhook_events")
+        .select(
+          "id,public_id,owner_wallet,alert_event_id,event_type,payload,created_at",
+        )
+        .limit(0),
+      server
+        .from("webhook_deliveries")
+        .select(
+          "id,public_id,owner_wallet,subscription_id,event_id,status,attempt_count,next_attempt_at,http_status,duration_ms,error_category,delivered_at,created_at,updated_at",
+        )
+        .limit(0),
     ]);
     const tableFailure = tableChecks.find((result) => result.error)?.error;
     assert(
@@ -77,7 +107,7 @@ async function verifyProductionMonitoringSchema() {
       `Monitoring tables or required columns are missing: ${tableFailure?.message}`,
     );
     console.log(
-      "  ✓ Canonical profiles, watchlists, rechecks, snapshots, and sponsorship source exist.",
+      "  ✓ Profiles, monitoring history, alerts, webhook queue, and sponsorship source exist.",
     );
 
     const schemaMetadata = await postgres.query<{
@@ -94,7 +124,10 @@ async function verifyProductionMonitoringSchema() {
             and indexname in (
               'trust_profiles_canonical_subject_key_key',
               'trust_watchlists_owner_profile_tenant_idx',
-              'trust_watchlists_public_profile_idx'
+              'trust_watchlists_public_profile_idx',
+              'trust_alert_events_profile_id_event_type_event_fingerprint_key',
+              'webhook_deliveries_due_idx',
+              'webhook_deliveries_subscription_id_event_id_key'
             )
         ), array[]::text[]) as index_names,
         coalesce((
@@ -120,6 +153,9 @@ async function verifyProductionMonitoringSchema() {
       "trust_profiles_canonical_subject_key_key",
       "trust_watchlists_owner_profile_tenant_idx",
       "trust_watchlists_public_profile_idx",
+      "trust_alert_events_profile_id_event_type_event_fingerprint_key",
+      "webhook_deliveries_due_idx",
+      "webhook_deliveries_subscription_id_event_id_key",
     ]) {
       assert(
         metadata.index_names.includes(index),
@@ -130,7 +166,51 @@ async function verifyProductionMonitoringSchema() {
       metadata.constraint_names.includes("trust_watchlists_visibility_check"),
       "The trust watchlist visibility constraint is missing.",
     );
-    console.log("  ✓ P3.1 indexes, constraints, and trust_profiles RLS are active.");
+    const rlsMetadata = await postgres.query<{
+      relname: string;
+      relrowsecurity: boolean;
+    }>(`
+      select relation.relname, relation.relrowsecurity
+      from pg_class relation
+      join pg_namespace namespace on namespace.oid = relation.relnamespace
+      where namespace.nspname = 'public'
+        and relation.relname in (
+          'trust_profiles',
+          'trust_watchlists',
+          'trust_monitoring_rechecks',
+          'trust_monitoring_snapshots',
+          'trust_alert_events',
+          'trust_alert_states',
+          'webhook_subscriptions',
+          'webhook_events',
+          'webhook_deliveries'
+        )
+      order by relation.relname
+    `);
+    assert(
+      rlsMetadata.rows.length === 9 &&
+        rlsMetadata.rows.every((row) => row.relrowsecurity),
+      "RLS is not enabled on every monitoring, alert, and webhook table.",
+    );
+    const credentialConstraint = await postgres.query<{ definition: string }>(`
+      select pg_get_constraintdef(constraint.oid) as definition
+      from pg_constraint constraint
+      join pg_class relation on relation.oid = constraint.conrelid
+      join pg_namespace namespace on namespace.oid = relation.relnamespace
+      where namespace.nspname = 'public'
+        and relation.relname = 'byoa_agent_credentials'
+        and constraint.conname = 'byoa_agent_credentials_scopes_check'
+    `);
+    const scopeDefinition = credentialConstraint.rows[0]?.definition ?? "";
+    for (const scope of [
+      "alerts:read",
+      "alerts:write",
+      "webhooks:read",
+      "webhooks:write",
+    ]) {
+      assert(scopeDefinition.includes(scope), `Credential constraint is missing ${scope}.`);
+    }
+    console.log("  ✓ P3.3 indexes, opt-in scopes, constraints, and RLS are active.");
 
     const noopClaim = await server.rpc("claim_due_trust_watchlists_v1", {
       p_limit: 0,
@@ -150,7 +230,17 @@ async function verifyProductionMonitoringSchema() {
       !missingLaunch.error && missingLaunchRow?.reason === "not_found",
       `Scheduled checkout RPC failed its non-mutating probe: ${missingLaunch.error?.message ?? "unexpected result"}`,
     );
-    console.log("  ✓ Scheduler claim and checkout RPCs are callable server-side.");
+    const noopWebhookClaim = await server.rpc(
+      "claim_due_webhook_deliveries_v1",
+      { p_limit: 0 },
+    );
+    assert(
+      !noopWebhookClaim.error &&
+        Array.isArray(noopWebhookClaim.data) &&
+        noopWebhookClaim.data.length === 0,
+      `No-op webhook claim RPC failed: ${noopWebhookClaim.error?.message ?? "unexpected rows"}`,
+    );
+    console.log("  ✓ Monitoring and webhook queue claim RPCs are callable server-side.");
 
     const marker = randomUUID();
     const publicId = `wtl_${digest(marker).slice(0, 20)}`;
@@ -163,6 +253,8 @@ async function verifyProductionMonitoringSchema() {
     const idempotencyDigest = digest(`${marker}:idempotency`);
     let watchlistId: string | null = null;
     let profileId: string | null = null;
+    let alertId: string | null = null;
+    let webhookId: string | null = null;
 
     try {
       const profile = await server
@@ -280,7 +372,82 @@ async function verifyProductionMonitoringSchema() {
       Boolean(duplicateRecheck.error),
       "Unique watchlist/idempotency constraint was not enforced.",
     );
-    console.log("  ✓ Database checks and unique idempotency constraint are enforced.");
+    const alert = await server
+      .from("trust_alert_events")
+      .insert({
+        public_id: `evt_${digest(`${marker}:alert`).slice(0, 24)}`,
+        owner_wallet: ownerWallet,
+        profile_id: profileId,
+        snapshot_id: null,
+        event_type: "recheck_failed",
+        event_fingerprint: digest(`${marker}:alert-fingerprint`),
+        message: "The scheduled trust recheck could not be completed.",
+        payload: { recheckStatus: "failed" },
+      })
+      .select("id")
+      .single();
+    assert(!alert.error && alert.data, `Alert insert failed: ${alert.error?.message}`);
+    alertId = alert.data.id as string;
+    const alertState = await server.from("trust_alert_states").insert({
+      alert_event_id: alertId,
+      owner_wallet: ownerWallet,
+      state: "unread",
+    });
+    assert(!alertState.error, `Alert state insert failed: ${alertState.error?.message}`);
+    const duplicateFailure = await server.from("trust_alert_events").insert({
+      owner_wallet: ownerWallet,
+      profile_id: profileId,
+      snapshot_id: null,
+      event_type: "recheck_failed",
+      event_fingerprint: digest(`${marker}:alert-fingerprint`),
+      message: "Duplicate alert probe.",
+      payload: { recheckStatus: "failed" },
+    });
+    assert(
+      Boolean(duplicateFailure.error),
+      "Failure alert fingerprint uniqueness was not enforced.",
+    );
+
+    const webhook = await server
+      .from("webhook_subscriptions")
+      .insert({
+        public_id: `whk_${digest(`${marker}:webhook`).slice(0, 24)}`,
+        owner_wallet: ownerWallet,
+        name: "Production schema probe",
+        endpoint_url: "https://example.com/veyra",
+        endpoint_domain: "example.com",
+        profile_ids: [profileId],
+        event_types: ["recheck_failed"],
+        secret_ciphertext: "schema-probe-encrypted-material",
+      })
+      .select("id")
+      .single();
+    assert(!webhook.error && webhook.data, `Webhook insert failed: ${webhook.error?.message}`);
+    webhookId = webhook.data.id as string;
+    const webhookEvent = await server
+      .from("webhook_events")
+      .insert({
+        public_id: `evt_${digest(`${marker}:webhook-event`).slice(0, 24)}`,
+        owner_wallet: ownerWallet,
+        alert_event_id: alertId,
+        event_type: "recheck_failed",
+        payload: { id: `evt_${digest(`${marker}:alert`).slice(0, 24)}`, type: "recheck_failed" },
+      })
+      .select("id")
+      .single();
+    assert(
+      !webhookEvent.error && webhookEvent.data,
+      `Webhook event insert failed: ${webhookEvent.error?.message}`,
+    );
+    const delivery = await server.from("webhook_deliveries").insert({
+      owner_wallet: ownerWallet,
+      subscription_id: webhookId,
+      event_id: webhookEvent.data.id,
+      status: "pending",
+      next_attempt_at: new Date(Date.now() + 60_000).toISOString(),
+    });
+    assert(!delivery.error, `Webhook delivery insert failed: ${delivery.error?.message}`);
+    console.log("  ✓ Idempotency, alert fingerprint, and delivery constraints are enforced.");
 
       const publicConfig = getPublicSupabaseConfig();
       const anonymous = createClient(publicConfig.url, publicConfig.key, {
@@ -291,6 +458,11 @@ async function verifyProductionMonitoringSchema() {
         anonymous.from("trust_watchlists").select("id").limit(1),
         anonymous.from("trust_monitoring_rechecks").select("id").limit(1),
         anonymous.from("trust_monitoring_snapshots").select("id").limit(1),
+        anonymous.from("trust_alert_events").select("id").limit(1),
+        anonymous.from("trust_alert_states").select("alert_event_id").limit(1),
+        anonymous.from("webhook_subscriptions").select("id").limit(1),
+        anonymous.from("webhook_events").select("id").limit(1),
+        anonymous.from("webhook_deliveries").select("id").limit(1),
       ]);
     assert(
       anonymousReads.every(
@@ -313,6 +485,26 @@ async function verifyProductionMonitoringSchema() {
     }
     console.log("  ✓ Anonymous reads and writes are denied by RLS.");
     } finally {
+      if (webhookId) {
+        const cleanup = await server
+          .from("webhook_subscriptions")
+          .delete()
+          .eq("id", webhookId);
+        assert(
+          !cleanup.error,
+          `Production webhook probe cleanup failed: ${cleanup.error?.message}`,
+        );
+      }
+      if (alertId) {
+        const cleanup = await server
+          .from("trust_alert_events")
+          .delete()
+          .eq("id", alertId);
+        assert(
+          !cleanup.error,
+          `Production alert probe cleanup failed: ${cleanup.error?.message}`,
+        );
+      }
       if (watchlistId) {
         const cleanup = await server
           .from("trust_watchlists")

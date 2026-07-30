@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
+  BellRing,
   CalendarClock,
   CheckCircle2,
   ExternalLink,
@@ -481,9 +482,17 @@ export function TrustMonitoringClient({
             {watchlists.length} of 10 subjects monitored
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={loadWatchlists}>
-          <RefreshCw /> Refresh
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/alerts"><BellRing /> Trust alerts</Link>
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link href="#webhooks"><ExternalLink /> Webhooks</Link>
+          </Button>
+          <Button variant="outline" size="sm" onClick={loadWatchlists}>
+            <RefreshCw /> Refresh
+          </Button>
+        </div>
       </div>
 
       {watchlists.length === 0 ? (

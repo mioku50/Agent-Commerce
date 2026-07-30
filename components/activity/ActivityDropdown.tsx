@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Bell, Clock, ExternalLink, XCircle } from "lucide-react";
+import { Bell, BellRing, ExternalLink, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -11,21 +11,21 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { StatusBadge } from "@/components/ui/status-badge";
-import { shortenHash } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
-type ActivityRun = {
+type TrustAlert = {
   id: string;
-  created_at: string;
-  task: string;
-  status: string;
-  spent_usdc: string;
-  paid_count?: number;
-  step_count?: number;
+  type: string;
+  message: string;
+  snapshotUrl: string;
+  createdAt: string;
 };
 
 function relativeTime(value: string) {
-  const seconds = Math.max(1, Math.floor((Date.now() - new Date(value).getTime()) / 1000));
+  const seconds = Math.max(
+    1,
+    Math.floor((Date.now() - new Date(value).getTime()) / 1000),
+  );
   if (seconds < 60) return `${seconds}s ago`;
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
@@ -35,98 +35,98 @@ function relativeTime(value: string) {
 }
 
 export function ActivityDropdown() {
-  const [runs, setRuns] = useState<ActivityRun[]>([]);
+  const [alerts, setAlerts] = useState<TrustAlert[]>([]);
+  const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-
-    async function loadRuns() {
-      try {
-        const response = await fetch("/api/agent/runs?limit=5", {
-          signal: controller.signal,
-        });
-        const data = (await response.json()) as {
-          runs?: ActivityRun[];
-          error?: string;
+    fetch("/api/monitoring/alerts?state=unread&limit=5", {
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const body = (await response.json().catch(() => ({}))) as {
+          alerts?: TrustAlert[];
+          unreadCount?: number;
+          error?: { message?: string };
         };
-        if (!response.ok || data.error) {
-          throw new Error(data.error ?? "Could not load recent activity.");
+        if (!response.ok) throw new Error(body.error?.message ?? "Owner session required.");
+        setAlerts(body.alerts ?? []);
+        setUnread(body.unreadCount ?? 0);
+      })
+      .catch((caught) => {
+        if ((caught as Error).name !== "AbortError") {
+          setError(caught instanceof Error ? caught.message : String(caught));
         }
-        setRuns(data.runs ?? []);
-        setError(null);
-      } catch (caught) {
-        if ((caught as Error).name === "AbortError") return;
-        setError(caught instanceof Error ? caught.message : String(caught));
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    void loadRuns();
-
+      })
+      .finally(() => setLoading(false));
     return () => controller.abort();
   }, []);
-
-  const unread = runs.filter((run) => run.status === "completed").length;
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button type="button" variant="outline" size="icon" className="relative">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          className="relative"
+          aria-label={`${unread} unread trust alerts`}
+        >
           <Bell className="size-4" />
           {unread > 0 ? (
             <span className="absolute -right-1 -top-1 flex size-4 items-center justify-center rounded-full bg-primary text-[10px] font-semibold text-primary-foreground">
-              {unread}
+              {Math.min(unread, 9)}
             </span>
           ) : null}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-[min(380px,calc(100vw-24px))] p-0">
+      <DropdownMenuContent
+        align="end"
+        className="w-[min(390px,calc(100vw-24px))] p-0"
+      >
         <div className="flex items-center justify-between border-b px-4 py-3">
           <div>
-            <p className="font-semibold">Recent Activity</p>
-            <p className="text-xs text-muted-foreground">Latest buyer-agent runs</p>
+            <p className="font-semibold">Trust Alerts</p>
+            <p className="text-xs text-muted-foreground">Meaningful monitoring changes</p>
           </div>
-          <Clock className="size-4 text-muted-foreground" />
+          <BellRing className="size-4 text-muted-foreground" />
         </div>
-
         <div className="max-h-[360px] overflow-y-auto">
           {loading ? (
             <div className="grid gap-3 p-4">
-              <div className="skeleton-shimmer h-14 rounded-md" />
-              <div className="skeleton-shimmer h-14 rounded-md" />
-              <div className="skeleton-shimmer h-14 rounded-md" />
+              <div className="skeleton-shimmer h-16 rounded-md" />
+              <div className="skeleton-shimmer h-16 rounded-md" />
             </div>
           ) : error ? (
             <div className="flex gap-3 p-4 text-sm text-muted-foreground">
-              <XCircle className="mt-0.5 size-4 shrink-0 text-destructive" />
-              {error}
+              <XCircle className="mt-0.5 size-4 shrink-0" />
+              <span>
+                {error}{" "}
+                <Link href="/monitoring" className="text-primary underline">
+                  Verify in Monitoring
+                </Link>
+              </span>
             </div>
-          ) : runs.length === 0 ? (
+          ) : alerts.length === 0 ? (
             <p className="p-4 text-sm text-muted-foreground">
-              No agent runs yet. Plan a task from Agent Control to create the
-              first timeline.
+              No unread trust changes.
             </p>
           ) : (
-            runs.map((run) => (
-              <DropdownMenuItem key={run.id} asChild>
+            alerts.map((alert) => (
+              <DropdownMenuItem key={alert.id} asChild>
                 <Link
-                  href={`/runs/${run.id}`}
+                  href={alert.snapshotUrl}
                   className="grid cursor-pointer gap-2 border-b px-4 py-3 last:border-b-0"
                 >
-                  <div className="flex min-w-0 items-center justify-between gap-3">
-                    <StatusBadge status={run.status} />
-                    <span className="font-mono text-xs text-muted-foreground">
-                      {shortenHash(run.id, 4)}
+                  <div className="flex items-center justify-between gap-3">
+                    <Badge variant="outline">{alert.type.replaceAll("_", " ")}</Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {relativeTime(alert.createdAt)}
                     </span>
                   </div>
-                  <p className="line-clamp-2 text-sm font-medium">{run.task}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {run.spent_usdc} USDC · {run.paid_count ?? 0} paid ·{" "}
-                    {run.step_count ?? 0} steps · {relativeTime(run.created_at)}
-                  </p>
+                  <p className="line-clamp-2 text-sm font-medium">{alert.message}</p>
                 </Link>
               </DropdownMenuItem>
             ))
@@ -135,8 +135,8 @@ export function ActivityDropdown() {
         <DropdownMenuSeparator className="m-0" />
         <div className="p-3">
           <Button asChild variant="outline" className="w-full">
-            <Link href="/runs">
-              View all runs
+            <Link href="/alerts">
+              View all alerts
               <ExternalLink />
             </Link>
           </Button>

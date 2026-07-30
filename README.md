@@ -45,6 +45,11 @@ Equivalent GitHub URLs and normalized endpoint, wallet, contract, or agent
 identifiers converge on the same stable profile. Private watchlists and unknown
 profiles both return the same 404 response.
 
+Public profiles also expose server-rendered, snapshot-aware SVG badges for
+README files and websites plus a compact public status endpoint. Meaningful
+changes create in-app alerts and can be delivered as signed, retryable,
+SSRF-protected webhooks.
+
 ## Two product paths
 
 People use the Public App:
@@ -67,6 +72,7 @@ GitHub Due Diligence agent example.
 - [TypeScript SDK](sdk/typescript)
 - [Production-ready agent example](examples/machine-agent/github-due-diligence-agent.ts)
 - [OpenAPI specification](public/openapi/agent-commerce-v1.json)
+- [Trust webhooks and HMAC verification](docs/webhooks.md)
 
 ## Curated workflows
 
@@ -101,6 +107,7 @@ npm run machine:sdk-build
 npm run github:analysis-test
 npm run monitoring:test
 npm run trust-profile:test
+npm run webhooks:test
 npm run machine:api-test
 npm run operations:test
 npm run build

@@ -1,8 +1,9 @@
 import { ImageResponse } from "next/og";
+import { BRAND } from "@/lib/brand";
 import { notFound } from "next/navigation";
 import { getPublicTrustProfile, TrustMonitoringError } from "@/lib/monitoring/service";
 
-export const alt = "Veyra Trust Profile";
+export const alt = `${BRAND.name} Trust Profile`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 

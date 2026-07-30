@@ -139,3 +139,101 @@ export type TrustMonitoringSnapshotRow = {
   observed_at: string;
   created_at: string;
 };
+
+export const TRUST_ALERT_EVENT_TYPES = [
+  "trust_score_changed",
+  "trust_status_changed",
+  "risk_added",
+  "risk_resolved",
+  "verification_failed",
+  "recheck_failed",
+  "subject_unavailable",
+] as const;
+
+export type TrustAlertEventType = (typeof TRUST_ALERT_EVENT_TYPES)[number];
+export type AlertState = "unread" | "read" | "archived";
+export type PublicTrustRisk = {
+  riskCode: string;
+  title: string;
+  severity: TrustDeltaSeverity;
+};
+export type TrustDelta = {
+  scoreChange: {
+    previous: number;
+    current: number;
+    delta: number;
+  } | null;
+  statusChange: {
+    previous: string;
+    current: string;
+  } | null;
+  addedRisks: PublicTrustRisk[];
+  resolvedRisks: PublicTrustRisk[];
+  meaningful: boolean;
+};
+export type TrustAlertEventRow = {
+  id: string;
+  public_id: string;
+  owner_wallet: string;
+  profile_id: string;
+  snapshot_id: string | null;
+  event_type: TrustAlertEventType;
+  event_fingerprint: string;
+  message: string;
+  payload: Record<string, unknown>;
+  byoa_agent_id: string | null;
+  machine_credential_id: string | null;
+  created_at: string;
+};
+export type WebhookSubscriptionStatus = "active" | "paused";
+export type WebhookSubscriptionRow = {
+  id: string;
+  public_id: string;
+  owner_wallet: string;
+  name: string;
+  endpoint_url: string;
+  endpoint_domain: string;
+  profile_ids: string[];
+  event_types: TrustAlertEventType[];
+  status: WebhookSubscriptionStatus;
+  secret_ciphertext: string;
+  previous_secret_ciphertext: string | null;
+  previous_secret_expires_at: string | null;
+  byoa_agent_id: string | null;
+  machine_credential_id: string | null;
+  last_success_at: string | null;
+  last_failure_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+export type WebhookDeliveryStatus =
+  | "pending"
+  | "delivering"
+  | "delivered"
+  | "retry_scheduled"
+  | "failed";
+export type WebhookEventRow = {
+  id: string;
+  public_id: string;
+  owner_wallet: string;
+  alert_event_id: string | null;
+  event_type: TrustAlertEventType | "test";
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+export type WebhookDeliveryRow = {
+  id: string;
+  public_id: string;
+  owner_wallet: string;
+  subscription_id: string;
+  event_id: string;
+  status: WebhookDeliveryStatus;
+  attempt_count: number;
+  next_attempt_at: string;
+  http_status: number | null;
+  duration_ms: number | null;
+  error_category: string | null;
+  delivered_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
