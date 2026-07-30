@@ -13,31 +13,296 @@ import {
   computeApiQualityMetrics,
   detectQualityDegradationAlerts,
   executeScheduledProbe,
+  fetchApiQualityObservations,
+  fetchApiQualityObservationsForServices,
+  getConfidenceLevel,
   getInMemoryApiQualityAlerts,
   getInMemoryApiQualityObservations,
+  observationToRowInput,
   recordApiQualityObservation,
+  rowToObservation,
   runScheduledApiQualityProbes,
 } from "../lib/providers/api-quality.ts";
+import {
+  buildApiQualityPublicReport,
+  formatApiQualityPublicReportAsMarkdown,
+  parseApiQualityJobInput,
+} from "../lib/reports/api-quality-report.ts";
+import {
+  HOSTED_WORKFLOW_TYPES,
+  defaultWorkflowTask,
+  isHostedWorkflowType,
+} from "../lib/agent/hosted-workflows.ts";
+import type { MachineErrorCode } from "../lib/api/machine-errors.ts";
+import type { ApiQualityObservationRow } from "../lib/providers/api-quality-types.ts";
 
 async function runTests() {
-  console.log("Starting API Quality Provider & Monitoring Probes Unit Tests...");
+  console.log("Starting Comprehensive P4.0 Paid API Quality & Monitoring Test Suite (22 Scenarios)...");
 
   // Setup: clear in-memory stores
   clearInMemoryApiQualityObservations();
   clearInMemoryApiQualityAlerts();
 
-  // Test 1: Record observations and compute metrics
-  console.log("Test 1: Recording observations and computing metrics");
   const now = new Date();
-  for (let i = 0; i < 15; i++) {
+
+  // ----------------------------------------------------
+  // Scenario 1: Observation Ingestion & Data Transformation
+  // ----------------------------------------------------
+  console.log("Scenario 1: Observation Ingestion & Data Transformation");
+  const testRow: ApiQualityObservationRow = {
+    observation_id: "obs_test_101",
+    service_id: "srv_transform_test",
+    seller_public_id: "sel_transform_seller",
+    started_at: new Date(now.getTime() - 3600000).toISOString(),
+    completed_at: new Date(now.getTime() - 3599850).toISOString(),
+    quoted_price_usdc: "0.05",
+    paid_amount_usdc: "0.05",
+    latency_ms: 150,
+    http_status_class: "2xx",
+    endpoint_reached: true,
+    response_schema_valid: true,
+    response_within_size_limit: true,
+    payment_required: true,
+    payment_authorized: true,
+    payment_settled: true,
+    execution_completed: true,
+    arc_proof_verified: true,
+    error_category: "none",
+    source: "real_paid_execution",
+    created_at: now.toISOString(),
+  };
+
+  const parsedObs = rowToObservation(testRow);
+  assert.equal(parsedObs.observationId, "obs_test_101");
+  assert.equal(parsedObs.quotedPriceUsdc, 0.05);
+  assert.equal(parsedObs.latencyMs, 150);
+
+  const rowBack = observationToRowInput(parsedObs);
+  assert.equal(rowBack.observation_id, "obs_test_101");
+  assert.equal(rowBack.quoted_price_usdc, 0.05);
+
+  const recorded = await recordApiQualityObservation({
+    serviceId: "srv_single_ingest",
+    sellerPublicId: "sel_ingest_seller",
+    startedAt: new Date(now.getTime() - 1800000).toISOString(),
+    completedAt: new Date(now.getTime() - 1799880).toISOString(),
+    quotedPriceUsdc: 0.1,
+    paidAmountUsdc: 0.1,
+    latencyMs: 120,
+    httpStatusClass: "2xx",
+    endpointReached: true,
+    responseSchemaValid: true,
+    responseWithinSizeLimit: true,
+    paymentRequired: true,
+    paymentAuthorized: true,
+    paymentSettled: true,
+    executionCompleted: true,
+    arcProofVerified: true,
+    errorCategory: "none",
+    source: "real_paid_execution",
+  });
+  assert.ok(recorded.observationId.startsWith("obs_") || recorded.observationId.length > 10);
+  assert.equal(recorded.serviceId, "srv_single_ingest");
+
+  // ----------------------------------------------------
+  // Scenario 2: Multi-Service Observation Ingestion & Window Filtering
+  // ----------------------------------------------------
+  console.log("Scenario 2: Multi-Service Observation Ingestion & Window Filtering");
+  clearInMemoryApiQualityObservations();
+  const t2_35daysAgo = new Date(now.getTime() - 35 * 86400 * 1000).toISOString();
+  const t2_5daysAgo = new Date(now.getTime() - 5 * 86400 * 1000).toISOString();
+
+  await recordApiQualityObservation({
+    serviceId: "srv_window_test",
+    sellerPublicId: "sel_window",
+    startedAt: t2_35daysAgo,
+    completedAt: t2_35daysAgo,
+    quotedPriceUsdc: 0.05,
+    paidAmountUsdc: 0.05,
+    latencyMs: 100,
+    httpStatusClass: "2xx",
+    endpointReached: true,
+    responseSchemaValid: true,
+    responseWithinSizeLimit: true,
+    paymentRequired: true,
+    paymentAuthorized: true,
+    paymentSettled: true,
+    executionCompleted: true,
+    arcProofVerified: true,
+    errorCategory: "none",
+    source: "historical_execution",
+  });
+  await recordApiQualityObservation({
+    serviceId: "srv_window_test",
+    sellerPublicId: "sel_window",
+    startedAt: t2_5daysAgo,
+    completedAt: t2_5daysAgo,
+    quotedPriceUsdc: 0.05,
+    paidAmountUsdc: 0.05,
+    latencyMs: 100,
+    httpStatusClass: "2xx",
+    endpointReached: true,
+    responseSchemaValid: true,
+    responseWithinSizeLimit: true,
+    paymentRequired: true,
+    paymentAuthorized: true,
+    paymentSettled: true,
+    executionCompleted: true,
+    arcProofVerified: true,
+    errorCategory: "none",
+    source: "real_paid_execution",
+  });
+
+  const obs30Days = await fetchApiQualityObservations("srv_window_test", 30);
+  assert.equal(obs30Days.length, 1, "30-day window should filter out 35-day old observation");
+
+  const multiObs = await fetchApiQualityObservationsForServices(["srv_window_test", "non_existent"], 30);
+  assert.ok(multiObs["srv_window_test"]);
+  assert.equal(multiObs["srv_window_test"].length, 1);
+  assert.equal(multiObs["non_existent"].length, 0);
+
+  // ----------------------------------------------------
+  // Scenario 3: Statistical Metrics Calculation
+  // ----------------------------------------------------
+  console.log("Scenario 3: Statistical Metrics Calculation");
+  clearInMemoryApiQualityObservations();
+  for (let i = 0; i < 20; i++) {
+    const isError = i === 19;
     await recordApiQualityObservation({
-      serviceId: "srv_test_weather",
-      sellerPublicId: "sel_test_seller_1",
-      startedAt: new Date(now.getTime() - (15 - i) * 3600000).toISOString(),
-      completedAt: new Date(now.getTime() - (15 - i) * 3600000 + 150).toISOString(),
+      serviceId: "srv_stats_test",
+      sellerPublicId: "sel_stats",
+      startedAt: new Date(now.getTime() - (20 - i) * 3600000).toISOString(),
+      completedAt: new Date(now.getTime() - (20 - i) * 3600000 + 200).toISOString(),
       quotedPriceUsdc: 0.05,
       paidAmountUsdc: 0.05,
-      latencyMs: 120 + (i % 3) * 10,
+      latencyMs: 100 + i * 10, // 100 to 290 ms
+      httpStatusClass: isError ? "5xx" : "2xx",
+      endpointReached: true,
+      responseSchemaValid: !isError,
+      responseWithinSizeLimit: true,
+      paymentRequired: true,
+      paymentAuthorized: true,
+      paymentSettled: true,
+      executionCompleted: !isError,
+      arcProofVerified: !isError,
+      errorCategory: isError ? "execution_failed" : "none",
+      source: "real_paid_execution",
+    });
+  }
+
+  const statsObs = getInMemoryApiQualityObservations().filter((o) => o.serviceId === "srv_stats_test");
+  const metrics3 = computeApiQualityMetrics(statsObs);
+  assert.equal(metrics3.totalObservations, 20);
+  assert.equal(metrics3.uptimePercent, 95);
+  assert.equal(metrics3.executionSuccessPercent, 95);
+  assert.equal(metrics3.paymentSuccessPercent, 100);
+  assert.equal(metrics3.settlementSuccessPercent, 100);
+  assert.equal(metrics3.validResponsePercent, 95);
+  assert.ok(metrics3.latencyP50Ms >= 190 && metrics3.latencyP50Ms <= 200);
+  assert.ok(metrics3.latencyP95Ms >= 280);
+  assert.equal(metrics3.latencyMaxMs, 290);
+
+  // ----------------------------------------------------
+  // Scenario 4: Quoted Price & Cost Efficiency Metrics
+  // ----------------------------------------------------
+  console.log("Scenario 4: Quoted Price & Cost Efficiency Metrics");
+  assert.equal(metrics3.quotedPriceMinUsdc, 0.05);
+  assert.equal(metrics3.quotedPriceMedianUsdc, 0.05);
+  assert.equal(metrics3.quotedPriceMaxUsdc, 0.05);
+  // Total paid = 20 * 0.05 = 1.00; 19 successful executions -> 1.00 / 19 = 0.052632 USDC per success
+  assert.ok(metrics3.costPerSuccessfulResultUsdc > 0.05);
+
+  // ----------------------------------------------------
+  // Scenario 5: 0–100 Quality Score Category Weighting Calculation
+  // ----------------------------------------------------
+  console.log("Scenario 5: 0–100 Quality Score Category Weighting Calculation");
+  const perfectMetrics = {
+    totalObservations: 20,
+    uptimePercent: 100,
+    executionSuccessPercent: 100,
+    paymentSuccessPercent: 100,
+    settlementSuccessPercent: 100,
+    validResponsePercent: 100,
+    latencyP50Ms: 100,
+    latencyP95Ms: 150,
+    latencyMaxMs: 200,
+    quotedPriceMinUsdc: 0.05,
+    quotedPriceMedianUsdc: 0.05,
+    quotedPriceMaxUsdc: 0.05,
+    costPerSuccessfulResultUsdc: 0.05,
+    firstObservedAt: now.toISOString(),
+    lastObservedAt: now.toISOString(),
+  };
+
+  const perfectScore = calculateQualityScore(perfectMetrics);
+  assert.equal(perfectScore.availabilityScore, 25);
+  assert.equal(perfectScore.executionReliabilityScore, 20);
+  assert.equal(perfectScore.responseValidityScore, 15);
+  assert.equal(perfectScore.paymentSuccessScore, 15);
+  assert.equal(perfectScore.settlementSuccessScore, 15);
+  assert.equal(perfectScore.latencyConsistencyScore, 10);
+  assert.equal(perfectScore.overallScore, 100);
+
+  // ----------------------------------------------------
+  // Scenario 6: Quality Status Classification
+  // ----------------------------------------------------
+  console.log("Scenario 6: Quality Status Classification");
+  assert.equal(perfectScore.status, "Excellent");
+
+  const reliableMetrics = { ...perfectMetrics, uptimePercent: 85 }; // score drops by ~3.75
+  const reliableScore = calculateQualityScore(reliableMetrics);
+  assert.ok(["Reliable", "Excellent"].includes(reliableScore.status));
+
+  const mixedMetrics = { ...perfectMetrics, uptimePercent: 40, executionSuccessPercent: 40 };
+  const mixedScore = calculateQualityScore(mixedMetrics);
+  assert.equal(mixedScore.status, "Mixed signals");
+
+  const highAttnMetrics = {
+    ...perfectMetrics,
+    uptimePercent: 10,
+    executionSuccessPercent: 10,
+    responseValidityPercent: 10,
+    paymentSuccessPercent: 10,
+    settlementSuccessPercent: 10,
+    latencyP95Ms: 15000,
+  };
+  const highAttnScore = calculateQualityScore(highAttnMetrics);
+  assert.equal(highAttnScore.status, "High attention");
+
+  // ----------------------------------------------------
+  // Scenario 7: Insufficient Data Handling (< 10 observations)
+  // ----------------------------------------------------
+  console.log("Scenario 7: Insufficient Data Handling");
+  const lowDataMetrics = { ...perfectMetrics, totalObservations: 5 };
+  const lowDataScore = calculateQualityScore(lowDataMetrics);
+  assert.equal(lowDataScore.hasSufficientData, false);
+  assert.equal(lowDataScore.status, "Insufficient data");
+
+  // ----------------------------------------------------
+  // Scenario 8: Confidence Level Categorization
+  // ----------------------------------------------------
+  console.log("Scenario 8: Confidence Level Categorization");
+  const lowCountObs: any[] = Array(3).fill({ startedAt: now.toISOString(), source: "real_paid_execution" });
+  assert.equal(getConfidenceLevel(lowCountObs), "low");
+
+  const highCountObs: any[] = Array(25).fill({ startedAt: now.toISOString(), source: "real_paid_execution" });
+  assert.equal(getConfidenceLevel(highCountObs), "high");
+
+  // ----------------------------------------------------
+  // Scenario 9: Multi-Service Side-by-Side Comparison Engine & Ranking
+  // ----------------------------------------------------
+  console.log("Scenario 9: Multi-Service Side-by-Side Comparison Engine & Ranking");
+  clearInMemoryApiQualityObservations();
+  // Service A (Weather) - Perfect
+  for (let i = 0; i < 12; i++) {
+    await recordApiQualityObservation({
+      serviceId: "srv_comp_weather",
+      sellerPublicId: "sel_weather",
+      startedAt: new Date(now.getTime() - i * 3600000).toISOString(),
+      completedAt: new Date(now.getTime() - i * 3600000 + 100).toISOString(),
+      quotedPriceUsdc: 0.05,
+      paidAmountUsdc: 0.05,
+      latencyMs: 100,
       httpStatusClass: "2xx",
       endpointReached: true,
       responseSchemaValid: true,
@@ -52,116 +317,268 @@ async function runTests() {
     });
   }
 
-  const obs = getInMemoryApiQualityObservations();
-  assert.equal(obs.length, 15, "Should have 15 recorded observations");
-
-  const metrics = computeApiQualityMetrics(obs);
-  assert.equal(metrics.totalObservations, 15, "Total observations should be 15");
-  assert.equal(metrics.uptimePercent, 100, "Uptime should be 100%");
-  assert.equal(metrics.executionSuccessPercent, 100, "Execution success should be 100%");
-  assert.equal(metrics.paymentSuccessPercent, 100, "Payment success should be 100%");
-  assert.equal(metrics.settlementSuccessPercent, 100, "Settlement success should be 100%");
-
-  // Test 2: Calculate quality score
-  console.log("Test 2: Calculating Quality Score");
-  const score = calculateQualityScore(metrics, obs);
-  assert.equal(score.hasSufficientData, true, "Should have sufficient data");
-  assert.equal(score.status, "Excellent", "Status should be Excellent");
-  assert.ok(score.overallScore >= 90, "Overall score should be >= 90");
-
-  // Test 3: Side-by-side comparison
-  console.log("Test 3: Comparing services");
-  for (let i = 0; i < 10; i++) {
+  // Service B (Crypto) - Slower / Higher price
+  for (let i = 0; i < 12; i++) {
     await recordApiQualityObservation({
-      serviceId: "srv_test_crypto",
-      sellerPublicId: "sel_test_seller_2",
-      startedAt: new Date(now.getTime() - (10 - i) * 3600000).toISOString(),
-      completedAt: new Date(now.getTime() - (10 - i) * 3600000 + 450).toISOString(),
-      quotedPriceUsdc: 0.10,
-      paidAmountUsdc: 0.10,
-      latencyMs: 400 + i * 50,
-      httpStatusClass: i === 5 ? "5xx" : "2xx",
+      serviceId: "srv_comp_crypto",
+      sellerPublicId: "sel_crypto",
+      startedAt: new Date(now.getTime() - i * 3600000).toISOString(),
+      completedAt: new Date(now.getTime() - i * 3600000 + 500).toISOString(),
+      quotedPriceUsdc: 0.2,
+      paidAmountUsdc: 0.2,
+      latencyMs: 500,
+      httpStatusClass: "2xx",
       endpointReached: true,
-      responseSchemaValid: i !== 5,
+      responseSchemaValid: true,
       responseWithinSizeLimit: true,
       paymentRequired: true,
       paymentAuthorized: true,
       paymentSettled: true,
-      executionCompleted: i !== 5,
-      arcProofVerified: i !== 5,
-      errorCategory: i === 5 ? "execution_failed" : "none",
+      executionCompleted: true,
+      arcProofVerified: true,
+      errorCategory: "none",
       source: "real_paid_execution",
     });
   }
 
-  const comparison = compareApiQuality(
+  const allCompObs = getInMemoryApiQualityObservations();
+  const compResult = compareApiQuality(
     [
-      { serviceId: "srv_test_weather", observations: obs.filter((o) => o.serviceId === "srv_test_weather") },
-      { serviceId: "srv_test_crypto", observations: obs.filter((o) => o.serviceId === "srv_test_crypto") },
+      { serviceId: "srv_comp_weather", observations: allCompObs.filter((o) => o.serviceId === "srv_comp_weather") },
+      { serviceId: "srv_comp_crypto", observations: allCompObs.filter((o) => o.serviceId === "srv_comp_crypto") },
     ],
     30,
   );
 
-  assert.equal(comparison.services.length, 2, "Should compare 2 services");
-  assert.equal(comparison.overallWinnerServiceId, "srv_test_weather", "srv_test_weather should win");
+  assert.equal(compResult.services.length, 2);
+  assert.equal(compResult.services[0].serviceId, "srv_comp_weather");
+  assert.equal(compResult.services[0].rank, 1);
+  assert.equal(compResult.services[1].rank, 2);
+  assert.equal(compResult.overallWinnerServiceId, "srv_comp_weather");
 
-  // Test 4: Cooldown & Budget guards
-  console.log("Test 4: Testing Probe Safety & Budget Guards");
-  // Cooldown check
-  const safety1 = await checkProbeSafetyAndBudget("srv_probe_test", "availability", { cooldownSeconds: 300 });
-  assert.equal(safety1.allowed, true, "Initial probe should be allowed");
+  // ----------------------------------------------------
+  // Scenario 10: Comparison Category Highlights Generation
+  // ----------------------------------------------------
+  console.log("Scenario 10: Comparison Category Highlights Generation");
+  assert.ok(compResult.highlights.length >= 3);
+  const overallHighlight = compResult.highlights.find((h) => h.category === "overall");
+  assert.equal(overallHighlight?.winnerServiceId, "srv_comp_weather");
+  const latencyHighlight = compResult.highlights.find((h) => h.category === "latency");
+  assert.equal(latencyHighlight?.winnerServiceId, "srv_comp_weather");
 
-  // Execute a probe
-  const probeRes1 = await executeScheduledProbe({ serviceId: "srv_probe_test", probeType: "availability" });
-  assert.equal(probeRes1.status, "success", "Probe execution should succeed");
+  // ----------------------------------------------------
+  // Scenario 11: Probe Cooldown Safety Guard (cooldown_skipped)
+  // ----------------------------------------------------
+  console.log("Scenario 11: Probe Cooldown Safety Guard");
+  const check1 = await checkProbeSafetyAndBudget("srv_cooldown_test", "availability", { cooldownSeconds: 300 });
+  assert.equal(check1.allowed, true);
 
-  // Immediate second probe should trigger cooldown
-  const safety2 = await checkProbeSafetyAndBudget("srv_probe_test", "availability", { cooldownSeconds: 300 });
-  assert.equal(safety2.allowed, false, "Second probe within 300s should be blocked by cooldown");
-  assert.equal(safety2.status, "cooldown_skipped", "Status should be cooldown_skipped");
+  await executeScheduledProbe({ serviceId: "srv_cooldown_test", probeType: "availability" });
 
-  // Test budget guard for paid execution probe
-  const safety3 = await checkProbeSafetyAndBudget("srv_budget_test", "paid_execution", {
-    maxDailyProbeBudgetUsdc: 0.01,
-    maxPriceUsdc: 0.005,
+  const check2 = await checkProbeSafetyAndBudget("srv_cooldown_test", "availability", { cooldownSeconds: 300 });
+  assert.equal(check2.allowed, false);
+  assert.equal(check2.status, "cooldown_skipped");
+
+  // ----------------------------------------------------
+  // Scenario 12: Probe Per-Request Price Limit Guard (budget_exceeded)
+  // ----------------------------------------------------
+  console.log("Scenario 12: Probe Per-Request Price Limit Guard");
+  const checkPriceLimit = await checkProbeSafetyAndBudget("srv_price_guard", "paid_execution", {
+    maxPriceUsdc: 0.05,
   });
-  assert.equal(safety3.allowed, false, "Paid probe exceeding max price limit should be blocked");
-  assert.equal(safety3.status, "budget_exceeded", "Status should be budget_exceeded");
+  // Service price defaults to 0.10 in mock metadata fetch if DB unavailable -> 0.10 > 0.05
+  assert.equal(checkPriceLimit.allowed, false);
+  assert.equal(checkPriceLimit.status, "budget_exceeded");
 
-  // Test 5: Delta Degradation Alert Detection
-  console.log("Test 5: Delta Alert Detection");
-  clearInMemoryApiQualityAlerts();
+  // ----------------------------------------------------
+  // Scenario 13: Probe Cumulative Daily Budget Guard
+  // ----------------------------------------------------
+  console.log("Scenario 13: Probe Cumulative Daily Budget Guard");
+  // Pre-fill daily spend of probes
+  for (let i = 0; i < 50; i++) {
+    await recordApiQualityObservation({
+      serviceId: "srv_budget_fill",
+      startedAt: new Date(now.getTime() - i * 60000).toISOString(),
+      completedAt: new Date(now.getTime() - i * 60000 + 100).toISOString(),
+      quotedPriceUsdc: 0.1,
+      paidAmountUsdc: 0.1,
+      latencyMs: 100,
+      httpStatusClass: "2xx",
+      endpointReached: true,
+      responseSchemaValid: true,
+      responseWithinSizeLimit: true,
+      paymentRequired: true,
+      paymentAuthorized: true,
+      paymentSettled: true,
+      executionCompleted: true,
+      arcProofVerified: true,
+      errorCategory: "none",
+      source: "scheduled_probe",
+    });
+  }
 
-  const prevScore = { overallScore: 95, availabilityScore: 25, executionReliabilityScore: 20, responseValidityScore: 15, paymentSuccessScore: 15, settlementSuccessScore: 15, latencyConsistencyScore: 10, status: "Excellent" as const, confidenceLevel: "high" as const, hasSufficientData: true };
-  const newScore = { overallScore: 70, availabilityScore: 15, executionReliabilityScore: 15, responseValidityScore: 15, paymentSuccessScore: 15, settlementSuccessScore: 10, latencyConsistencyScore: 0, status: "Mixed signals" as const, confidenceLevel: "high" as const, hasSufficientData: true };
+  const checkDailyBudget = await checkProbeSafetyAndBudget("srv_budget_guard", "paid_execution", {
+    maxDailyProbeBudgetUsdc: 4.0, // Spent is 50 * 0.1 = 5.0 USDC > 4.0 USDC
+    cooldownSeconds: 0,
+    maxPriceUsdc: 1.0,
+  });
+  assert.equal(checkDailyBudget.allowed, false);
+  assert.equal(checkDailyBudget.status, "budget_exceeded");
 
-  const prevMetrics = { totalObservations: 20, uptimePercent: 100, executionSuccessPercent: 100, paymentSuccessPercent: 100, settlementSuccessPercent: 100, validResponsePercent: 100, latencyP50Ms: 100, latencyP95Ms: 150, latencyMaxMs: 200, quotedPriceMinUsdc: 0.05, quotedPriceMedianUsdc: 0.05, quotedPriceMaxUsdc: 0.05, costPerSuccessfulResultUsdc: 0.05, firstObservedAt: now.toISOString(), lastObservedAt: now.toISOString() };
-  const newMetrics = { totalObservations: 21, uptimePercent: 85, executionSuccessPercent: 75, paymentSuccessPercent: 100, settlementSuccessPercent: 100, validResponsePercent: 100, latencyP50Ms: 200, latencyP95Ms: 6000, latencyMaxMs: 8000, quotedPriceMinUsdc: 0.05, quotedPriceMedianUsdc: 0.05, quotedPriceMaxUsdc: 0.05, costPerSuccessfulResultUsdc: 0.05, firstObservedAt: now.toISOString(), lastObservedAt: now.toISOString() };
-
-  const alerts = detectQualityDegradationAlerts("srv_degraded", prevScore, newScore, prevMetrics, newMetrics);
-  assert.ok(alerts.length >= 3, "Should trigger multiple degradation alerts");
-  const alertTypes = alerts.map((a) => a.alertType);
-  assert.ok(alertTypes.includes("score_drop"), "Should trigger score_drop alert");
-  assert.ok(alertTypes.includes("uptime_drop"), "Should trigger uptime_drop alert");
-  assert.ok(alertTypes.includes("latency_spike"), "Should trigger latency_spike alert");
-  assert.ok(alertTypes.includes("execution_failure_spike"), "Should trigger execution_failure_spike alert");
-
-  // Test 6: Batch Probe Runner
-  console.log("Test 6: Batch Probe Runner");
-  const batchSummary = await runScheduledApiQualityProbes({
-    serviceIds: ["srv_batch_1", "srv_batch_2"],
+  // ----------------------------------------------------
+  // Scenario 14: Single Scheduled Probe Execution & Pre/Post Delta Calculation
+  // ----------------------------------------------------
+  console.log("Scenario 14: Single Scheduled Probe Execution & Pre/Post Delta Calculation");
+  const probeExecRes = await executeScheduledProbe({
+    serviceId: "srv_single_probe",
     probeType: "availability",
-    cooldownSeconds: 0, // Disable cooldown for batch test
+    cooldownSeconds: 0,
   });
 
-  assert.equal(batchSummary.totalProbes, 2, "Batch totalProbes should be 2");
-  assert.equal(batchSummary.executed, 2, "Batch executed probes should be 2");
-  assert.equal(batchSummary.results.length, 2, "Should return 2 probe results");
+  assert.equal(probeExecRes.status, "success");
+  assert.ok(probeExecRes.observation);
+  assert.ok(probeExecRes.metricsDelta);
+  assert.equal(probeExecRes.metricsDelta.serviceId, "srv_single_probe");
 
-  console.log("All API Quality Provider & Monitoring Probes Tests Passed!");
+  // ----------------------------------------------------
+  // Scenario 15: Batch Scheduled Probes Runner
+  // ----------------------------------------------------
+  console.log("Scenario 15: Batch Scheduled Probes Runner");
+  const batchRes = await runScheduledApiQualityProbes({
+    serviceIds: ["srv_batch_a", "srv_batch_b"],
+    probeType: "availability",
+    cooldownSeconds: 0,
+  });
+
+  assert.equal(batchRes.totalProbes, 2);
+  assert.equal(batchRes.executed, 2);
+  assert.equal(batchRes.skipped, 0);
+  assert.equal(batchRes.results.length, 2);
+
+  // ----------------------------------------------------
+  // Scenario 16: Delta Degradation Alert - Score Drop (>= 15 pts)
+  // ----------------------------------------------------
+  console.log("Scenario 16: Delta Degradation Alert - Score Drop");
+  const prevScore16 = { overallScore: 95, availabilityScore: 25, executionReliabilityScore: 20, responseValidityScore: 15, paymentSuccessScore: 15, settlementSuccessScore: 15, latencyConsistencyScore: 10, status: "Excellent" as const, confidenceLevel: "high" as const, hasSufficientData: true };
+  const newScore16 = { overallScore: 70, availabilityScore: 15, executionReliabilityScore: 15, responseValidityScore: 15, paymentSuccessScore: 15, settlementSuccessScore: 10, latencyConsistencyScore: 0, status: "Mixed signals" as const, confidenceLevel: "high" as const, hasSufficientData: true };
+  const prevMetrics16 = { totalObservations: 20, uptimePercent: 100, executionSuccessPercent: 100, paymentSuccessPercent: 100, settlementSuccessPercent: 100, validResponsePercent: 100, latencyP50Ms: 100, latencyP95Ms: 150, latencyMaxMs: 200, quotedPriceMinUsdc: 0.05, quotedPriceMedianUsdc: 0.05, quotedPriceMaxUsdc: 0.05, costPerSuccessfulResultUsdc: 0.05, firstObservedAt: now.toISOString(), lastObservedAt: now.toISOString() };
+  const newMetrics16 = { totalObservations: 21, uptimePercent: 95, executionSuccessPercent: 95, paymentSuccessPercent: 100, settlementSuccessPercent: 100, validResponsePercent: 100, latencyP50Ms: 100, latencyP95Ms: 150, latencyMaxMs: 200, quotedPriceMinUsdc: 0.05, quotedPriceMedianUsdc: 0.05, quotedPriceMaxUsdc: 0.05, costPerSuccessfulResultUsdc: 0.05, firstObservedAt: now.toISOString(), lastObservedAt: now.toISOString() };
+
+  const alerts16 = detectQualityDegradationAlerts("srv_score_drop", prevScore16, newScore16, prevMetrics16, newMetrics16);
+  const scoreDropAlert = alerts16.find((a) => a.alertType === "score_drop");
+  assert.ok(scoreDropAlert);
+  assert.equal(scoreDropAlert.severity, "critical");
+
+  // ----------------------------------------------------
+  // Scenario 17: Delta Degradation Alert - Uptime Drop
+  // ----------------------------------------------------
+  console.log("Scenario 17: Delta Degradation Alert - Uptime Drop");
+  const prevMetrics17 = { ...prevMetrics16, uptimePercent: 100 };
+  const newMetrics17 = { ...newMetrics16, uptimePercent: 88 }; // Drop >= 10% and < 90%
+  const prevScore17 = prevScore16;
+  const newScore17 = prevScore16;
+
+  const alerts17 = detectQualityDegradationAlerts("srv_uptime_drop", prevScore17, newScore17, prevMetrics17, newMetrics17);
+  const uptimeAlert = alerts17.find((a) => a.alertType === "uptime_drop");
+  assert.ok(uptimeAlert);
+
+  // ----------------------------------------------------
+  // Scenario 18: Delta Degradation Alert - Latency Spike & Execution Spike
+  // ----------------------------------------------------
+  console.log("Scenario 18: Delta Degradation Alert - Latency Spike & Execution Spike");
+  const prevMetrics18 = { ...prevMetrics16, latencyP95Ms: 200, executionSuccessPercent: 100 };
+  const newMetrics18 = { ...newMetrics16, latencyP95Ms: 500, executionSuccessPercent: 70 }; // Latency 2.5x spike; Exec < 80%
+
+  const alerts18 = detectQualityDegradationAlerts("srv_spikes", prevScore16, prevScore16, prevMetrics18, newMetrics18);
+  const latencyAlert = alerts18.find((a) => a.alertType === "latency_spike");
+  const execAlert = alerts18.find((a) => a.alertType === "execution_failure_spike");
+  assert.ok(latencyAlert);
+  assert.ok(execAlert);
+
+  // ----------------------------------------------------
+  // Scenario 19: Job Input Parsing
+  // ----------------------------------------------------
+  console.log("Scenario 19: Job Input Parsing");
+  const parseJson = parseApiQualityJobInput(JSON.stringify({ serviceId: "srv_json_target", observationWindowDays: 90 }));
+  assert.deepEqual(parseJson.targetServices, ["srv_json_target"]);
+  assert.equal(parseJson.observationWindowDays, 90);
+
+  const parseMultiJson = parseApiQualityJobInput(JSON.stringify({ serviceIds: ["srv_a", "srv_b"], observationWindowDays: 7 }));
+  assert.deepEqual(parseMultiJson.targetServices, ["srv_a", "srv_b"]);
+  assert.equal(parseMultiJson.observationWindowDays, 7);
+
+  const parseTokens = parseApiQualityJobInput("compare srv_weather srv_crypto for quality");
+  assert.ok(parseTokens.targetServices.includes("srv_weather"));
+  assert.ok(parseTokens.targetServices.includes("srv_crypto"));
+
+  // ----------------------------------------------------
+  // Scenario 20: Unified Report View Model Construction (15 Sections)
+  // ----------------------------------------------------
+  console.log("Scenario 20: Unified Report View Model Construction");
+  const reportInput = {
+    jobId: "job_p4_quality_001",
+    workflow: "paid_api_quality",
+    status: "completed",
+    targetServices: ["srv_comp_weather", "srv_comp_crypto"],
+    observationWindowDays: 30,
+    observationsByService: {
+      srv_comp_weather: allCompObs.filter((o) => o.serviceId === "srv_comp_weather"),
+      srv_comp_crypto: allCompObs.filter((o) => o.serviceId === "srv_comp_crypto"),
+    },
+    proofs: [{ txHash: "0x123abc...", status: "verified", explorerUrl: "https://explorer.arc.io/tx/0x123abc..." }],
+    receipts: [{ receiptId: "rcpt_001", serviceSlug: "srv_comp_weather", serviceName: "Weather API", priceUsdc: "0.05", status: "settled" }],
+  };
+
+  const reportModel = buildApiQualityPublicReport(reportInput);
+  assert.equal(reportModel.reportId, "job_p4_quality_001");
+  assert.equal(reportModel.mode, "comparison");
+  assert.equal(reportModel.servicesCompared.length, 2);
+  assert.ok(reportModel.executiveSummary.length > 0);
+  assert.ok(reportModel.priceAndCostEfficiency);
+  assert.ok(reportModel.availability);
+  assert.ok(reportModel.latencyDistribution);
+  assert.ok(reportModel.responseQuality);
+  assert.ok(reportModel.paymentAndSettlementReliability);
+  assert.ok(Array.isArray(reportModel.observedFailures));
+  assert.ok(reportModel.qualityScoreAndConfidence);
+  assert.ok(Array.isArray(reportModel.strengths));
+  assert.ok(Array.isArray(reportModel.risksAndReviewItems));
+  assert.ok(Array.isArray(reportModel.questionsBeforeIntegration));
+  assert.ok(reportModel.evidenceAndObservationWindow);
+  assert.ok(reportModel.limitations);
+  assert.equal(reportModel.verification.status, "verified");
+
+  // ----------------------------------------------------
+  // Scenario 21: Report Markdown Serializer
+  // ----------------------------------------------------
+  console.log("Scenario 21: Report Markdown Serializer");
+  const markdownText = formatApiQualityPublicReportAsMarkdown(reportModel);
+  assert.ok(markdownText.includes("# Paid API Quality Report"));
+  assert.ok(markdownText.includes("## Executive Summary"));
+  assert.ok(markdownText.includes("## Quality Score & Breakdown"));
+  assert.ok(markdownText.includes("## Services Overview & Comparison"));
+  assert.ok(markdownText.includes("## Payment & Arc Verification Details"));
+  assert.ok(markdownText.includes("0x123abc..."));
+
+  // ----------------------------------------------------
+  // Scenario 22: Workflow System & Machine Error Integration
+  // ----------------------------------------------------
+  console.log("Scenario 22: Workflow System & Machine Error Integration");
+  assert.ok(HOSTED_WORKFLOW_TYPES.includes("paid_api_quality"));
+  assert.equal(isHostedWorkflowType("paid_api_quality"), true);
+
+  const defaultTask = defaultWorkflowTask("paid_api_quality");
+  assert.ok(defaultTask.toLowerCase().includes("evaluate"));
+
+  const testErrorCode: MachineErrorCode = "api_quality_service_not_found";
+  assert.equal(testErrorCode, "api_quality_service_not_found");
+
+  console.log("\n=======================================================");
+  console.log("ALL 22 P4.0 PAID API QUALITY TEST SCENARIOS PASSED!");
+  console.log("=======================================================");
 }
 
 runTests().catch((err) => {
-  console.error("Test failure:", err);
+  console.error("Test suite failed:", err);
   process.exit(1);
 });
