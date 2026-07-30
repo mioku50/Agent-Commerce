@@ -9,6 +9,7 @@ import { BRAND } from "../brand.ts";
 export const HOSTED_WORKFLOW_TYPES = [
   "github_due_diligence",
   "agent_trust_report",
+  "paid_api_quality",
   "sentiment_tone",
   "builder_update",
   "market_context",
@@ -20,6 +21,7 @@ export type HostedWorkflowType = (typeof HOSTED_WORKFLOW_TYPES)[number];
 export const CURATED_HOSTED_WORKFLOW_TYPES = [
   "github_due_diligence",
   "agent_trust_report",
+  "paid_api_quality",
   "market_context",
   "sentiment_tone",
   "builder_update",
@@ -208,6 +210,26 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
       "Deterministic Trust Score with evidence for every category",
       "Identity, execution, payment, service, contract, and endpoint snapshots when available",
       "Receipts and Arc verification status without exposing private tenant data",
+    ],
+  },
+  {
+    value: "paid_api_quality",
+    label: "Paid API Quality Report",
+    shortLabel: "API Quality",
+    description:
+      "Evaluate and compare paid APIs using observed pricing, latency, availability, response validity, payment execution, and settlement history.",
+    task:
+      "Evaluate and compare paid APIs using observed pricing, latency, availability, response validity, payment execution, and settlement history.",
+    placeholder:
+      "Enter service ID(s) to evaluate, e.g. pyth-market-price, github-repository-intelligence…",
+    estimatedSpendUsdc: 0.0013,
+    benefitLabel:
+      "Telemetry & benchmarking · Uptime & latency P95 · Arc verification",
+    services: commonServices,
+    expectedResult: [
+      "Observed uptime, P50/P95 latency, and response validity metrics",
+      "Payment execution success, settlement reliability, and cost efficiency",
+      "Receipts and verified Arc proof trail for telemetry observations",
     ],
   },
   {

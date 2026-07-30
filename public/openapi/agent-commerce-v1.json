@@ -807,8 +807,64 @@
             "properties": {
               "code": {
                 "type": "string",
-                "example": "invalid_repository",
-                "description": "Stable Machine API error code. Idempotent mutations may return idempotency_key_missing, idempotency_conflict, idempotency_in_progress, or idempotency_store_unavailable."
+                "enum": [
+                  "agent_trust_input_required",
+                  "agent_not_found",
+                  "agent_access_denied",
+                  "agent_registry_unavailable",
+                  "agent_trust_service_unavailable",
+                  "contract_not_found",
+                  "contract_provider_unavailable",
+                  "endpoint_invalid",
+                  "endpoint_private_network_blocked",
+                  "endpoint_unreachable",
+                  "endpoint_response_too_large",
+                  "insufficient_trust_evidence",
+                  "invalid_wallet",
+                  "invalid_repository",
+                  "repository_not_found",
+                  "repository_inaccessible",
+                  "credential_missing",
+                  "credential_revoked",
+                  "scope_denied",
+                  "workflow_disabled",
+                  "quote_expired",
+                  "quote_not_found",
+                  "quote_already_used",
+                  "idempotency_key_missing",
+                  "idempotency_conflict",
+                  "idempotency_in_progress",
+                  "idempotency_store_unavailable",
+                  "invalid_request",
+                  "payment_required",
+                  "payment_invalid",
+                  "spending_limit_exceeded",
+                  "watchlist_invalid",
+                  "watchlist_not_found",
+                  "watchlist_limit_exceeded",
+                  "recheck_not_found",
+                  "recheck_conflict",
+                  "recheck_in_progress",
+                  "monitoring_unavailable",
+                  "run_not_found",
+                  "report_not_found",
+                  "report_not_ready",
+                  "report_generation_failed",
+                  "verification_pending",
+                  "provider_unavailable",
+                  "rate_limited",
+                  "internal_error",
+                  "api_quality_service_not_found",
+                  "api_quality_service_unavailable",
+                  "api_quality_insufficient_services",
+                  "api_quality_too_many_services",
+                  "api_quality_no_observations",
+                  "api_quality_observation_store_unavailable",
+                  "api_quality_comparison_incompatible",
+                  "api_quality_probe_budget_exceeded"
+                ],
+                "example": "api_quality_service_not_found",
+                "description": "Stable Machine API error code."
               },
               "message": {
                 "type": "string",
@@ -1086,7 +1142,16 @@
         "properties": {
           "workflow": {
             "type": "string",
-            "example": "github_due_diligence"
+            "enum": [
+              "github_due_diligence",
+              "agent_trust_report",
+              "paid_api_quality",
+              "sentiment_tone",
+              "builder_update",
+              "market_context",
+              "custom_task"
+            ],
+            "example": "paid_api_quality"
           },
           "repository": {
             "type": "string",
@@ -1095,6 +1160,7 @@
           "input": {
             "oneOf": [
               { "$ref": "#/components/schemas/AgentTrustReportInput" },
+              { "$ref": "#/components/schemas/PaidApiQualityReportInput" },
               {
                 "type": "object",
                 "additionalProperties": true,
@@ -1103,6 +1169,29 @@
                 }
               }
             ]
+          }
+        }
+      },
+      "PaidApiQualityReportInput": {
+        "type": "object",
+        "description": "Input payload for Paid API Quality Report workflow. Accepts a single service ID or 1-5 service IDs to evaluate.",
+        "properties": {
+          "serviceId": {
+            "type": "string",
+            "example": "pyth-market-price"
+          },
+          "serviceIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "maxItems": 5,
+            "example": ["pyth-market-price", "github-repository-intelligence"]
+          },
+          "observationWindowDays": {
+            "type": "integer",
+            "enum": [7, 30, 90],
+            "default": 30,
+            "example": 30
           }
         }
       },
