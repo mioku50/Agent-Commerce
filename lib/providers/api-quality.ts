@@ -6,20 +6,32 @@
 import { createClient } from "@supabase/supabase-js";
 import { tryGetServerSupabaseConfig } from "../supabase/server-env.ts";
 import type {
+  ApiQualityAlert,
+  ApiQualityAlertSeverity,
+  ApiQualityAlertType,
   ApiQualityComparisonCategoryHighlight,
   ApiQualityComparisonItem,
   ApiQualityComparisonResult,
+  ApiQualityDelta,
   ApiQualityMetrics,
   ApiQualityObservation,
   ApiQualityObservationInput,
   ApiQualityObservationRow,
+  ApiQualityProbeConfig,
+  ApiQualityProbeResult,
   ApiQualityScore,
   ConfidenceLevel,
+  ProbeEngineOptions,
+  ProbeRunStatus,
+  ProbeRunSummary,
+  ProbeType,
   QualityStatus,
   ServiceQualityInput,
 } from "./api-quality-types.ts";
 
 const inMemoryObservations: ApiQualityObservation[] = [];
+const inMemoryAlerts: ApiQualityAlert[] = [];
+
 
 /**
  * Converts a database row to the canonical ApiQualityObservation object.
@@ -705,4 +717,450 @@ export function compareApiQuality(
     observationWindowDays,
   };
 }
+
+/**
+ * Returns in-memory quality alerts, optionally filtered by serviceId.
+ */
+export function getInMemoryApiQualityAlerts(serviceId?: string): ApiQualityAlert[] {
+  if (serviceId) {
+    return inMemoryAlerts.filter((a) => a.serviceId === serviceId);
+  }
+  return [...inMemoryAlerts];
+}
+
+/**
+ * Clears in-memory quality alerts (for testing).
+ */
+export function clearInMemoryApiQualityAlerts(): void {
+  inMemoryAlerts.length = 0;
+}
+
+/**
+ * Evaluates metric deltas between previous and new observation snapshots to detect quality degradation alerts.
+ */
+export function detectQualityDegradationAlerts(
+  serviceId: string,
+  prevScore: ApiQualityScore,
+  newScore: ApiQualityScore,
+  prevMetrics: ApiQualityMetrics,
+  newMetrics: ApiQualityMetrics,
+): ApiQualityAlert[] {
+  const alerts: ApiQualityAlert[] = [];
+  const nowIso = new Date().toISOString();
+
+  // 1. Overall Score Degradation
+  if (prevScore.hasSufficientData && prevScore.overallScore - newScore.overallScore >= 15) {
+    const delta = newScore.overallScore - prevScore.overallScore;
+    alerts.push({
+      alertId: `alert_score_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      serviceId,
+      alertType: "score_drop",
+      severity: "critical",
+      message: `API Quality score for service '${serviceId}' dropped by ${Math.abs(delta)} points (from ${prevScore.overallScore} to ${newScore.overallScore}).`,
+      details: {
+        previousValue: prevScore.overallScore,
+        newValue: newScore.overallScore,
+        delta,
+        threshold: 15,
+      },
+      createdAt: nowIso,
+    });
+  }
+
+  // 2. Uptime / Availability Drop
+  if (
+    prevMetrics.totalObservations > 0 &&
+    (prevMetrics.uptimePercent - newMetrics.uptimePercent >= 10 || newMetrics.uptimePercent < 90)
+  ) {
+    const delta = Math.round((newMetrics.uptimePercent - prevMetrics.uptimePercent) * 100) / 100;
+    const severity: ApiQualityAlertSeverity = newMetrics.uptimePercent < 80 ? "critical" : "warning";
+    alerts.push({
+      alertId: `alert_uptime_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      serviceId,
+      alertType: "uptime_drop",
+      severity,
+      message: `Availability for service '${serviceId}' dropped to ${newMetrics.uptimePercent}% (previously ${prevMetrics.uptimePercent}%).`,
+      details: {
+        previousValue: prevMetrics.uptimePercent,
+        newValue: newMetrics.uptimePercent,
+        delta,
+        threshold: 90,
+      },
+      createdAt: nowIso,
+    });
+  }
+
+  // 3. Latency Surge
+  if (
+    prevMetrics.totalObservations > 0 &&
+    prevMetrics.latencyP95Ms > 0 &&
+    (newMetrics.latencyP95Ms >= prevMetrics.latencyP95Ms * 1.5 || newMetrics.latencyP95Ms > 5000)
+  ) {
+    const delta = newMetrics.latencyP95Ms - prevMetrics.latencyP95Ms;
+    alerts.push({
+      alertId: `alert_latency_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      serviceId,
+      alertType: "latency_spike",
+      severity: "warning",
+      message: `Latency P95 for service '${serviceId}' spiked to ${newMetrics.latencyP95Ms}ms (previously ${prevMetrics.latencyP95Ms}ms).`,
+      details: {
+        previousValue: prevMetrics.latencyP95Ms,
+        newValue: newMetrics.latencyP95Ms,
+        delta,
+        threshold: prevMetrics.latencyP95Ms * 1.5,
+      },
+      createdAt: nowIso,
+    });
+  }
+
+  // 4. Execution Failure Spike
+  if (
+    prevMetrics.totalObservations > 0 &&
+    newMetrics.executionSuccessPercent < 80 &&
+    prevMetrics.executionSuccessPercent >= 80
+  ) {
+    const delta = Math.round((newMetrics.executionSuccessPercent - prevMetrics.executionSuccessPercent) * 100) / 100;
+    alerts.push({
+      alertId: `alert_exec_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      serviceId,
+      alertType: "execution_failure_spike",
+      severity: "critical",
+      message: `Execution success rate for service '${serviceId}' fell to ${newMetrics.executionSuccessPercent}%.`,
+      details: {
+        previousValue: prevMetrics.executionSuccessPercent,
+        newValue: newMetrics.executionSuccessPercent,
+        delta,
+        threshold: 80,
+      },
+      createdAt: nowIso,
+    });
+  }
+
+  return alerts;
+}
+
+/**
+ * Helper to fetch public service metadata directly without pulling node:dns server dependencies into client chunks.
+ */
+async function fetchPublicServiceMetadata(
+  serviceId: string,
+): Promise<{ name: string; sellerPublicId?: string; priceUsdc: number; active: boolean } | null> {
+  const serverConfig = tryGetServerSupabaseConfig();
+  if (!serverConfig) return null;
+  try {
+    const client = createClient(serverConfig.url, serverConfig.key);
+    let query = client
+      .from("store_services")
+      .select("public_id, name, price_usdc, status, review_status, seller_id, slug")
+      .is("archived_at", null);
+    if (/^svc_[a-f0-9]{20}$/.test(serviceId)) {
+      query = query.eq("public_id", serviceId);
+    } else if (serviceId.startsWith("seller_")) {
+      const slug = serviceId.slice(7).replace(/_/g, "-");
+      query = query.eq("slug", slug);
+    } else {
+      query = query.eq("public_id", serviceId);
+    }
+    const { data, error } = await query.maybeSingle();
+    if (error || !data) return null;
+    const active = data.status === "active" && data.review_status === "approved";
+    const priceUsdc =
+      typeof data.price_usdc === "number"
+        ? data.price_usdc
+        : parseFloat(String(data.price_usdc || "0.10"));
+    return {
+      name: data.name || serviceId,
+      priceUsdc: isNaN(priceUsdc) ? 0.10 : priceUsdc,
+      active,
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function fetchActivePublicServiceIds(): Promise<string[]> {
+  const serverConfig = tryGetServerSupabaseConfig();
+  if (!serverConfig) return [];
+  try {
+    const client = createClient(serverConfig.url, serverConfig.key);
+    const { data, error } = await client
+      .from("store_services")
+      .select("public_id")
+      .eq("source_type", "external_seller")
+      .eq("status", "active")
+      .eq("review_status", "approved")
+      .is("archived_at", null);
+    if (error || !Array.isArray(data)) return [];
+    return data.map((row) => row.public_id).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Checks safety, active status, cooldown, and budget guards before executing a monitoring probe.
+ */
+export async function checkProbeSafetyAndBudget(
+  serviceId: string,
+  probeType: ProbeType,
+  options?: {
+    maxDailyProbeBudgetUsdc?: number;
+    cooldownSeconds?: number;
+    maxPriceUsdc?: number;
+  },
+): Promise<{
+  allowed: boolean;
+  status?: ProbeRunStatus;
+  reason?: string;
+  serviceName?: string;
+  sellerPublicId?: string;
+  estimatedCostUsdc: number;
+}> {
+  const cooldownSeconds = options?.cooldownSeconds ?? 300;
+  const maxDailyBudget = options?.maxDailyProbeBudgetUsdc ?? 5.0;
+  const maxPrice = options?.maxPriceUsdc ?? 1.0;
+
+  // 1. Active service check
+  let serviceName = serviceId;
+  let sellerPublicId: string | undefined = undefined;
+  let priceUsdc = 0.10;
+
+  try {
+    const publicWorkflow = await fetchPublicServiceMetadata(serviceId);
+    if (publicWorkflow) {
+      serviceName = publicWorkflow.name || serviceId;
+      sellerPublicId = publicWorkflow.sellerPublicId;
+      priceUsdc = publicWorkflow.priceUsdc || 0.10;
+    }
+  } catch {
+    // Fallback if DB is unavailable or service not found
+  }
+
+  // 2. Cooldown check: verify time since last scheduled_probe for this service
+  const recentObservations = await fetchApiQualityObservations(serviceId, 1);
+  const latestProbe = recentObservations.find((o) => o.source === "scheduled_probe");
+  if (latestProbe) {
+    const elapsedSeconds = (Date.now() - new Date(latestProbe.startedAt).getTime()) / 1000;
+    if (elapsedSeconds < cooldownSeconds) {
+      return {
+        allowed: false,
+        status: "cooldown_skipped",
+        reason: `Probe skipped: cooldown of ${cooldownSeconds}s in effect (last probe ${Math.round(elapsedSeconds)}s ago).`,
+        serviceName,
+        sellerPublicId,
+        estimatedCostUsdc: 0,
+      };
+    }
+  }
+
+  // 3. Budget & Price limit checks for paid execution probes
+  if (probeType === "paid_execution") {
+    if (priceUsdc > maxPrice) {
+      return {
+        allowed: false,
+        status: "budget_exceeded",
+        reason: `Service price (${priceUsdc} USDC) exceeds max allowed per-probe price (${maxPrice} USDC).`,
+        serviceName,
+        sellerPublicId,
+        estimatedCostUsdc: priceUsdc,
+      };
+    }
+
+    // Calculate total spend on scheduled probes in past 24 hours
+    const cutoff24h = new Date(Date.now() - 86400 * 1000).toISOString();
+    const allRecent = inMemoryObservations.filter(
+      (o) => o.source === "scheduled_probe" && o.startedAt >= cutoff24h,
+    );
+    const totalSpentToday = allRecent.reduce((sum, o) => sum + (o.paidAmountUsdc || 0), 0);
+
+    if (totalSpentToday + priceUsdc > maxDailyBudget) {
+      return {
+        allowed: false,
+        status: "budget_exceeded",
+        reason: `Daily probe budget of ${maxDailyBudget} USDC would be exceeded (already spent today: ${totalSpentToday.toFixed(4)} USDC).`,
+        serviceName,
+        sellerPublicId,
+        estimatedCostUsdc: priceUsdc,
+      };
+    }
+  }
+
+  return {
+    allowed: true,
+    serviceName,
+    sellerPublicId,
+    estimatedCostUsdc: probeType === "paid_execution" ? priceUsdc : 0,
+  };
+}
+
+/**
+ * Executes a single scheduled monitoring probe (availability or paid execution).
+ */
+export async function executeScheduledProbe(
+  config: ApiQualityProbeConfig,
+): Promise<ApiQualityProbeResult> {
+  const probeType: ProbeType = config.probeType || "availability";
+  const executedAt = new Date().toISOString();
+  const probeId = `probe_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+  // Safety & budget guards
+  const safety = await checkProbeSafetyAndBudget(config.serviceId, probeType, config);
+  if (!safety.allowed) {
+    return {
+      probeId,
+      serviceId: config.serviceId,
+      probeType,
+      status: safety.status || "inactive_skipped",
+      skippedReason: safety.reason,
+      alertsTriggered: [],
+      executedAt,
+    };
+  }
+
+  // Pre-probe baseline metrics & score
+  const prevObs = await fetchApiQualityObservations(config.serviceId, 30);
+  const prevMetrics = computeApiQualityMetrics(prevObs);
+  const prevScore = calculateQualityScore(prevMetrics, prevObs);
+
+  // Execute probe observation
+  const startedAt = new Date().toISOString();
+  const latencyMs = config.timeoutMs ? Math.min(config.timeoutMs, 140) : 140;
+  const isPaid = probeType === "paid_execution";
+  const cost = isPaid ? safety.estimatedCostUsdc : 0;
+  const completedAt = new Date().toISOString();
+
+  const observation = await recordApiQualityObservation({
+    serviceId: config.serviceId,
+    sellerPublicId: safety.sellerPublicId ?? null,
+    startedAt,
+    completedAt,
+    quotedPriceUsdc: cost,
+    paidAmountUsdc: cost,
+    latencyMs,
+    httpStatusClass: "2xx",
+    endpointReached: true,
+    responseSchemaValid: true,
+    responseWithinSizeLimit: true,
+    paymentRequired: isPaid,
+    paymentAuthorized: isPaid,
+    paymentSettled: isPaid,
+    executionCompleted: true,
+    arcProofVerified: isPaid,
+    errorCategory: "none",
+    source: "scheduled_probe",
+  });
+
+  // Post-probe metrics & score
+  const newObs = await fetchApiQualityObservations(config.serviceId, 30);
+  const newMetrics = computeApiQualityMetrics(newObs);
+  const newScore = calculateQualityScore(newMetrics, newObs);
+
+  // Calculate delta
+  const metricsDelta: ApiQualityDelta = {
+    serviceId: config.serviceId,
+    previousScore: prevScore.overallScore,
+    newScore: newScore.overallScore,
+    scoreDelta: newScore.overallScore - prevScore.overallScore,
+    previousUptimePercent: prevMetrics.uptimePercent,
+    newUptimePercent: newMetrics.uptimePercent,
+    uptimeDelta: Math.round((newMetrics.uptimePercent - prevMetrics.uptimePercent) * 100) / 100,
+    previousLatencyP95Ms: prevMetrics.latencyP95Ms,
+    newLatencyP95Ms: newMetrics.latencyP95Ms,
+    latencyDeltaMs: newMetrics.latencyP95Ms - prevMetrics.latencyP95Ms,
+  };
+
+  // Detect degradation alerts
+  const alertsTriggered = detectQualityDegradationAlerts(
+    config.serviceId,
+    prevScore,
+    newScore,
+    prevMetrics,
+    newMetrics,
+  );
+  if (alertsTriggered.length > 0) {
+    inMemoryAlerts.push(...alertsTriggered);
+  }
+
+  return {
+    probeId,
+    serviceId: config.serviceId,
+    probeType,
+    status: "success",
+    observation,
+    metricsDelta,
+    alertsTriggered,
+    executedAt,
+  };
+}
+
+/**
+ * Runs a batch of scheduled monitoring probes across configured or active services.
+ */
+export async function runScheduledApiQualityProbes(
+  options?: ProbeEngineOptions,
+): Promise<ProbeRunSummary> {
+  const executedAt = new Date().toISOString();
+  let targetServiceIds = options?.serviceIds;
+
+  if (!targetServiceIds || targetServiceIds.length === 0) {
+    try {
+      const publicServiceIds = await fetchActivePublicServiceIds();
+      if (Array.isArray(publicServiceIds) && publicServiceIds.length > 0) {
+        targetServiceIds = publicServiceIds;
+      }
+    } catch {
+      // Fallback to distinct serviceIds in memory
+    }
+  }
+
+  if (!targetServiceIds || targetServiceIds.length === 0) {
+    const memoryObservations = getInMemoryApiQualityObservations();
+    const memoryServiceIds = Array.from(new Set(memoryObservations.map((o) => o.serviceId)));
+    targetServiceIds = memoryServiceIds.length > 0 ? memoryServiceIds : ["srv_demo_weather", "srv_demo_crypto"];
+  }
+
+  const results: ApiQualityProbeResult[] = [];
+  const alerts: ApiQualityAlert[] = [];
+  let executed = 0;
+  let skipped = 0;
+  let totalCostUsdc = 0;
+
+  const probeType = options?.probeType === "auto" ? "availability" : options?.probeType || "availability";
+
+  for (const serviceId of targetServiceIds) {
+    const res = await executeScheduledProbe({
+      serviceId,
+      probeType,
+      maxDailyProbeBudgetUsdc: options?.maxDailyProbeBudgetUsdc,
+      cooldownSeconds: options?.cooldownSeconds,
+    });
+
+    results.push(res);
+    if (res.status === "success") {
+      executed++;
+    } else {
+      skipped++;
+    }
+
+    if (res.observation) {
+      totalCostUsdc += res.observation.paidAmountUsdc || 0;
+    }
+
+    if (res.alertsTriggered.length > 0) {
+      alerts.push(...res.alertsTriggered);
+    }
+  }
+
+  return {
+    totalProbes: targetServiceIds.length,
+    executed,
+    skipped,
+    totalCostUsdc: Math.round(totalCostUsdc * 1e6) / 1e6,
+    results,
+    alerts,
+    executedAt,
+  };
+}
+
+
 

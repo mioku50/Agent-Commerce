@@ -151,3 +151,91 @@ export interface ApiQualityComparisonResult {
   observationWindowDays?: number;
 }
 
+export type ProbeType = "availability" | "paid_execution";
+
+export type ProbeRunStatus =
+  | "success"
+  | "degraded"
+  | "failed"
+  | "budget_exceeded"
+  | "cooldown_skipped"
+  | "inactive_skipped";
+
+export type ApiQualityAlertType =
+  | "quality_degradation"
+  | "uptime_drop"
+  | "latency_spike"
+  | "score_drop"
+  | "execution_failure_spike";
+
+export type ApiQualityAlertSeverity = "critical" | "warning" | "info";
+
+export interface ApiQualityProbeConfig {
+  serviceId: string;
+  probeType?: ProbeType;
+  maxPriceUsdc?: number;
+  cooldownSeconds?: number;
+  maxDailyProbeBudgetUsdc?: number;
+  timeoutMs?: number;
+}
+
+export interface ApiQualityDelta {
+  serviceId: string;
+  previousScore: number;
+  newScore: number;
+  scoreDelta: number;
+  previousUptimePercent: number;
+  newUptimePercent: number;
+  uptimeDelta: number;
+  previousLatencyP95Ms: number;
+  newLatencyP95Ms: number;
+  latencyDeltaMs: number;
+}
+
+export interface ApiQualityAlert {
+  alertId: string;
+  serviceId: string;
+  alertType: ApiQualityAlertType;
+  severity: ApiQualityAlertSeverity;
+  message: string;
+  details: {
+    previousValue?: number;
+    newValue?: number;
+    delta?: number;
+    threshold?: number;
+    [key: string]: unknown;
+  };
+  createdAt: string;
+}
+
+export interface ApiQualityProbeResult {
+  probeId: string;
+  serviceId: string;
+  probeType: ProbeType;
+  status: ProbeRunStatus;
+  observation?: ApiQualityObservation;
+  skippedReason?: string;
+  metricsDelta?: ApiQualityDelta;
+  alertsTriggered: ApiQualityAlert[];
+  executedAt: string;
+}
+
+export interface ProbeEngineOptions {
+  serviceIds?: string[];
+  probeType?: ProbeType | "auto";
+  maxDailyProbeBudgetUsdc?: number;
+  cooldownSeconds?: number;
+  emitAlerts?: boolean;
+}
+
+export interface ProbeRunSummary {
+  totalProbes: number;
+  executed: number;
+  skipped: number;
+  totalCostUsdc: number;
+  results: ApiQualityProbeResult[];
+  alerts: ApiQualityAlert[];
+  executedAt: string;
+}
+
+
