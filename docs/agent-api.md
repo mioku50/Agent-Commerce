@@ -10,6 +10,7 @@ An external agent can:
 3. launch exactly one sponsored or paid run;
 4. poll until the run reaches a terminal state;
 5. retrieve structured JSON or Markdown with Arc Testnet proof metadata.
+6. save trust watchlists and trigger repeat checks with deterministic deltas.
 
 Production base URL:
 
@@ -120,6 +121,42 @@ The final internal x402 step costs `0.0001 USDC` and binds the deterministic
 `reportHash` to the proof registry response hash. `verifiedOnArc` becomes true
 only when that exact report-hash proof is verified; unrelated service receipt
 proofs cannot upgrade the report badge.
+
+### Continuous Trust Monitoring
+
+Machine credentials can create tenant-isolated watchlists and recheck them
+through the same immutable quote/run flow:
+
+```ts
+const watch = await client.createWatchlist({
+  label: "Payments Agent",
+  input: {
+    agentId: "agt_...",
+    repositoryUrl: "owner/repository",
+  },
+  cadence: "weekly",
+});
+
+const { report, history } = await client.recheckWatchlist(watch.id, {
+  recheckIdempotencyKey: "payments-agent-recheck-001",
+  runIdempotencyKey: "payments-agent-run-001",
+});
+
+console.log(history.currentDelta?.changes);
+console.log(history.history[0]?.proofUrl);
+```
+
+`manual`, `daily`, and `weekly` are valid cadences. A Machine API recheck first
+creates an immutable quote at
+`POST /api/agent/v1/watchlists/{watchlistId}/rechecks`, then launches that quote
+through the existing run endpoint. Sponsored and paid checkout remain separate;
+Machine API never receives an implicit payment authorization.
+
+Each snapshot stores the canonical Agent Trust Report hash and the exact Arc
+proof transaction. Deltas are deterministic comparisons between two snapshots:
+Trust Score movement, new/resolved risks, repository activity, agent status,
+service health, endpoint availability, contract signals, and Arc verification
+coverage.
 
 ## HTTP quickstart
 
@@ -276,6 +313,10 @@ The SDK exposes these fields through `AgentCommerceApiError`.
 | `payment_required` | 402 | Submit the exact quoted Arc transaction |
 | `payment_invalid` | 400 | Do not retry until transaction details are fixed |
 | `spending_limit_exceeded` | 429 | Wait for policy window or adjust policy |
+| `watchlist_not_found` | 404 | Use the credential that created the watchlist |
+| `watchlist_limit_exceeded` | 429 | Reuse one of the owner wallet's watchlists |
+| `recheck_in_progress` | 409 | Poll the existing recheck instead of creating another |
+| `monitoring_unavailable` | 503 | Retry the same idempotent request later |
 | `report_not_ready` | 400 | Poll the run before retrieving the report |
 | `report_generation_failed` | 422 | Review the run failure before retrying |
 | `provider_unavailable` | 503 | Retry according to `retryable` |
@@ -283,7 +324,9 @@ The SDK exposes these fields through `AgentCommerceApiError`.
 
 ## Tenant isolation
 
-Quotes, runs, and reports are bound to the exact Machine credential that
-created them. Another credential receives `404`, even if it belongs to the same
-owner. Secrets, raw authorization headers, full prompts, and raw provider
-payloads are not returned by public or Veyra Agent API report surfaces.
+Quotes, runs, reports, watchlists, rechecks, and monitoring history are bound to
+the exact Machine credential that created them. Another credential receives
+`404`, even if it belongs to the same owner. Owner-wallet Public App sessions
+can still manage their browser-created watchlists. Secrets, raw authorization
+headers, full prompts, and raw provider payloads are not returned by public or
+Veyra Agent API report surfaces.

@@ -37,6 +37,18 @@ function expectInputCode(value: unknown, code: string) {
 
 expectInputCode({}, "agent_trust_input_required");
 expectInputCode({ agentWallet: "0xinvalid" }, "invalid_wallet");
+assert.equal(
+  normalizeAgentTrustInput({
+    contractAddress: "0x0000000000000000000000000000000000000002",
+  }).contractAddress,
+  "0x0000000000000000000000000000000000000002",
+);
+assert.equal(
+  normalizeAgentTrustInput({
+    serviceEndpoint: "https://example.com/health",
+  }).serviceEndpoint,
+  "https://example.com/health",
+);
 expectInputCode({ repositoryUrl: "https://example.com/not-github" }, "invalid_repository");
 expectInputCode(
   { repositoryUrl: "circlefin/agent-commerce", serviceEndpoint: "http://localhost:3000" },

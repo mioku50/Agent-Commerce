@@ -7,6 +7,7 @@ import {
   Download,
   ExternalLink,
   HelpCircle,
+  Radar,
   ShieldAlert,
   Share2,
 } from "lucide-react";
@@ -104,6 +105,15 @@ export function AgentTrustReportView({
   const scoreEntries = Object.entries(CATEGORY_LABELS) as Array<
     [keyof typeof CATEGORY_LABELS, string]
   >;
+  const monitoringQuery = new URLSearchParams(
+    Object.entries({
+      agentId: report.input.agentId,
+      agentWallet: report.input.agentWallet,
+      repositoryUrl: report.input.repositoryUrl,
+      contractAddress: report.input.contractAddress,
+      serviceEndpoint: report.input.serviceEndpoint,
+    }).filter((entry): entry is [string, string] => Boolean(entry[1])),
+  );
 
   return (
     <Card className="rounded-lg">
@@ -136,6 +146,12 @@ export function AgentTrustReportView({
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline" size="sm">
+              <Link href={`/monitoring?${monitoringQuery.toString()}`}>
+                <Radar className="size-4" />
+                Monitor
+              </Link>
+            </Button>
             <Button variant="outline" size="sm" onClick={onShare}>
               {copied ? <Check className="size-4 text-emerald-500" /> : <Share2 className="size-4" />}
               {copied ? "Copied!" : "Share"}

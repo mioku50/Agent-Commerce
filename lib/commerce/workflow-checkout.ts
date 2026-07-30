@@ -107,6 +107,7 @@ export type HostedWorkflowUserPaymentRow = {
   credited_at: string | null;
   completed_at: string | null;
   failure_reason: string | null;
+  sponsorship_source?: "user_quota" | "scheduled_monitoring";
   created_at: string;
 };
 
@@ -172,7 +173,19 @@ function publicQuote(row: HostedWorkflowQuoteRow) {
           providerType: "external_seller",
         }],
       }
-    : row.planner_snapshot;
+    : {
+        ...row.planner_snapshot,
+        metadata: meta
+          ? {
+              ...(meta.agentTrustInput
+                ? { agentTrustInput: meta.agentTrustInput }
+                : {}),
+              ...(meta.requestedSources
+                ? { requestedSources: meta.requestedSources }
+                : {}),
+            }
+          : undefined,
+      };
   return {
     id: row.id,
     requesterWallet: getAddress(row.requester_wallet),
@@ -304,6 +317,7 @@ export async function createHostedWorkflowQuote(input: {
   ownerWallet?: string;
   metadata?: Record<string, unknown>;
   allowSponsored?: boolean;
+  sponsorship?: "regular" | "scheduled_monitoring";
   sellerSnapshot?: {
     serviceId: string;
     servicePublicId: string;
@@ -333,7 +347,17 @@ export async function createHostedWorkflowQuote(input: {
   await currentPolicyState(input.requesterFingerprint, hostedConfig);
   const pricing = priceHostedWorkflow(input.plan, checkoutConfig);
   const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText);
-  const sponsored = input.allowSponsored === false
+  const scheduledMonitoring = input.sponsorship === "scheduled_monitoring";
+  if (
+    scheduledMonitoring &&
+    (
+      typeof input.metadata?.monitoringWatchlistId !== "string" ||
+      typeof input.metadata?.monitoringRecheckId !== "string"
+    )
+  ) {
+    throw new Error("Scheduled monitoring sponsorship requires a persisted watchlist and recheck.");
+  }
+  const sponsored = scheduledMonitoring || input.allowSponsored === false
     ? { count: checkoutConfig.sponsoredQuota, error: null }
     : await client
       .from("hosted_workflow_user_payments")
@@ -342,7 +366,10 @@ export async function createHostedWorkflowQuote(input: {
       .ilike("requester_wallet", input.requesterWallet);
   if (sponsored.error) throw new Error("Unable to evaluate sponsored workflow quota.");
   const paymentMode: HostedCheckoutPaymentMode =
-    (sponsored.count ?? 0) < checkoutConfig.sponsoredQuota ? "sponsored" : "paid";
+    scheduledMonitoring ||
+    (sponsored.count ?? 0) < checkoutConfig.sponsoredQuota
+      ? "sponsored"
+      : "paid";
   const expiresAt = new Date(
     Date.now() + checkoutConfig.quoteExpirySeconds * 1_000,
   ).toISOString();
@@ -653,6 +680,7 @@ export async function getHostedWorkflowUserPaymentForJob(jobId: string) {
     creditedAt: row.credited_at,
     completedAt: row.completed_at,
     failureReason: row.failure_reason,
+    sponsorshipSource: row.sponsorship_source ?? "user_quota",
     transactionUrl: row.transaction_hash
       ? `${ARC_TESTNET_EXPLORER_URL}/tx/${row.transaction_hash}`
       : null,

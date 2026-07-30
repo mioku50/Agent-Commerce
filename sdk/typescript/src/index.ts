@@ -114,6 +114,109 @@ export type AgentTrustQuoteRequest = {
   input: AgentTrustReportInput;
 };
 
+export type TrustMonitoringCadence = "manual" | "daily" | "weekly";
+
+export type TrustWatchlist = {
+  id: string;
+  label: string;
+  input: AgentTrustReportInput;
+  cadence: TrustMonitoringCadence;
+  status: "active" | "paused";
+  nextRecheckAt: string | null;
+  lastRecheckAt: string | null;
+  currentScore: number | null;
+  trustStatus: string | null;
+  verificationStatus: string | null;
+  latestSnapshotId: string | null;
+  publicHistoryUrl: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type TrustDeltaChange = {
+  code: string;
+  kind: "new_risk" | "improved" | "activity" | "status_change" | "changed";
+  severity: "critical" | "high" | "medium" | "low" | "info";
+  category: string;
+  title: string;
+  summary: string;
+  before: string | number | boolean | null;
+  after: string | number | boolean | null;
+};
+
+export type TrustDeltaReport = {
+  kind: "trust_delta_report";
+  version: 1;
+  previousSnapshotId: string | null;
+  currentSnapshotId: string;
+  score: {
+    before: number | null;
+    after: number | null;
+    change: number | null;
+    direction: "improved" | "declined" | "unchanged" | "unavailable";
+  };
+  summary: {
+    newRisks: number;
+    improvements: number;
+    statusChanges: number;
+    activityChanges: number;
+    totalChanges: number;
+  };
+  changes: TrustDeltaChange[];
+  generatedAt: string;
+};
+
+export type TrustHistory = {
+  watchlist: {
+    id: string;
+    label: string;
+    input: AgentTrustReportInput;
+    cadence: TrustMonitoringCadence;
+    status: "active" | "paused";
+    lastCheckedAt: string | null;
+    nextRecheckAt: string | null;
+  };
+  currentReport: AgentTrustReport | null;
+  currentDelta: TrustDeltaReport | null;
+  history: Array<{
+    snapshotId: string;
+    jobId: string;
+    sequence: number;
+    score: number | null;
+    trustStatus: string;
+    reportHash: string;
+    verificationStatus: string;
+    proofTransactionHash: string | null;
+    proofUrl: string | null;
+    observedAt: string;
+    delta: TrustDeltaReport;
+    reportUrl: string;
+  }>;
+};
+
+export type TrustRecheckQuote = {
+  watchlistId: string;
+  recheckId: string;
+  quoteId: string;
+  workflow: "agent_trust_report";
+  totalUsdc: number;
+  sponsored: boolean;
+  checkout: {
+    mode: "sponsored" | "arc_transaction";
+    asset: "USDC";
+    network: "arc-testnet";
+  };
+  downstreamSettlement: "server_side_x402";
+  expiresAt: string;
+  requiredPayment: {
+    network: "arc-testnet";
+    asset: "USDC";
+    amount: number;
+    treasuryAddress: string;
+    chainId: 5_042_002;
+  };
+};
+
 export type WorkflowQuote = {
   quoteId: string;
   workflow: string;
@@ -439,6 +542,116 @@ export class AgentCommerceClient {
       options,
     );
     return response.workflows;
+  }
+
+  async listWatchlists(options: { signal?: AbortSignal } = {}) {
+    const response = await this.request<{ watchlists: TrustWatchlist[] }>(
+      "/api/agent/v1/watchlists",
+      { method: "GET" },
+      options,
+    );
+    return response.watchlists;
+  }
+
+  async createWatchlist(
+    input: {
+      label?: string;
+      input: AgentTrustReportInput;
+      cadence?: TrustMonitoringCadence;
+    },
+    options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+  ) {
+    return this.request<TrustWatchlist>(
+      "/api/agent/v1/watchlists",
+      { method: "POST", body: JSON.stringify(input) },
+      {
+        idempotencyKey:
+          options.idempotencyKey ?? createIdempotencyKey("watchlist"),
+        signal: options.signal,
+      },
+    );
+  }
+
+  async getWatchlist(
+    watchlistId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<TrustHistory>(
+      `/api/agent/v1/watchlists/${encodeURIComponent(watchlistId)}`,
+      { method: "GET" },
+      options,
+    );
+  }
+
+  async createWatchlistRecheck(
+    watchlistId: string,
+    options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+  ) {
+    return this.request<TrustRecheckQuote>(
+      `/api/agent/v1/watchlists/${encodeURIComponent(watchlistId)}/rechecks`,
+      { method: "POST", body: "{}" },
+      {
+        idempotencyKey:
+          options.idempotencyKey ?? createIdempotencyKey("recheck"),
+        signal: options.signal,
+      },
+    );
+  }
+
+  async recheckWatchlist(
+    watchlistId: string,
+    options: Omit<ExecuteWorkflowOptions, "quoteIdempotencyKey"> & {
+      recheckIdempotencyKey?: string;
+    } = {},
+  ) {
+    const quote = await this.createWatchlistRecheck(watchlistId, {
+      idempotencyKey: options.recheckIdempotencyKey,
+      signal: options.wait?.signal,
+    });
+    let paymentAuthorization: PaymentAuthorization | undefined;
+    if (!quote.sponsored) {
+      if (typeof options.paymentAuthorization === "function") {
+        paymentAuthorization = await options.paymentAuthorization({
+          ...quote,
+          repository: null,
+          requiredPayment: quote.requiredPayment,
+        });
+      } else {
+        paymentAuthorization = options.paymentAuthorization;
+      }
+      if (!paymentAuthorization) {
+        throw new AgentCommerceApiError({
+          status: 402,
+          code: "payment_authorization_required",
+          message:
+            "This recheck requires an Arc Testnet payment transaction. Provide paymentAuthorization or a payment callback.",
+          retryable: false,
+        });
+      }
+    }
+    const launch = await this.createRun(
+      { quoteId: quote.quoteId, paymentAuthorization },
+      {
+        idempotencyKey: options.runIdempotencyKey,
+        signal: options.wait?.signal,
+      },
+    );
+    const run = await this.waitForRun(launch.runId, options.wait);
+    if (run.status === "failed" || run.status === "expired" || !run.reportId) {
+      throw new AgentCommerceApiError({
+        status: 422,
+        code: run.status === "expired" ? "run_expired" : "run_failed",
+        message: `Watchlist recheck ${run.runId} did not produce a report.`,
+        retryable: false,
+      });
+    }
+    const [report, history] = await Promise.all([
+      this.getReport<AgentTrustReport>(run.reportId, {
+        signal: options.wait?.signal,
+      }),
+      this.getWatchlist(watchlistId, { signal: options.wait?.signal }),
+    ]);
+    return { quote, launch, run, report, history };
   }
 
   async createQuote(
