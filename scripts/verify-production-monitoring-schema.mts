@@ -193,13 +193,13 @@ async function verifyProductionMonitoringSchema() {
       "RLS is not enabled on every monitoring, alert, and webhook table.",
     );
     const credentialConstraint = await postgres.query<{ definition: string }>(`
-      select pg_get_constraintdef(constraint.oid) as definition
-      from pg_constraint constraint
-      join pg_class relation on relation.oid = constraint.conrelid
+      select pg_get_constraintdef(credential_constraint.oid) as definition
+      from pg_constraint credential_constraint
+      join pg_class relation on relation.oid = credential_constraint.conrelid
       join pg_namespace namespace on namespace.oid = relation.relnamespace
       where namespace.nspname = 'public'
         and relation.relname = 'byoa_agent_credentials'
-        and constraint.conname = 'byoa_agent_credentials_scopes_check'
+        and credential_constraint.conname = 'byoa_agent_credentials_scopes_check'
     `);
     const scopeDefinition = credentialConstraint.rows[0]?.definition ?? "";
     for (const scope of [
