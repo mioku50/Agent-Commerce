@@ -272,6 +272,11 @@ const reportB = buildAgentTrustReport({
   generatedAt: checkedAt,
 });
 assert.deepEqual(reportA, reportB, "same snapshots must produce the same report and score");
+assert.match(
+  reportA.verification.reportHash,
+  /^0x[0-9a-f]{64}$/,
+  "canonical report hash must be a single bytes32 value",
+);
 assert.equal(reportA.verification.verifiedOnArc, false);
 assert.equal(reportA.verification.status, "verification_pending");
 for (const category of Object.values(reportA.trustScore.categories)) {
@@ -285,7 +290,7 @@ const verified = applyAgentTrustVerification(reportA, [
     status: "verified",
     transactionHash: `0x${"1".repeat(64)}`,
     transactionUrl: `https://testnet.arcscan.app/tx/0x${"1".repeat(64)}`,
-    responseHash: `0x${reportA.verification.reportHash}`,
+    responseHash: reportA.verification.reportHash,
   },
 ]);
 assert.equal(verified.verification.verifiedOnArc, true);
@@ -296,7 +301,7 @@ const pending = applyAgentTrustVerification(reportA, [
     status: "pending",
     transactionHash: null,
     transactionUrl: null,
-    responseHash: `0x${reportA.verification.reportHash}`,
+    responseHash: reportA.verification.reportHash,
   },
 ]);
 assert.equal(pending.verification.verifiedOnArc, false);

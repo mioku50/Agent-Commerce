@@ -21,7 +21,7 @@ function validPendingReport(value: unknown): value is AgentTrustReport {
     report.verification?.status === "verification_pending" &&
     report.verification.verifiedOnArc === false &&
     typeof report.verification.reportHash === "string" &&
-    /^[0-9a-f]{64}$/i.test(report.verification.reportHash)
+    /^0x[0-9a-f]{64}$/i.test(report.verification.reportHash)
   );
 }
 
@@ -53,7 +53,7 @@ const handler = async (request: NextRequest) => {
     {
       headers: {
         "X-Veyra-Canonical-Response-Hash":
-          `0x${body.report.verification.reportHash}`,
+          body.report.verification.reportHash,
       },
     },
   );

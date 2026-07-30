@@ -820,7 +820,7 @@
               "chainId": { "type": "integer", "enum": [5042002] },
               "reportHash": {
                 "type": "string",
-                "pattern": "^[0-9a-f]{64}$",
+                "pattern": "^0x[0-9a-f]{64}$",
                 "description": "Deterministic SHA-256 hash of the canonical report evidence and score snapshot"
               },
               "proofs": {

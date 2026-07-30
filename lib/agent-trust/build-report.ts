@@ -650,7 +650,7 @@ export function applyAgentTrustVerification(
     responseHash?: string | null;
   }>,
 ): AgentTrustReport {
-  const expectedReportHash = `0x${report.verification.reportHash}`.toLowerCase();
+  const expectedReportHash = report.verification.reportHash.toLowerCase();
   const reportProofs = proofs.filter(
     (proof) => proof.responseHash?.toLowerCase() === expectedReportHash,
   );
