@@ -60,6 +60,8 @@ import {
   createSellerWorkflowQuote,
   sellerWorkflowAllowed,
 } from "../../../../../lib/seller/workflow.ts";
+import { validatePublicServiceForQualityEvaluation } from "../../../../../lib/providers/api-quality.ts";
+import { parseApiQualityJobInput } from "../../../../../lib/reports/api-quality-report.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -365,6 +367,20 @@ export async function POST(request: NextRequest) {
     marketSymbol = inputObject.marketSymbol ?? body.marketSymbol ?? null;
   }
 
+  if (workflow === "paid_api_quality") {
+    const { targetServices } = parseApiQualityJobInput(inputText, null, body.input);
+    for (const serviceId of targetServices) {
+      const validService = await validatePublicServiceForQualityEvaluation(serviceId);
+      if (!validService) {
+        return createMachineErrorResponse(
+          "api_quality_service_not_found",
+          "The requested service could not be found or evaluated.",
+          404,
+        );
+      }
+    }
+  }
+
   let workflowRequest;
   try {
     workflowRequest = validateHostedWorkflowRequest({
@@ -419,6 +435,19 @@ export async function POST(request: NextRequest) {
         true,
       );
     }
+
+    if (
+      workflow === "paid_api_quality" &&
+      !selected.has("api-quality-finalizer")
+    ) {
+      return createMachineErrorResponse(
+        "provider_unavailable",
+        "Paid API Quality Report is temporarily unavailable because API quality finalization is disabled.",
+        503,
+        true,
+      );
+    }
+
 
     if (
       workflow === "github_due_diligence" ||

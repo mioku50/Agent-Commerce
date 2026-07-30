@@ -51,6 +51,8 @@ import {
   bindMachineTrustMonitoringJob,
   executeTrustMonitoringJob,
 } from "../../../../../lib/monitoring/service.ts";
+import { validatePublicServiceForQualityEvaluation } from "../../../../../lib/providers/api-quality.ts";
+import { parseApiQualityJobInput } from "../../../../../lib/reports/api-quality-report.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -329,6 +331,23 @@ export async function POST(request: NextRequest) {
       "This quote has already been executed.",
       409,
     );
+  }
+
+  if (storedQuote.workflow_type === "paid_api_quality") {
+    const { targetServices } = parseApiQualityJobInput(
+      storedQuote.input_preview,
+      storedQuote.planner_snapshot,
+    );
+    for (const serviceId of targetServices) {
+      const validService = await validatePublicServiceForQualityEvaluation(serviceId);
+      if (!validService) {
+        return createMachineErrorResponse(
+          "api_quality_service_not_found",
+          "The requested service could not be found or evaluated.",
+          404,
+        );
+      }
+    }
   }
 
   const paymentAuth = body.paymentAuthorization as

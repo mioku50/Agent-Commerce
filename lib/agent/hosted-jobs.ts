@@ -53,6 +53,11 @@ import {
 import type { AgentTrustReport } from "../agent-trust/types.ts";
 import type { GitHubRepositorySnapshot } from "../providers/github-types.ts";
 import type { GitHubDueDiligenceAssessment } from "./github-due-diligence.ts";
+import { fetchApiQualityObservationsForServices } from "../providers/api-quality.ts";
+import {
+  buildApiQualityPublicReport,
+  parseApiQualityJobInput,
+} from "../reports/api-quality-report.ts";
 
 export type HostedJobStatus = "queued" | "running" | "completed" | "failed";
 export type HostedJobProgressStage =
@@ -273,35 +278,59 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
         runtimeServiceOutputs,
       }) => {
         if (
-          service.slug !== "agent-trust-finalizer" ||
-          request.workflowType !== "agent_trust_report" ||
-          !request.agentTrustInput
+          service.slug === "agent-trust-finalizer" &&
+          request.workflowType === "agent_trust_report" &&
+          request.agentTrustInput
         ) {
-          return undefined;
-        }
-        const githubSnapshot =
-          runtimeServiceOutputs.get("github-repository-intelligence") as
-            | GitHubRepositorySnapshot
-            | undefined;
-        const githubAnalysis =
-          runtimeServiceOutputs.get("github-due-diligence-analysis") as
-            | { assessment?: GitHubDueDiligenceAssessment }
-            | undefined;
-        agentTrustReport = buildAgentTrustReport({
-          reportId: jobId,
-          reportInput: request.agentTrustInput,
-          sources: await collectAgentTrustSources({
-            client: getHostedClient(),
-            reportInput: request.agentTrustInput,
+          const githubSnapshot =
+            runtimeServiceOutputs.get("github-repository-intelligence") as
+              | GitHubRepositorySnapshot
+              | undefined;
+          const githubAnalysis =
+            runtimeServiceOutputs.get("github-due-diligence-analysis") as
+              | { assessment?: GitHubDueDiligenceAssessment }
+              | undefined;
+          agentTrustReport = buildAgentTrustReport({
             reportId: jobId,
-            requesterWallet: job.requester_wallet,
-            requesterAgentId: job.byoa_agent_id,
-            repository: request.repository,
-            githubSnapshot: githubSnapshot ?? null,
-            githubAssessment: githubAnalysis?.assessment ?? null,
-          }),
-        });
-        return { report: agentTrustReport };
+            reportInput: request.agentTrustInput,
+            sources: await collectAgentTrustSources({
+              client: getHostedClient(),
+              reportInput: request.agentTrustInput,
+              reportId: jobId,
+              requesterWallet: job.requester_wallet,
+              requesterAgentId: job.byoa_agent_id,
+              repository: request.repository,
+              githubSnapshot: githubSnapshot ?? null,
+              githubAssessment: githubAnalysis?.assessment ?? null,
+            }),
+          });
+          return { report: agentTrustReport };
+        }
+
+        if (
+          service.slug === "api-quality-finalizer" &&
+          request.workflowType === "paid_api_quality"
+        ) {
+          const { targetServices, observationWindowDays } = parseApiQualityJobInput(
+            request.inputText,
+            plannerSnapshot,
+          );
+          const observationsByService = await fetchApiQualityObservationsForServices(
+            targetServices,
+            observationWindowDays,
+          );
+          const qualityReport = buildApiQualityPublicReport({
+            jobId,
+            workflow: "paid_api_quality",
+            status: "completed",
+            targetServices,
+            observationWindowDays,
+            observationsByService,
+          });
+          return { report: qualityReport };
+        }
+
+        return undefined;
       },
       onProgress: async (progress) => {
         if (progress.stage === "completed" || progress.stage === "failed") return;
