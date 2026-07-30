@@ -390,8 +390,13 @@ async function requestPinnedAddress(
         chunks.push(bytes);
       });
       response.on("end", () => {
-        resolve(new Response(Buffer.concat(chunks), {
-          status: response.statusCode ?? 502,
+        const status = response.statusCode ?? 502;
+        const responseBody =
+          status === 204 || status === 205 || status === 304
+            ? null
+            : Buffer.concat(chunks);
+        resolve(new Response(responseBody, {
+          status,
           statusText: response.statusMessage,
           headers: headersFromIncoming(response.headers),
         }));

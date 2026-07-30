@@ -630,6 +630,19 @@ export async function deliverDueWebhooks(limit = 25) {
     );
   }
   const deliveries = (claimed.data ?? []) as WebhookDeliveryRow[];
-  for (const delivery of deliveries) await deliverOne(delivery);
+  let cursor = 0;
+  async function runWorker() {
+    while (cursor < deliveries.length) {
+      const delivery = deliveries[cursor];
+      cursor += 1;
+      await deliverOne(delivery);
+    }
+  }
+  await Promise.all(
+    Array.from(
+      { length: Math.min(5, deliveries.length) },
+      () => runWorker(),
+    ),
+  );
   return { processed: deliveries.length };
 }

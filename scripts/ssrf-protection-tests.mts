@@ -101,7 +101,12 @@ async function runTests() {
 
   // Test 5: the production request-scoped transport never follows redirects.
   setSellerRequestAdapterForTests(null);
-  const server = createServer((_request, response) => {
+  const server = createServer((request, response) => {
+    if (request.url === "/empty") {
+      response.writeHead(204);
+      response.end();
+      return;
+    }
     response.writeHead(302, { Location: "http://169.254.169.254/latest/meta-data" });
     response.end();
   });
@@ -118,6 +123,18 @@ async function runTests() {
       (error: unknown) => error instanceof SSRFProtectionError && error.message.includes("redirects are strictly forbidden"),
       "Actual external seller transport must reject redirects without following them",
     );
+    const emptyResponse = await fetchWithSsrfProtection(
+      `http://127.0.0.1:${address.port}/empty`,
+      { method: "POST", body: "{}" },
+      {
+        allowLocalhostForTesting: true,
+        maxTimeoutMs: 2000,
+        maxResponseSizeBytes: 1024,
+        allowedHeaders: ["content-type"],
+      },
+    );
+    assert.equal(emptyResponse.status, 204);
+    assert.equal(await emptyResponse.text(), "");
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }

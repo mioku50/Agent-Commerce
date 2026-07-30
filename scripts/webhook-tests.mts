@@ -268,6 +268,19 @@ for (const required of [
 ]) {
   assert(migration.includes(required), `Migration is missing: ${required}`);
 }
+const leaseRecoveryMigration = read(
+  "supabase/migrations/20260730235700_recover_webhook_delivery_leases.sql",
+);
+for (const required of [
+  "delivery.status = 'delivering'",
+  "delivery.updated_at <= now() - interval '2 minutes'",
+  "delivery.attempt_count + 1",
+]) {
+  assert(
+    leaseRecoveryMigration.includes(required),
+    `Delivery lease recovery is missing: ${required}`,
+  );
+}
 
 const webhookSource = read("lib/monitoring/webhooks.ts");
 for (const required of [
@@ -276,6 +289,7 @@ for (const required of [
   "fetchWithSsrfProtection",
   "-Webhooks/1.0",
   "previous_secret_expires_at",
+  "Math.min(5, deliveries.length)",
 ]) {
   assert(webhookSource.includes(required), `Webhook worker is missing: ${required}`);
 }
