@@ -118,3 +118,36 @@ export interface ApiQualityScore {
   confidenceLevel: ConfidenceLevel;
   hasSufficientData: boolean;
 }
+
+export interface ServiceQualityInput {
+  serviceId: string;
+  serviceName?: string;
+  sellerPublicId?: string | null;
+  observations: ApiQualityObservation[];
+}
+
+export interface ApiQualityComparisonItem {
+  serviceId: string;
+  serviceName?: string;
+  sellerPublicId?: string | null;
+  metrics: ApiQualityMetrics;
+  score: ApiQualityScore;
+  rank: number;
+}
+
+export interface ApiQualityComparisonCategoryHighlight {
+  category: "uptime" | "latency" | "execution" | "cost" | "overall";
+  title: string;
+  winnerServiceId: string;
+  winnerServiceName?: string;
+  value: string;
+  description: string;
+}
+
+export interface ApiQualityComparisonResult {
+  services: ApiQualityComparisonItem[];
+  highlights: ApiQualityComparisonCategoryHighlight[];
+  overallWinnerServiceId: string | null;
+  observationWindowDays?: number;
+}
+

@@ -6,9 +6,17 @@
 import { createClient } from "@supabase/supabase-js";
 import { tryGetServerSupabaseConfig } from "../supabase/server-env.ts";
 import type {
+  ApiQualityComparisonCategoryHighlight,
+  ApiQualityComparisonItem,
+  ApiQualityComparisonResult,
+  ApiQualityMetrics,
   ApiQualityObservation,
   ApiQualityObservationInput,
   ApiQualityObservationRow,
+  ApiQualityScore,
+  ConfidenceLevel,
+  QualityStatus,
+  ServiceQualityInput,
 } from "./api-quality-types.ts";
 
 const inMemoryObservations: ApiQualityObservation[] = [];
@@ -248,3 +256,453 @@ export function clearInMemoryApiQualityObservations(): void {
 export function getInMemoryApiQualityObservations(): ApiQualityObservation[] {
   return [...inMemoryObservations];
 }
+
+/**
+ * Calculates linear percentile for a numeric array.
+ */
+function getPercentile(values: number[], p: number): number {
+  if (values.length === 0) return 0;
+  if (values.length === 1) return values[0];
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = (p / 100) * (sorted.length - 1);
+  const lower = Math.floor(index);
+  const upper = Math.ceil(index);
+  const weight = index - lower;
+  return sorted[lower] * (1 - weight) + sorted[upper] * weight;
+}
+
+/**
+ * Computes raw statistical API quality metrics from an array of observations.
+ */
+export function computeApiQualityMetrics(
+  observations: ApiQualityObservation[],
+): ApiQualityMetrics {
+  const totalObservations = observations.length;
+  if (totalObservations === 0) {
+    return {
+      totalObservations: 0,
+      uptimePercent: 0,
+      executionSuccessPercent: 0,
+      paymentSuccessPercent: 0,
+      settlementSuccessPercent: 0,
+      validResponsePercent: 0,
+      latencyP50Ms: 0,
+      latencyP95Ms: 0,
+      latencyMaxMs: 0,
+      quotedPriceMinUsdc: 0,
+      quotedPriceMedianUsdc: 0,
+      quotedPriceMaxUsdc: 0,
+      costPerSuccessfulResultUsdc: 0,
+      firstObservedAt: null,
+      lastObservedAt: null,
+    };
+  }
+
+  // Uptime (endpoint reached without 5xx, timeout, or network error)
+  const upCount = observations.filter(
+    (o) =>
+      o.endpointReached &&
+      o.httpStatusClass !== "5xx" &&
+      o.httpStatusClass !== "timeout" &&
+      o.httpStatusClass !== "network_error",
+  ).length;
+  const uptimePercent = Math.round((upCount / totalObservations) * 10000) / 100;
+
+  // Execution Success
+  const execSuccessCount = observations.filter((o) => o.executionCompleted).length;
+  const executionSuccessPercent =
+    Math.round((execSuccessCount / totalObservations) * 10000) / 100;
+
+  // Payment Success
+  const paymentRequiredObs = observations.filter((o) => o.paymentRequired);
+  const paymentSuccessPercent =
+    paymentRequiredObs.length > 0
+      ? Math.round(
+          (paymentRequiredObs.filter((o) => o.paymentAuthorized).length /
+            paymentRequiredObs.length) *
+            10000,
+        ) / 100
+      : 100;
+
+  // Settlement Success
+  const paymentAuthorizedObs = observations.filter((o) => o.paymentAuthorized);
+  const settlementSuccessPercent =
+    paymentAuthorizedObs.length > 0
+      ? Math.round(
+          (paymentAuthorizedObs.filter((o) => o.paymentSettled).length /
+            paymentAuthorizedObs.length) *
+            10000,
+        ) / 100
+      : paymentRequiredObs.length > 0
+      ? 0
+      : 100;
+
+  // Valid Response %
+  const validResponseCount = observations.filter(
+    (o) => o.responseSchemaValid && o.responseWithinSizeLimit,
+  ).length;
+  const validResponsePercent =
+    Math.round((validResponseCount / totalObservations) * 10000) / 100;
+
+  // Latency percentiles
+  const latencies = observations.map((o) => o.latencyMs);
+  const latencyP50Ms = Math.round(getPercentile(latencies, 50));
+  const latencyP95Ms = Math.round(getPercentile(latencies, 95));
+  const latencyMaxMs = Math.round(Math.max(...latencies));
+
+  // Quoted Prices
+  const prices = observations.map((o) => o.quotedPriceUsdc);
+  const sortedPrices = [...prices].sort((a, b) => a - b);
+  const quotedPriceMinUsdc = Math.round(sortedPrices[0] * 1e6) / 1e6;
+  const quotedPriceMedianUsdc =
+    Math.round(getPercentile(sortedPrices, 50) * 1e6) / 1e6;
+  const quotedPriceMaxUsdc =
+    Math.round(sortedPrices[sortedPrices.length - 1] * 1e6) / 1e6;
+
+  // Cost per successful result
+  const successfulExecutions = observations.filter(
+    (o) => o.executionCompleted && o.responseSchemaValid,
+  );
+  let costPerSuccessfulResultUsdc = 0;
+  if (successfulExecutions.length > 0) {
+    const totalPaidUsdc = observations.reduce(
+      (sum, o) => sum + (o.paidAmountUsdc || 0),
+      0,
+    );
+    costPerSuccessfulResultUsdc =
+      Math.round((totalPaidUsdc / successfulExecutions.length) * 1e6) / 1e6;
+  }
+
+  // Timestamps
+  const sortedTimestamps = observations
+    .map((o) => o.startedAt)
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+
+  return {
+    totalObservations,
+    uptimePercent,
+    executionSuccessPercent,
+    paymentSuccessPercent,
+    settlementSuccessPercent,
+    validResponsePercent,
+    latencyP50Ms,
+    latencyP95Ms,
+    latencyMaxMs,
+    quotedPriceMinUsdc,
+    quotedPriceMedianUsdc,
+    quotedPriceMaxUsdc,
+    costPerSuccessfulResultUsdc,
+    firstObservedAt: sortedTimestamps[0] || null,
+    lastObservedAt: sortedTimestamps[sortedTimestamps.length - 1] || null,
+  };
+}
+
+/**
+ * Determines confidence level (high/medium/low) based on observation count, data age, and real execution ratio.
+ */
+export function getConfidenceLevel(
+  observations: ApiQualityObservation[],
+): ConfidenceLevel {
+  const count = observations.length;
+  if (count < 5) return "low";
+
+  let score = 0;
+
+  // Observation count component
+  if (count >= 20) {
+    score += 3;
+  } else if (count >= 10) {
+    score += 2;
+  } else {
+    score += 1;
+  }
+
+  // Data recency component
+  const nowMs = Date.now();
+  const latestTimestamp = observations.reduce((latest, obs) => {
+    const ms = new Date(obs.startedAt).getTime();
+    return ms > latest ? ms : latest;
+  }, 0);
+
+  if (latestTimestamp > 0) {
+    const ageDays = (nowMs - latestTimestamp) / (86400 * 1000);
+    if (ageDays <= 1) {
+      score += 1;
+    } else if (ageDays > 7) {
+      score -= 1;
+    }
+  }
+
+  // Real execution ratio component
+  const realCount = observations.filter(
+    (o) => o.source === "real_paid_execution",
+  ).length;
+  const realRatio = realCount / count;
+  if (realRatio >= 0.5) {
+    score += 1;
+  } else if (realRatio < 0.2) {
+    score -= 1;
+  }
+
+  if (score >= 4) return "high";
+  if (score >= 2) return "medium";
+  return "low";
+}
+
+/**
+ * Calculates the 0-100 Quality Score across Availability (25), Execution (20), Response Validity (15),
+ * Payment (15), Settlement (15), and Latency (10).
+ */
+export function calculateQualityScore(
+  metrics: ApiQualityMetrics,
+  observations?: ApiQualityObservation[],
+): ApiQualityScore {
+  const hasSufficientData = metrics.totalObservations >= 10;
+
+  // 1. Availability Score (0 - 25)
+  const availabilityScore =
+    Math.round(((metrics.uptimePercent / 100) * 25) * 10) / 10;
+
+  // 2. Execution Reliability Score (0 - 20)
+  const executionReliabilityScore =
+    Math.round(((metrics.executionSuccessPercent / 100) * 20) * 10) / 10;
+
+  // 3. Response Validity Score (0 - 15)
+  const responseValidityScore =
+    Math.round(((metrics.validResponsePercent / 100) * 15) * 10) / 10;
+
+  // 4. Payment Success Score (0 - 15)
+  const paymentSuccessScore =
+    Math.round(((metrics.paymentSuccessPercent / 100) * 15) * 10) / 10;
+
+  // 5. Settlement Success Score (0 - 15)
+  const settlementSuccessScore =
+    Math.round(((metrics.settlementSuccessPercent / 100) * 15) * 10) / 10;
+
+  // 6. Latency Consistency Score (0 - 10)
+  let latencyConsistencyScore = 0;
+  if (metrics.totalObservations > 0 && metrics.latencyP95Ms > 0) {
+    // Component based on P95 magnitude (0 to 7)
+    let p95Pts = 1;
+    if (metrics.latencyP95Ms <= 200) p95Pts = 7;
+    else if (metrics.latencyP95Ms <= 500) p95Pts = 6;
+    else if (metrics.latencyP95Ms <= 1000) p95Pts = 5;
+    else if (metrics.latencyP95Ms <= 2000) p95Pts = 4;
+    else if (metrics.latencyP95Ms <= 5000) p95Pts = 3;
+    else if (metrics.latencyP95Ms <= 10000) p95Pts = 2;
+
+    // Component based on jitter ratio (P95 / P50) (0 to 3)
+    const p50 = Math.max(1, metrics.latencyP50Ms);
+    const ratio = metrics.latencyP95Ms / p50;
+    let jitterPts = 0;
+    if (ratio <= 1.5) jitterPts = 3;
+    else if (ratio <= 2.5) jitterPts = 2;
+    else if (ratio <= 4.0) jitterPts = 1;
+
+    latencyConsistencyScore = Math.min(10, p95Pts + jitterPts);
+  }
+
+  // Overall Score (sum rounded to integer 0 - 100)
+  const rawSum =
+    availabilityScore +
+    executionReliabilityScore +
+    responseValidityScore +
+    paymentSuccessScore +
+    settlementSuccessScore +
+    latencyConsistencyScore;
+
+  const overallScore = Math.min(100, Math.max(0, Math.round(rawSum)));
+
+  // Quality Status
+  let status: QualityStatus;
+  if (!hasSufficientData) {
+    status = "Insufficient data";
+  } else if (overallScore >= 90) {
+    status = "Excellent";
+  } else if (overallScore >= 75) {
+    status = "Reliable";
+  } else if (overallScore >= 55) {
+    status = "Mixed signals";
+  } else {
+    status = "High attention";
+  }
+
+  // Confidence Level
+  const confidenceLevel: ConfidenceLevel = observations
+    ? getConfidenceLevel(observations)
+    : metrics.totalObservations >= 20
+    ? "high"
+    : metrics.totalObservations >= 10
+    ? "medium"
+    : "low";
+
+  return {
+    overallScore,
+    availabilityScore,
+    executionReliabilityScore,
+    responseValidityScore,
+    paymentSuccessScore,
+    settlementSuccessScore,
+    latencyConsistencyScore,
+    status,
+    confidenceLevel,
+    hasSufficientData,
+  };
+}
+
+/**
+ * Compares quality metrics across multiple services and generates side-by-side comparison matrix and highlights.
+ */
+export function compareApiQuality(
+  servicesData: ServiceQualityInput[] | Record<string, ApiQualityObservation[]>,
+  observationWindowDays: number = 30,
+): ApiQualityComparisonResult {
+  // Normalize input
+  const inputs: ServiceQualityInput[] = Array.isArray(servicesData)
+    ? servicesData
+    : Object.entries(servicesData).map(([serviceId, observations]) => ({
+        serviceId,
+        observations,
+      }));
+
+  if (inputs.length === 0) {
+    return {
+      services: [],
+      highlights: [],
+      overallWinnerServiceId: null,
+      observationWindowDays,
+    };
+  }
+
+  // Compute metrics and score for each service
+  const items: ApiQualityComparisonItem[] = inputs.map((input) => {
+    const metrics = computeApiQualityMetrics(input.observations);
+    const score = calculateQualityScore(metrics, input.observations);
+    const sellerPublicId =
+      input.sellerPublicId ||
+      input.observations.find((o) => o.sellerPublicId)?.sellerPublicId ||
+      null;
+
+    return {
+      serviceId: input.serviceId,
+      serviceName: input.serviceName || input.serviceId,
+      sellerPublicId,
+      metrics,
+      score,
+      rank: 1, // Will be set after sorting
+    };
+  });
+
+  // Sort by sufficient data first, then overallScore descending, then uptime, then execution success
+  items.sort((a, b) => {
+    if (a.score.hasSufficientData !== b.score.hasSufficientData) {
+      return a.score.hasSufficientData ? -1 : 1;
+    }
+    if (b.score.overallScore !== a.score.overallScore) {
+      return b.score.overallScore - a.score.overallScore;
+    }
+    if (b.metrics.uptimePercent !== a.metrics.uptimePercent) {
+      return b.metrics.uptimePercent - a.metrics.uptimePercent;
+    }
+    return b.metrics.executionSuccessPercent - a.metrics.executionSuccessPercent;
+  });
+
+  // Assign ranks
+  items.forEach((item, index) => {
+    item.rank = index + 1;
+  });
+
+  const overallWinnerServiceId = items[0]?.serviceId || null;
+
+  // Build Highlights
+  const highlights: ApiQualityComparisonCategoryHighlight[] = [];
+
+  // Overall winner highlight
+  if (items.length > 0 && items[0]) {
+    const winner = items[0];
+    highlights.push({
+      category: "overall",
+      title: "Top Overall Performer",
+      winnerServiceId: winner.serviceId,
+      winnerServiceName: winner.serviceName,
+      value: `${winner.score.overallScore}/100`,
+      description: `Highest quality score with ${winner.score.status.toLowerCase()} status across ${winner.metrics.totalObservations} observations.`,
+    });
+  }
+
+  // Uptime highlight
+  const uptimeWinner = [...items].sort(
+    (a, b) => b.metrics.uptimePercent - a.metrics.uptimePercent,
+  )[0];
+  if (uptimeWinner && uptimeWinner.metrics.totalObservations > 0) {
+    highlights.push({
+      category: "uptime",
+      title: "Best Uptime",
+      winnerServiceId: uptimeWinner.serviceId,
+      winnerServiceName: uptimeWinner.serviceName,
+      value: `${uptimeWinner.metrics.uptimePercent}%`,
+      description: `Highest endpoint availability in the ${observationWindowDays}-day window.`,
+    });
+  }
+
+  // Latency highlight
+  const latencyWinner = [...items]
+    .filter((item) => item.metrics.totalObservations > 0 && item.metrics.latencyP50Ms > 0)
+    .sort((a, b) => a.metrics.latencyP50Ms - b.metrics.latencyP50Ms)[0];
+  if (latencyWinner) {
+    highlights.push({
+      category: "latency",
+      title: "Fastest Response (P50)",
+      winnerServiceId: latencyWinner.serviceId,
+      winnerServiceName: latencyWinner.serviceName,
+      value: `${latencyWinner.metrics.latencyP50Ms}ms`,
+      description: `Lowest median response time across recorded requests.`,
+    });
+  }
+
+  // Execution reliability highlight
+  const executionWinner = [...items].sort(
+    (a, b) => b.metrics.executionSuccessPercent - a.metrics.executionSuccessPercent,
+  )[0];
+  if (executionWinner && executionWinner.metrics.totalObservations > 0) {
+    highlights.push({
+      category: "execution",
+      title: "Most Reliable Execution",
+      winnerServiceId: executionWinner.serviceId,
+      winnerServiceName: executionWinner.serviceName,
+      value: `${executionWinner.metrics.executionSuccessPercent}%`,
+      description: `Highest end-to-end execution success rate.`,
+    });
+  }
+
+  // Cost efficiency highlight
+  const costWinner = [...items]
+    .filter(
+      (item) =>
+        item.metrics.totalObservations > 0 &&
+        item.metrics.costPerSuccessfulResultUsdc > 0,
+    )
+    .sort(
+      (a, b) =>
+        a.metrics.costPerSuccessfulResultUsdc -
+        b.metrics.costPerSuccessfulResultUsdc,
+    )[0];
+  if (costWinner) {
+    highlights.push({
+      category: "cost",
+      title: "Best Cost Efficiency",
+      winnerServiceId: costWinner.serviceId,
+      winnerServiceName: costWinner.serviceName,
+      value: `${costWinner.metrics.costPerSuccessfulResultUsdc} USDC`,
+      description: `Lowest cost per successful result delivered.`,
+    });
+  }
+
+  return {
+    services: items,
+    highlights,
+    overallWinnerServiceId,
+    observationWindowDays,
+  };
+}
+
