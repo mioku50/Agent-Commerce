@@ -18,6 +18,8 @@ import {
   type HostedWorkflowReceiptItem,
 } from "../../../../../../lib/reports/github-public-report.ts";
 import { isSellerWorkflowType } from "../../../../../../lib/seller/marketplace.ts";
+import { formatAgentTrustReportAsMarkdown } from "../../../../../../lib/agent-trust/markdown.ts";
+import type { AgentTrustReport } from "../../../../../../lib/agent-trust/types.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -166,6 +168,53 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       "Report execution is not ready yet.",
       400,
     );
+  }
+
+  if (job.workflow_type === "agent_trust_report") {
+    const reconciledStructured = jobView?.job.structuredResult as
+      | {
+          workflowData?: {
+            kind?: string;
+            report?: AgentTrustReport;
+          } | null;
+        }
+      | null
+      | undefined;
+    const storedStructured = job.structured_result as
+      | {
+          workflowData?: {
+            kind?: string;
+            report?: AgentTrustReport;
+          } | null;
+        }
+      | null;
+    const trustReport =
+      reconciledStructured?.workflowData?.report ??
+      storedStructured?.workflowData?.report ??
+      null;
+    if (!trustReport) {
+      return createMachineErrorResponse(
+        job.status === "failed" ? "report_generation_failed" : "report_not_ready",
+        job.status === "failed"
+          ? "Agent Trust Report generation failed safely."
+          : "Agent Trust Report is not ready yet.",
+        job.status === "failed" ? 422 : 400,
+      );
+    }
+    const accept = request.headers.get("accept") ?? "";
+    if (accept.toLowerCase().includes("text/markdown")) {
+      return new NextResponse(formatAgentTrustReportAsMarkdown(trustReport), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+    return NextResponse.json(trustReport, {
+      status: 200,
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   if (isSellerWorkflowType(job.workflow_type)) {

@@ -45,6 +45,11 @@ import {
   parseGitHubRepositoryInput,
   InvalidGitHubRepositoryError,
 } from "../../../../../lib/providers/github-repository-ref.ts";
+import {
+  AgentTrustInputError,
+  canonicalAgentTrustInput,
+  normalizeAgentTrustInput,
+} from "../../../../../lib/agent-trust/input.ts";
 import { ARC_TESTNET_CHAIN_ID } from "../../../../../lib/wallet/arc.ts";
 import {
   getSellerServiceRowByWorkflowType,
@@ -303,9 +308,27 @@ export async function POST(request: NextRequest) {
 
   let inputText = "";
   let repositoryRef = null;
+  let agentTrustInput = null;
   let marketSymbol: unknown = null;
 
-  if (workflow === "github_due_diligence") {
+  if (workflow === "agent_trust_report") {
+    try {
+      agentTrustInput = normalizeAgentTrustInput(body.input);
+      inputText = canonicalAgentTrustInput(agentTrustInput);
+      repositoryRef = agentTrustInput.repositoryUrl
+        ? parseGitHubRepositoryInput(agentTrustInput.repositoryUrl)
+        : null;
+    } catch (error) {
+      if (error instanceof AgentTrustInputError) {
+        return createMachineErrorResponse(error.code, error.message, 400);
+      }
+      return createMachineErrorResponse(
+        "agent_trust_input_required",
+        "Provide at least one Agent ID, agent wallet, or public GitHub repository.",
+        400,
+      );
+    }
+  } else if (workflow === "github_due_diligence") {
     const rawRepo =
       (body.input as Record<string, unknown>)?.repository ||
       (body.input as Record<string, unknown>)?.repositoryUrl ||
@@ -348,6 +371,7 @@ export async function POST(request: NextRequest) {
       workflowType: workflow,
       inputText,
       repositoryUrl: repositoryRef?.canonicalUrl,
+      agentTrustInput,
       marketSymbol,
       task: template.task,
       budgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
@@ -356,7 +380,10 @@ export async function POST(request: NextRequest) {
     return createMachineErrorResponse(
       workflow === "github_due_diligence"
         ? "invalid_repository"
-        : "invalid_request",
+        : workflow === "agent_trust_report" &&
+            err instanceof AgentTrustInputError
+          ? err.code
+          : "invalid_request",
       err instanceof Error ? err.message : "Invalid workflow request input.",
       400,
     );
@@ -378,7 +405,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (workflow === "github_due_diligence") {
+    if (
+      workflow === "github_due_diligence" ||
+      (workflow === "agent_trust_report" && workflowRequest.repository)
+    ) {
       const selected = new Set(
         plan.selectedServices.map((service) => service.slug),
       );
@@ -389,7 +419,9 @@ export async function POST(request: NextRequest) {
       if (missingRequiredService) {
         return createMachineErrorResponse(
           "provider_unavailable",
-          "GitHub Project Due Diligence is temporarily unavailable because required analysis services are disabled.",
+          workflow === "agent_trust_report"
+            ? "The repository portion of Agent Trust Report is temporarily unavailable because required GitHub analysis services are disabled."
+            : "GitHub Project Due Diligence is temporarily unavailable because required analysis services are disabled.",
           503,
           true,
         );
@@ -485,6 +517,22 @@ export async function POST(request: NextRequest) {
             canonicalUrl: workflowRequest.repository.canonicalUrl,
           }
         : null,
+      inputSources:
+        workflowRequest.workflowType === "agent_trust_report"
+          ? {
+              agentRegistry: Boolean(
+                workflowRequest.agentTrustInput?.agentId ||
+                  workflowRequest.agentTrustInput?.agentWallet,
+              ),
+              github: Boolean(workflowRequest.repository),
+              contract: Boolean(
+                workflowRequest.agentTrustInput?.contractAddress,
+              ),
+              endpoint: Boolean(
+                workflowRequest.agentTrustInput?.serviceEndpoint,
+              ),
+            }
+          : undefined,
       totalUsdc: quoteResult.quote.pricing.listPriceUsdc,
       sponsored: isSponsored,
       checkout: {

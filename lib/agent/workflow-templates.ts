@@ -8,6 +8,7 @@ import { BRAND } from "../brand.ts";
 
 export const HOSTED_WORKFLOW_TYPES = [
   "github_due_diligence",
+  "agent_trust_report",
   "sentiment_tone",
   "builder_update",
   "market_context",
@@ -18,6 +19,7 @@ export type HostedWorkflowType = (typeof HOSTED_WORKFLOW_TYPES)[number];
 
 export const CURATED_HOSTED_WORKFLOW_TYPES = [
   "github_due_diligence",
+  "agent_trust_report",
   "market_context",
   "sentiment_tone",
   "builder_update",
@@ -169,6 +171,25 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
       "Live repository metadata, commits, releases, and file presence",
       "Deterministic health status, category signals, and risk analysis",
       "Receipts and a verified Arc proof for every paid call",
+    ],
+  },
+  {
+    value: "agent_trust_report",
+    label: "Veyra Agent Trust Report",
+    shortLabel: "Agent Trust Report",
+    description:
+      "Review identity, code health, execution history, service reliability, payments, and verification signals in one report.",
+    task:
+      "Build an evidence-backed Agent Trust Report from the supplied public identifiers and available Veyra signals.",
+    placeholder: "Provide an Agent ID, wallet, or public GitHub repository",
+    estimatedSpendUsdc: 0.0003,
+    benefitLabel:
+      "Identity · Code health · Execution history · Arc verification",
+    services: [...githubServices, commonServices[0]],
+    expectedResult: [
+      "Deterministic Trust Score with evidence for every category",
+      "Identity, execution, payment, service, contract, and endpoint snapshots when available",
+      "Receipts and Arc verification status without exposing private tenant data",
     ],
   },
   {

@@ -36,6 +36,14 @@ import {
 } from "../services/presentation.ts";
 import type { HostedReportSynthesis } from "../llm/types.ts";
 import { BRAND } from "../brand.ts";
+import {
+  canonicalAgentTrustInput,
+  normalizeAgentTrustInput,
+} from "../agent-trust/input.ts";
+import type {
+  AgentTrustReport,
+  AgentTrustReportInput,
+} from "../agent-trust/types.ts";
 
 export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType };
 
@@ -50,6 +58,7 @@ export type HostedWorkflowRequest = {
   inputText: string;
   marketSymbol: PythMarketSymbol | null;
   repository: GitHubRepositoryRef | null;
+  agentTrustInput: AgentTrustReportInput | null;
   budgetUsdc: number;
 };
 
@@ -124,6 +133,7 @@ export type HostedFinalReport = {
 
 const WORKFLOW_LABELS: Record<HostedWorkflowType, string> = {
   github_due_diligence: "GitHub Project Due Diligence",
+  agent_trust_report: "Veyra Agent Trust Report",
   sentiment_tone: "Sentiment & Tone Report",
   builder_update: "Builder Update Summary",
   market_context: "Market Context Brief",
@@ -251,17 +261,23 @@ export function validateHostedWorkflowRequest(input: {
   task?: unknown;
   inputText?: unknown;
   repositoryUrl?: unknown;
+  agentTrustInput?: unknown;
+  agentId?: unknown;
+  agentWallet?: unknown;
+  contractAddress?: unknown;
+  serviceEndpoint?: unknown;
   marketSymbol?: unknown;
   budgetUsdc?: unknown;
 }): HostedWorkflowRequest {
   if (!isHostedWorkflowType(input.workflowType)) {
     throw new Error(
-      "Workflow type must be github_due_diligence, sentiment_tone, builder_update, market_context, or custom_task.",
+      "Workflow type must be github_due_diligence, agent_trust_report, sentiment_tone, builder_update, market_context, or custom_task.",
     );
   }
 
   const workflowType = input.workflowType;
   let repository: GitHubRepositoryRef | null = null;
+  let agentTrustInput: AgentTrustReportInput | null = null;
   let rawInputText = typeof input.inputText === "string" ? input.inputText : "";
 
   if (workflowType === "github_due_diligence") {
@@ -271,6 +287,30 @@ export function validateHostedWorkflowRequest(input: {
         : rawInputText.trim();
     repository = parseGitHubRepositoryInput(rawRepoInput);
     rawInputText = repository.canonicalUrl;
+  } else if (workflowType === "agent_trust_report") {
+    let trustValue = input.agentTrustInput;
+    if (!trustValue && rawInputText.trim().startsWith("{")) {
+      try {
+        trustValue = JSON.parse(rawInputText);
+      } catch {
+        trustValue = null;
+      }
+    }
+    agentTrustInput = normalizeAgentTrustInput(
+      trustValue && typeof trustValue === "object"
+        ? trustValue
+        : {
+            agentId: input.agentId,
+            agentWallet: input.agentWallet,
+            repositoryUrl: input.repositoryUrl,
+            contractAddress: input.contractAddress,
+            serviceEndpoint: input.serviceEndpoint,
+          },
+    );
+    rawInputText = canonicalAgentTrustInput(agentTrustInput);
+    repository = agentTrustInput.repositoryUrl
+      ? parseGitHubRepositoryInput(agentTrustInput.repositoryUrl)
+      : null;
   }
 
   const rawTask = normalizedText(input.task).replace(/\s+/g, " ");
@@ -279,6 +319,7 @@ export function validateHostedWorkflowRequest(input: {
 
   const isStandardWorkflow =
     workflowType === "github_due_diligence" ||
+    workflowType === "agent_trust_report" ||
     workflowType === "sentiment_tone" ||
     workflowType === "builder_update" ||
     workflowType === "market_context";
@@ -333,6 +374,7 @@ export function validateHostedWorkflowRequest(input: {
     inputText,
     marketSymbol,
     repository,
+    agentTrustInput,
     budgetUsdc: validateHostedBudget(rawBudget),
   };
 }
@@ -340,6 +382,9 @@ export function validateHostedWorkflowRequest(input: {
 export function defaultWorkflowTask(workflowType: HostedWorkflowType) {
   if (workflowType === "github_due_diligence") {
     return "Analyze the selected public GitHub repository using live repository data and deterministic due diligence rules.";
+  }
+  if (workflowType === "agent_trust_report") {
+    return "Build an evidence-backed Agent Trust Report from the supplied public identifiers and available Veyra signals.";
   }
   if (workflowType === "sentiment_tone") {
     return "Analyze the submitted text and produce a sentiment and tone workflow report.";
@@ -356,6 +401,24 @@ export function defaultWorkflowTask(workflowType: HostedWorkflowType) {
 export function effectiveWorkflowTask(input: HostedWorkflowRequest) {
   if (input.workflowType === "github_due_diligence") {
     return `${input.task} Analyze ${input.repository?.fullName ?? input.inputText} using live GitHub repository intelligence and deterministic due diligence analysis.`;
+  }
+  if (input.workflowType === "agent_trust_report") {
+    const sources = [
+      input.agentTrustInput?.agentId ? "Veyra agent identity" : null,
+      input.agentTrustInput?.agentWallet ? "registered wallet signals" : null,
+      input.repository ? "GitHub repository intelligence" : null,
+      input.agentTrustInput?.contractAddress
+        ? "Arc Testnet contract transparency"
+        : null,
+      input.agentTrustInput?.serviceEndpoint
+        ? "a protected endpoint availability snapshot"
+        : null,
+    ].filter(Boolean);
+    return `${input.task} Use ${sources.join(", ")} and deterministic scoring. ${
+      input.repository
+        ? `Analyze ${input.repository.fullName} using the existing GitHub intelligence pipeline.`
+        : "Analyze the normalized public identifier record and produce the structured report without inventing unavailable evidence."
+    }`;
   }
   if (input.workflowType === "sentiment_tone") {
     return `${input.task} Use paid text analysis and concise research context for the report.`;
@@ -398,6 +461,17 @@ export function createHostedWorkflowPlan(input: {
         allowed.endpoint === service.endpoint &&
         allowed.method === service.method,
     ),
+  ).filter(
+    (service) => {
+      if (input.request.workflowType !== "agent_trust_report") return true;
+      if (input.request.repository) {
+        return [
+          "github-repository-intelligence",
+          "github-due-diligence-analysis",
+        ].includes(service.slug);
+      }
+      return service.slug === "text-analyzer";
+    },
   );
   const effectiveTask = effectiveWorkflowTask(input.request);
   const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText ?? "");
@@ -435,6 +509,25 @@ export function createHostedWorkflowPlan(input: {
     marketSymbol: input.request.marketSymbol,
     repository: input.request.repository,
     warnings: plan.warnings,
+    metadata:
+      input.request.workflowType === "agent_trust_report"
+        ? {
+            agentTrustInput: input.request.agentTrustInput,
+            requestedSources: {
+              agentRegistry: Boolean(
+                input.request.agentTrustInput?.agentId ||
+                  input.request.agentTrustInput?.agentWallet,
+              ),
+              github: Boolean(input.request.repository),
+              contract: Boolean(
+                input.request.agentTrustInput?.contractAddress,
+              ),
+              endpoint: Boolean(
+                input.request.agentTrustInput?.serviceEndpoint,
+              ),
+            },
+          }
+        : undefined,
   };
 }
 
@@ -471,6 +564,19 @@ function deterministicWorkflowFindings(request: HostedWorkflowRequest) {
     return [
       `Target GitHub repository: ${request.repository?.fullName ?? request.inputText}.`,
       "Deterministic due diligence workflow combines live server-side GitHub API intelligence with automated category assessments.",
+    ];
+  }
+  if (request.workflowType === "agent_trust_report") {
+    const supplied = [
+      request.agentTrustInput?.agentId ? "Agent ID" : null,
+      request.agentTrustInput?.agentWallet ? "agent wallet" : null,
+      request.repository ? "GitHub repository" : null,
+      request.agentTrustInput?.contractAddress ? "Arc contract" : null,
+      request.agentTrustInput?.serviceEndpoint ? "service endpoint" : null,
+    ].filter(Boolean);
+    return [
+      `Trust report sources supplied: ${supplied.join(", ")}.`,
+      "Trust Score is deterministic; missing optional sources are excluded rather than scored as zero.",
     ];
   }
   const words: string[] = text.toLowerCase().match(/[a-z0-9'-]+/g) ?? [];
@@ -546,6 +652,7 @@ export function buildHostedFinalReport(input: {
   } | BuyerAgentExecutionResult | null;
   workflowArtifacts?: BuyerAgentWorkflowArtifacts | null;
   explorerUrl: string;
+  agentTrustReport?: AgentTrustReport | null;
 }): HostedFinalReport {
   const { request } = input;
   const serviceResults = input.serviceResults.map(safeHostedServiceResult);
@@ -558,7 +665,14 @@ export function buildHostedFinalReport(input: {
   const assessment = executionResult.workflowArtifacts?.githubDueDiligenceAssessment ?? null;
 
   const workflowData =
-    request.workflowType === "github_due_diligence"
+    request.workflowType === "agent_trust_report"
+      ? input.agentTrustReport
+        ? {
+            kind: "agent_trust_report",
+            report: input.agentTrustReport,
+          }
+        : null
+      : request.workflowType === "github_due_diligence"
       ? snapshot
         ? {
             kind: "github_due_diligence",

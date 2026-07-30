@@ -2,6 +2,7 @@ import type { GitHubRepositoryRef } from "@/lib/providers/github-repository-ref"
 
 export type HostedWorkflowType =
   | "github_due_diligence"
+  | "agent_trust_report"
   | "sentiment_tone"
   | "builder_update"
   | "market_context"

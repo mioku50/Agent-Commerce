@@ -65,6 +65,66 @@ export function humanizeError(raw: unknown): HumanizedError {
   }
 
   if (
+    reasonCode === "agent_trust_input_required" ||
+    messageStr.includes("Provide at least one Agent ID")
+  ) {
+    return {
+      title: "Add an agent identifier",
+      message: "Provide at least one public Agent ID, agent wallet, or GitHub repository.",
+      technicalCode: "agent_trust_input_required",
+    };
+  }
+
+  if (reasonCode === "agent_not_found" || messageStr.includes("public Agent ID")) {
+    return {
+      title: "Agent not found",
+      message: "Check the public Veyra Agent ID. Unknown agents are not treated as negative evidence.",
+      technicalCode: "agent_not_found",
+    };
+  }
+
+  if (reasonCode === "invalid_wallet" || messageStr.includes("valid EVM address")) {
+    return {
+      title: "Invalid agent wallet",
+      message: "Enter a valid public EVM wallet address.",
+      technicalCode: "invalid_wallet",
+    };
+  }
+
+  if (
+    reasonCode === "contract_not_found" ||
+    messageStr.includes("Arc Testnet contract address")
+  ) {
+    return {
+      title: "Contract not found",
+      message: "Check the Arc Testnet contract address, or remove it to continue without contract evidence.",
+      technicalCode: "contract_not_found",
+    };
+  }
+
+  if (
+    reasonCode === "endpoint_private_network_blocked" ||
+    messageStr.includes("private and local networks are blocked")
+  ) {
+    return {
+      title: "Private endpoint blocked",
+      message: "Use a public HTTPS endpoint. Localhost, private IPs, redirects to private networks, and internal hosts are blocked.",
+      technicalCode: "endpoint_private_network_blocked",
+    };
+  }
+
+  if (
+    reasonCode === "endpoint_invalid" ||
+    messageStr.includes("public HTTPS URL")
+  ) {
+    return {
+      title: "Invalid service endpoint",
+      message: "Check the service endpoint. It must be a public HTTPS URL.",
+      technicalCode: "endpoint_invalid",
+    };
+  }
+
+  if (
     reasonCode === "invalid_github_repository" ||
     messageStr.includes("invalid_github_repository") ||
     messageStr.includes("Invalid GitHub repository")

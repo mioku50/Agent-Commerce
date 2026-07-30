@@ -1,4 +1,10 @@
 export type MachineErrorCode =
+  | "agent_trust_input_required"
+  | "agent_not_found"
+  | "contract_not_found"
+  | "endpoint_invalid"
+  | "endpoint_private_network_blocked"
+  | "invalid_wallet"
   | "invalid_repository"
   | "repository_not_found"
   | "repository_inaccessible"
@@ -22,6 +28,7 @@ export type MachineErrorCode =
   | "run_expired"
   | "report_not_found"
   | "report_not_ready"
+  | "report_generation_failed"
   | "verification_pending"
   | "provider_unavailable"
   | "rate_limited"
@@ -86,10 +93,30 @@ export type WorkflowQuoteRequest = {
   input?: Record<string, unknown>;
 };
 
+export type AgentTrustReportInput = (
+  | { agentId: string; agentWallet?: string; repositoryUrl?: string }
+  | { agentId?: string; agentWallet: string; repositoryUrl?: string }
+  | { agentId?: string; agentWallet?: string; repositoryUrl: string }
+) & {
+  contractAddress?: string;
+  serviceEndpoint?: string;
+};
+
+export type AgentTrustQuoteRequest = {
+  workflow: "agent_trust_report";
+  input: AgentTrustReportInput;
+};
+
 export type WorkflowQuote = {
   quoteId: string;
   workflow: string;
   repository: { fullName: string; canonicalUrl: string } | null;
+  inputSources?: {
+    agentRegistry: boolean;
+    github: boolean;
+    contract: boolean;
+    endpoint: boolean;
+  };
   totalUsdc: number;
   sponsored: boolean;
   checkout?: {
@@ -175,6 +202,82 @@ export type MachineReport = {
     requiredSteps?: number;
   };
   [key: string]: unknown;
+};
+
+export type AgentTrustScoreCategory = {
+  score: number | null;
+  confidence: "high" | "medium" | "low";
+  evidenceCount: number;
+  summary: string;
+  positiveSignals: Array<Record<string, unknown>>;
+  reviewItems: Array<Record<string, unknown>>;
+};
+
+export type AgentTrustReport = {
+  kind: "agent_trust_report";
+  version: 1;
+  workflowType: "agent_trust_report";
+  reportId: string;
+  input: AgentTrustReportInput;
+  subject: {
+    name: string;
+    agentId: string | null;
+    wallet: string | null;
+    repository: { fullName: string; canonicalUrl: string } | null;
+  };
+  trustScore: {
+    overall: number | null;
+    status:
+      | "strong_signals"
+      | "review_recommended"
+      | "high_attention"
+      | "limited_data";
+    categories: Partial<
+      Record<
+        | "codeHealth"
+        | "agentIdentity"
+        | "executionReliability"
+        | "paymentHistory"
+        | "serviceReliability"
+        | "contractTransparency",
+        AgentTrustScoreCategory
+      >
+    >;
+    excludedCategories: string[];
+  };
+  executiveSummary: string[];
+  identity: Record<string, unknown>;
+  codeIntelligence: Record<string, unknown>;
+  executionReliability: Record<string, unknown>;
+  paymentsAndReceipts: Record<string, unknown>;
+  services: Record<string, unknown>;
+  contractTransparency: Record<string, unknown>;
+  endpointAvailability: Record<string, unknown>;
+  evidenceBackedStrengths: Array<Record<string, unknown>>;
+  risksAndReviewItems: Array<Record<string, unknown>>;
+  questionsBeforeIntegration: string[];
+  dataFreshness: Array<{
+    source: string;
+    fetchedAt: string;
+    cacheMode: string;
+    upstreamStatus: string;
+  }>;
+  unavailableSources: string[];
+  limitations: string[];
+  verification: {
+    status: "verified" | "verification_pending" | "verification_failed";
+    verifiedOnArc: boolean;
+    network: "arc-testnet";
+    chainId: 5_042_002;
+    reportHash: string;
+    proofs: Array<{
+      receiptId: string;
+      status: "pending" | "verified" | "failed";
+      transactionHash: string | null;
+      explorerUrl: string | null;
+    }>;
+  };
+  generatedAt: string;
 };
 
 export type AgentCommerceClientOptions = {
@@ -413,8 +516,11 @@ export class AgentCommerceClient {
     });
   }
 
-  async getReport(reportId: string, options: { signal?: AbortSignal } = {}) {
-    return this.request<MachineReport>(
+  async getReport<TReport extends MachineReport | AgentTrustReport = MachineReport>(
+    reportId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<TReport>(
       `/api/agent/v1/reports/${encodeURIComponent(reportId)}`,
       { method: "GET" },
       options,

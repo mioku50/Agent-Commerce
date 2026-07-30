@@ -262,7 +262,10 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/StructuredReportResponse"
+                  "oneOf": [
+                    { "$ref": "#/components/schemas/StructuredReportResponse" },
+                    { "$ref": "#/components/schemas/AgentTrustReportResponse" }
+                  ]
                 }
               },
               "text/markdown": {
@@ -409,12 +412,52 @@
             "example": "circlefin/agent-commerce"
           },
           "input": {
-            "type": "object",
-            "properties": {
-              "repository": { "type": "string", "example": "circlefin/agent-commerce" }
-            }
+            "oneOf": [
+              { "$ref": "#/components/schemas/AgentTrustReportInput" },
+              {
+                "type": "object",
+                "additionalProperties": true,
+                "properties": {
+                  "repository": { "type": "string", "example": "circlefin/agent-commerce" }
+                }
+              }
+            ]
           }
         }
+      },
+      "AgentTrustReportInput": {
+        "type": "object",
+        "description": "Public identifiers for Veyra Agent Trust Report. At least one primary identifier is required.",
+        "properties": {
+          "agentId": {
+            "type": "string",
+            "pattern": "^agt_[a-z0-9]{20}$",
+            "example": "agt_0123456789abcdefghij"
+          },
+          "agentWallet": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$"
+          },
+          "repositoryUrl": {
+            "type": "string",
+            "example": "circlefin/developer-controlled-wallets-web-sdk"
+          },
+          "contractAddress": {
+            "type": "string",
+            "pattern": "^0x[0-9a-fA-F]{40}$",
+            "description": "Optional Arc Testnet contract address"
+          },
+          "serviceEndpoint": {
+            "type": "string",
+            "format": "uri",
+            "description": "Optional public HTTPS endpoint; localhost and private networks are blocked"
+          }
+        },
+        "anyOf": [
+          { "required": ["agentId"] },
+          { "required": ["agentWallet"] },
+          { "required": ["repositoryUrl"] }
+        ]
       },
       "WorkflowQuoteResponse": {
         "type": "object",
@@ -667,6 +710,127 @@
             }
           },
           "generatedAt": { "type": "string", "format": "date-time", "example": "2026-07-24T21:05:00.000Z" }
+        }
+      },
+      "AgentTrustReportResponse": {
+        "type": "object",
+        "required": [
+          "kind",
+          "version",
+          "workflowType",
+          "reportId",
+          "input",
+          "subject",
+          "trustScore",
+          "executiveSummary",
+          "identity",
+          "codeIntelligence",
+          "executionReliability",
+          "paymentsAndReceipts",
+          "services",
+          "contractTransparency",
+          "endpointAvailability",
+          "evidenceBackedStrengths",
+          "risksAndReviewItems",
+          "questionsBeforeIntegration",
+          "dataFreshness",
+          "unavailableSources",
+          "limitations",
+          "verification",
+          "generatedAt"
+        ],
+        "properties": {
+          "kind": { "type": "string", "enum": ["agent_trust_report"] },
+          "version": { "type": "integer", "enum": [1] },
+          "workflowType": { "type": "string", "enum": ["agent_trust_report"] },
+          "reportId": { "type": "string" },
+          "input": { "$ref": "#/components/schemas/AgentTrustReportInput" },
+          "subject": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "agentId": { "type": "string", "nullable": true },
+              "wallet": { "type": "string", "nullable": true },
+              "repository": {
+                "type": "object",
+                "nullable": true,
+                "properties": {
+                  "fullName": { "type": "string" },
+                  "canonicalUrl": { "type": "string" }
+                }
+              }
+            }
+          },
+          "trustScore": {
+            "type": "object",
+            "required": ["overall", "status", "categories", "excludedCategories"],
+            "properties": {
+              "overall": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100,
+                "nullable": true,
+                "description": "Deterministic confidence-weighted score; null when fewer than two categories are scorable"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["strong_signals", "review_recommended", "high_attention", "limited_data"]
+              },
+              "categories": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "properties": {
+                    "score": { "type": "integer", "minimum": 0, "maximum": 100, "nullable": true },
+                    "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+                    "evidenceCount": { "type": "integer" },
+                    "summary": { "type": "string" },
+                    "positiveSignals": { "type": "array", "items": { "type": "object" } },
+                    "reviewItems": { "type": "array", "items": { "type": "object" } }
+                  }
+                }
+              },
+              "excludedCategories": { "type": "array", "items": { "type": "string" } }
+            }
+          },
+          "executiveSummary": { "type": "array", "items": { "type": "string" } },
+          "identity": { "type": "object" },
+          "codeIntelligence": { "type": "object" },
+          "executionReliability": { "type": "object" },
+          "paymentsAndReceipts": { "type": "object" },
+          "services": { "type": "object" },
+          "contractTransparency": { "type": "object" },
+          "endpointAvailability": { "type": "object" },
+          "evidenceBackedStrengths": { "type": "array", "items": { "type": "object" } },
+          "risksAndReviewItems": { "type": "array", "items": { "type": "object" } },
+          "questionsBeforeIntegration": { "type": "array", "items": { "type": "string" } },
+          "dataFreshness": { "type": "array", "items": { "type": "object" } },
+          "unavailableSources": { "type": "array", "items": { "type": "string" } },
+          "limitations": { "type": "array", "items": { "type": "string" } },
+          "verification": {
+            "type": "object",
+            "required": ["status", "verifiedOnArc", "network", "chainId", "reportHash", "proofs"],
+            "properties": {
+              "status": { "type": "string", "enum": ["verified", "verification_pending", "verification_failed"] },
+              "verifiedOnArc": { "type": "boolean" },
+              "network": { "type": "string", "enum": ["arc-testnet"] },
+              "chainId": { "type": "integer", "enum": [5042002] },
+              "reportHash": { "type": "string" },
+              "proofs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "receiptId": { "type": "string" },
+                    "status": { "type": "string", "enum": ["pending", "verified", "failed"] },
+                    "transactionHash": { "type": "string", "nullable": true },
+                    "explorerUrl": { "type": "string", "nullable": true }
+                  }
+                }
+              }
+            }
+          },
+          "generatedAt": { "type": "string", "format": "date-time" }
         }
       }
     },

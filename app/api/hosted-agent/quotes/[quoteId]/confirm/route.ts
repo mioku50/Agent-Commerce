@@ -40,6 +40,10 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       workflowType: storedQuote.workflow_type,
       inputText: body.inputText,
       repositoryUrl: body.repositoryUrl ?? storedQuote.planner_snapshot?.repository?.canonicalUrl,
+      agentTrustInput:
+        storedQuote.workflow_type === "agent_trust_report"
+          ? storedQuote.planner_snapshot?.metadata?.agentTrustInput
+          : body.agentTrustInput,
       marketSymbol: body.marketSymbol ?? storedQuote.planner_snapshot?.marketSymbol,
       task: storedQuote.task,
       budgetUsdc: storedQuote.budget_usdc,
