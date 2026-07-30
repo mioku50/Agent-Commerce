@@ -39,6 +39,8 @@
     "agent:trust-test": "node --experimental-transform-types --no-warnings scripts/agent-trust-tests.mts",
     "monitoring:test": "node --experimental-transform-types --no-warnings scripts/monitoring-tests.mts",
     "monitoring:production-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-monitoring-schema.mts",
+    "monitoring:production-smoke": "node --experimental-transform-types --no-warnings scripts/p30-production-smoke.mts",
+    "monitoring:scheduler-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/p30-scheduler-smoke.mts",
     "machine:api-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/machine-api-tests.mts",
     "machine:production-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-machine-schema.mts",
     "machine:production-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/production-machine-smoke.mts",
