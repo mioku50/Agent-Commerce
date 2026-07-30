@@ -20,6 +20,12 @@ import {
 import { isSellerWorkflowType } from "../../../../../../lib/seller/marketplace.ts";
 import { formatAgentTrustReportAsMarkdown } from "../../../../../../lib/agent-trust/markdown.ts";
 import type { AgentTrustReport } from "../../../../../../lib/agent-trust/types.ts";
+import {
+  buildApiQualityPublicReport,
+  formatApiQualityPublicReportAsMarkdown,
+  parseApiQualityJobInput,
+} from "../../../../../../lib/reports/api-quality-report.ts";
+import { fetchApiQualityObservationsForServices } from "../../../../../../lib/providers/api-quality.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -214,6 +220,111 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     return NextResponse.json(trustReport, {
       status: 200,
       headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  if (job.workflow_type === "paid_api_quality") {
+    const structuredResult = job.structured_result as any;
+    const workflowData = structuredResult?.workflowData || {};
+    const inputPreview = String(job.input_preview || "");
+
+    const { targetServices, observationWindowDays } = parseApiQualityJobInput(
+      inputPreview,
+      job.planner_snapshot,
+      structuredResult,
+    );
+
+    let obsMap = await fetchApiQualityObservationsForServices(
+      targetServices,
+      observationWindowDays,
+    );
+
+    if (
+      Object.values(obsMap).every((list) => list.length === 0) &&
+      workflowData?.observationsByService
+    ) {
+      obsMap = workflowData.observationsByService;
+    } else if (
+      Object.values(obsMap).every((list) => list.length === 0) &&
+      Array.isArray(workflowData?.observations)
+    ) {
+      for (const id of targetServices) {
+        obsMap[id] = workflowData.observations;
+      }
+    }
+
+    const mappedStatus =
+      job.status === "completed"
+        ? structuredResult?.completedWithWarnings
+          ? "completed_with_warnings"
+          : "completed"
+        : job.status;
+
+    const proofs: HostedWorkflowArcProofItem[] = (jobView?.proofs || []).map(
+      (proof) => ({
+        receiptId: proof.receiptId,
+        txHash: proof.transactionHash || null,
+        status: proof.status,
+        explorerUrl:
+          proof.transactionUrl ||
+          (proof.transactionHash
+            ? `https://testnet.arcscan.app/tx/${proof.transactionHash}`
+            : null),
+        blockNumber: proof.blockNumber,
+        contractAddress: proof.contractAddress,
+      }),
+    );
+
+    const receipts: HostedWorkflowReceiptItem[] = (jobView?.services || []).map(
+      (s) => ({
+        receiptId: s.receiptId || s.serviceSlug,
+        serviceSlug: s.serviceSlug,
+        serviceName: s.serviceName,
+        priceUsdc: s.priceUsdc,
+        status: s.status,
+      }),
+    );
+
+    const generatedAt =
+      job.completed_at ||
+      structuredResult?.generatedAt ||
+      job.updated_at ||
+      job.created_at ||
+      new Date().toISOString();
+
+    const report = buildApiQualityPublicReport({
+      jobId: job.id,
+      workflow: job.workflow_type,
+      status: mappedStatus,
+      targetServices,
+      observationWindowDays,
+      observationsByService: obsMap,
+      proofs,
+      receipts,
+      generatedAt,
+    });
+
+    const acceptHeader =
+      request.headers.get("accept") || request.headers.get("Accept") || "";
+    const wantsMarkdown = acceptHeader.toLowerCase().includes("text/markdown");
+
+    if (wantsMarkdown) {
+      const markdown = formatApiQualityPublicReportAsMarkdown(report);
+      return new NextResponse(markdown, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    return NextResponse.json(report, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      },
     });
   }
 
