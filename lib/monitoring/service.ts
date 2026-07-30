@@ -1361,7 +1361,8 @@ export async function claimAndLaunchScheduledTrustRecheck() {
   const watchlist = ((claimed.data ?? []) as TrustWatchlistRow[])[0] ?? null;
   if (!watchlist) return null;
   const scheduledFor = new Date().toISOString();
-  const key = `scheduled-${watchlist.id}-${scheduledFor.slice(0, 10)}`;
+  const cycleId = watchlist.next_recheck_at ?? scheduledFor;
+  const key = `scheduled-${watchlist.id}-${cycleId}`;
   try {
     const quoted = await createTrustMonitoringQuote({
       watchlist,

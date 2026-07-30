@@ -339,6 +339,7 @@ assert(monitoringService.includes("monitoringWatchlistId"));
 assert(monitoringService.includes("agent-trust-finalizer"));
 assert(monitoringService.includes("proof.responseHash?.toLowerCase()"));
 assert(monitoringService.includes("MAX_WATCHLISTS_PER_OWNER = 10"));
+assert(monitoringService.includes("watchlist.next_recheck_at ?? scheduledFor"));
 
 const publicRoute = readFileSync(
   "app/api/monitoring/watchlists/[watchlistId]/rechecks/route.ts",
