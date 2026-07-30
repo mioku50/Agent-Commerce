@@ -30,8 +30,10 @@ only alert codes, severity, messages, retry policy, environment, and timestamp.
 Trust alerts use a separate durable delivery queue. Production Supabase Cron
 invokes `/api/internal/webhooks/deliver` every minute because the current
 Vercel plan only supports daily native cron jobs. The worker is authorized by
-`CRON_SECRET`; its URL and bearer token are stored in Supabase Vault and are
-not embedded in the migration or cron command.
+the dedicated sensitive `WEBHOOK_DELIVERY_CRON_SECRET`; its URL and bearer
+token are stored in Supabase Vault and are not embedded in the migration or
+cron command. `CRON_SECRET` remains a supported route fallback for Vercel's
+native internal cron calls.
 
 After applying migrations, configure the production scheduler once:
 

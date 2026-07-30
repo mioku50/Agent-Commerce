@@ -19,8 +19,11 @@ assert(
 );
 const config = tryGetServerSupabaseConfig();
 assert(config, "Production Supabase service configuration is required.");
-const cronSecret = process.env.CRON_SECRET?.trim();
-assert(cronSecret, "CRON_SECRET is required for the production delivery smoke.");
+const cronSecret = process.env.WEBHOOK_DELIVERY_CRON_SECRET?.trim();
+assert(
+  cronSecret,
+  "WEBHOOK_DELIVERY_CRON_SECRET is required for the production delivery smoke.",
+);
 const client = createClient(config.url, config.key, {
   auth: { persistSession: false, autoRefreshToken: false },
 });

@@ -50,8 +50,8 @@ assert(
   "Use --confirm-production https://YOUR_PRODUCTION_HOST",
 );
 const workerUrl = `${baseUrl}/api/internal/webhooks/deliver`;
-const cronSecret = process.env.CRON_SECRET?.trim();
-assert(cronSecret, "CRON_SECRET is required.");
+const cronSecret = process.env.WEBHOOK_DELIVERY_CRON_SECRET?.trim();
+assert(cronSecret, "WEBHOOK_DELIVERY_CRON_SECRET is required.");
 const postgresUrl =
   process.env.AGENT_DB_POSTGRES_URL_NON_POOLING ??
   process.env.POSTGRES_URL_NON_POOLING;

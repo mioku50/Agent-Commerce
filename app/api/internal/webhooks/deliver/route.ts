@@ -7,12 +7,17 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 function authorized(request: Request) {
-  const expected = process.env.CRON_SECRET;
   const actual = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
-  if (!expected || !actual) return false;
-  const left = Buffer.from(expected);
+  if (!actual) return false;
   const right = Buffer.from(actual);
-  return left.length === right.length && timingSafeEqual(left, right);
+  return [
+    process.env.WEBHOOK_DELIVERY_CRON_SECRET,
+    process.env.CRON_SECRET,
+  ].some((expected) => {
+    if (!expected) return false;
+    const left = Buffer.from(expected);
+    return left.length === right.length && timingSafeEqual(left, right);
+  });
 }
 
 export async function GET(request: Request) {
