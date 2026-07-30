@@ -37,6 +37,12 @@ import {
   buildGitHubPublicReport,
   formatGitHubPublicReportAsMarkdown,
 } from "@/lib/reports/github-public-report";
+import {
+  buildApiQualityPublicReport,
+  formatApiQualityPublicReportAsMarkdown,
+  parseApiQualityJobInput,
+} from "@/lib/reports/api-quality-report";
+import type { QualityStatus } from "@/lib/providers/api-quality-types";
 import type { HostedJobView } from "./types";
 import { AgentTrustReportView } from "./agent-trust-report-view";
 
@@ -66,6 +72,22 @@ function formatDate(value?: string | null) {
     }).format(new Date(value));
   } catch {
     return String(value);
+  }
+}
+
+function qualityStatusBadge(status?: QualityStatus) {
+  switch (status) {
+    case "Excellent":
+      return { label: "Excellent", color: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20" };
+    case "Reliable":
+      return { label: "Reliable", color: "bg-blue-500/10 text-blue-500 border-blue-500/20" };
+    case "Mixed signals":
+      return { label: "Mixed signals", color: "bg-amber-500/10 text-amber-500 border-amber-500/20" };
+    case "High attention":
+      return { label: "High attention", color: "bg-red-500/10 text-red-500 border-red-500/20" };
+    case "Insufficient data":
+    default:
+      return { label: "Insufficient data", color: "bg-muted text-muted-foreground border-muted" };
   }
 }
 
@@ -311,6 +333,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
   const activeStage = view.job.progressStage;
   const isGithubWorkflow = view.job.workflowType === "github_due_diligence";
   const isAgentTrustWorkflow = view.job.workflowType === "agent_trust_report";
+  const isApiQualityWorkflow = view.job.workflowType === "paid_api_quality";
   const isSellerWorkflow = String(view.job.workflowType).startsWith("seller_");
   const consumerStages = isGithubWorkflow ? GITHUB_CONSUMER_STAGES : DEFAULT_CONSUMER_STAGES;
   const currentIndex = DEFAULT_CONSUMER_STAGES.findIndex((stage) =>
@@ -327,6 +350,70 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
     } | null)?.kind === "agent_trust_report"
       ? ((report?.workflowData as { report: AgentTrustReport }).report)
       : null;
+
+  const apiQualityReport = isApiQualityWorkflow
+    ? (() => {
+        const { targetServices, observationWindowDays } = parseApiQualityJobInput(
+          view.job.inputPreview,
+          view.job.plannerSnapshot,
+          view.job.structuredResult,
+        );
+        const proofs = view.proofs.map((p) => ({
+          receiptId: p.receiptId,
+          txHash: p.transactionHash || null,
+          status: p.status,
+          explorerUrl: p.transactionUrl,
+          blockNumber: p.blockNumber,
+          contractAddress: p.contractAddress,
+        }));
+        const receipts = view.services.map((s) => ({
+          receiptId: s.receiptId || s.serviceSlug,
+          serviceSlug: s.serviceSlug,
+          serviceName: s.serviceName,
+          priceUsdc: String(s.priceUsdc),
+          status: s.status,
+        }));
+        const workflowData = (view.job.structuredResult as any)?.workflowData;
+        const observationsByService = workflowData?.observationsByService;
+        const observations = workflowData?.observations;
+
+        return buildApiQualityPublicReport({
+          jobId: view.job.id,
+          workflow: view.job.workflowType,
+          status: view.job.status,
+          targetServices,
+          observationWindowDays,
+          observationsByService,
+          observations,
+          proofs,
+          receipts,
+          generatedAt: view.job.completedAt || view.job.createdAt,
+        });
+      })()
+    : null;
+
+  function downloadApiQualityReport(format: "json" | "markdown") {
+    if (!apiQualityReport) return;
+    const content =
+      format === "json"
+        ? `${JSON.stringify(apiQualityReport, null, 2)}\n`
+        : formatApiQualityPublicReportAsMarkdown(apiQualityReport);
+    const blob = new Blob([content], {
+      type:
+        format === "json"
+          ? "application/json;charset=utf-8"
+          : "text/markdown;charset=utf-8",
+    });
+    const href = URL.createObjectURL(blob);
+    const fileName = `paid-api-quality-${apiQualityReport.reportId}`;
+    const anchor = document.createElement("a");
+    anchor.href = href;
+    anchor.download = `${fileName}.${format === "json" ? "json" : "md"}`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(href);
+  }
   const reportInput = report?.input ?? {
     preview: view.job.inputPreview,
     sha256: view.job.inputSha256,
@@ -587,7 +674,325 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
         )}
 
         <div className="grid content-start gap-6">
-          {isAgentTrustWorkflow && trustReport ? (
+          {isApiQualityWorkflow && apiQualityReport ? (
+            <Card className="rounded-lg">
+              <CardContent className="p-6 grid gap-6">
+                {/* 1. Header & Actions */}
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-6">
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      <Badge variant="secondary">Generated by {BRAND.name}</Badge>
+                      <Badge variant="outline" className="font-mono text-xs">
+                        {apiQualityReport.targetServices.join(", ")}
+                      </Badge>
+                      <Badge className={qualityStatusBadge(apiQualityReport.overallStatus).color}>
+                        Score: {apiQualityReport.overallScore}/100 ({apiQualityReport.overallStatus})
+                      </Badge>
+                      <Badge variant="outline" className="text-xs">
+                        {apiQualityReport.confidence} confidence
+                      </Badge>
+                      <ArcVerificationBadge
+                        proofs={view.proofs}
+                        services={view.services}
+                        jobStatus={view.job.status}
+                      />
+                    </div>
+                    <h2 className="text-2xl font-bold tracking-tight">Paid API Quality Report</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      {apiQualityReport.mode === "comparison"
+                        ? `Comparative evaluation across ${apiQualityReport.targetServices.length} paid API service(s) (${apiQualityReport.observationWindowDays}-day window)`
+                        : `Empirical telemetry evaluation for service '${apiQualityReport.targetServices[0]}' (${apiQualityReport.observationWindowDays}-day window)`}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button variant="outline" size="sm" onClick={copyShareLink} className="gap-1.5">
+                      {copied ? <Check className="size-4 text-emerald-500" /> : <Share2 className="size-4" />}
+                      {copied ? "Copied!" : "Share Report"}
+                    </Button>
+                    {view.job.status === "completed" ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadApiQualityReport("json")}
+                          className="gap-1.5"
+                        >
+                          <Download className="size-4" />
+                          JSON
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => downloadApiQualityReport("markdown")}
+                          className="gap-1.5"
+                        >
+                          <Download className="size-4" />
+                          Markdown
+                        </Button>
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+
+                {/* 2. Executive Summary */}
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    1. Executive Summary
+                  </h3>
+                  <div className="rounded-md bg-secondary/30 p-4 text-sm leading-6">
+                    {sanitizePublicReportText(apiQualityReport.executiveSummary)}
+                  </div>
+                </div>
+
+                {/* 3. Category Performance Highlights */}
+                {apiQualityReport.comparison?.highlights?.length ? (
+                  <div className="border-t pt-6">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                      2. Category Performance Highlights
+                    </h3>
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+                      {apiQualityReport.comparison.highlights.map((h) => (
+                        <div key={h.category} className="rounded-md border p-3.5 bg-primary/5 border-primary/20">
+                          <p className="font-semibold text-xs text-primary uppercase tracking-wide">{h.title}</p>
+                          <p className="mt-1 text-sm font-bold">{h.winnerServiceName || h.winnerServiceId}</p>
+                          <Badge variant="secondary" className="mt-1 font-mono text-[11px]">
+                            {h.value}
+                          </Badge>
+                          <p className="mt-2 text-muted-foreground leading-4">{h.description}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* 4. Side-by-Side Comparison Matrix */}
+                {apiQualityReport.servicesCompared?.length > 1 ? (
+                  <div className="border-t pt-6">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                      3. Side-by-Side Comparison Matrix
+                    </h3>
+                    <div className="overflow-x-auto rounded-md border">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-secondary/40 text-muted-foreground">
+                          <tr>
+                            <th className="p-3 font-semibold">Rank</th>
+                            <th className="p-3 font-semibold">Service</th>
+                            <th className="p-3 font-semibold">Quality Score</th>
+                            <th className="p-3 font-semibold">Status</th>
+                            <th className="p-3 font-semibold">Observations</th>
+                            <th className="p-3 font-semibold">P50 Latency</th>
+                            <th className="p-3 font-semibold">Uptime</th>
+                            <th className="p-3 font-semibold">Cost / Result</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                          {apiQualityReport.servicesCompared.map((s) => {
+                            const match = apiQualityReport.comparison?.services.find(
+                              (item) => item.serviceId === s.serviceId,
+                            );
+                            const isWinner = apiQualityReport.comparison?.overallWinnerServiceId === s.serviceId;
+                            return (
+                              <tr key={s.serviceId} className={isWinner ? "bg-primary/5 font-medium" : ""}>
+                                <td className="p-3 font-bold font-mono">#{s.rank ?? 1}</td>
+                                <td className="p-3 font-medium">
+                                  {s.serviceName}
+                                  <code className="block text-[10px] text-muted-foreground font-mono">{s.serviceId}</code>
+                                </td>
+                                <td className="p-3 font-bold font-mono text-sm">{s.qualityScore ?? 0}/100</td>
+                                <td className="p-3">
+                                  <Badge className={qualityStatusBadge(s.status).color}>
+                                    {s.status ?? "Insufficient data"}
+                                  </Badge>
+                                </td>
+                                <td className="p-3 font-mono">{s.observationCount.value}</td>
+                                <td className="p-3 font-mono">{match ? `${match.metrics.latencyP50Ms}ms` : "N/A"}</td>
+                                <td className="p-3 font-mono">{match ? `${match.metrics.uptimePercent}%` : "N/A"}</td>
+                                <td className="p-3 font-mono">{match ? `${match.metrics.costPerSuccessfulResultUsdc} USDC` : "N/A"}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* 5. Single / Primary Service Review Metrics */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    {apiQualityReport.servicesCompared.length > 1 ? "4. Primary Service Review Metrics" : "2. Primary Service Review Metrics"}
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
+                    <div className="rounded-md border p-3.5">
+                      <p className="text-xs text-muted-foreground">Observed Uptime</p>
+                      <p className="font-semibold text-lg mt-1">{apiQualityReport.availability.uptimePercent.value}%</p>
+                      <p className="text-xs text-muted-foreground mt-1">{apiQualityReport.availability.totalObservations.value} total observation(s)</p>
+                    </div>
+                    <div className="rounded-md border p-3.5">
+                      <p className="text-xs text-muted-foreground">Latency (P50 / P95 / Max)</p>
+                      <p className="font-semibold text-lg mt-1 font-mono">{apiQualityReport.latencyDistribution.latencyP50Ms.value}ms / {apiQualityReport.latencyDistribution.latencyP95Ms.value}ms</p>
+                      <p className="text-xs text-muted-foreground mt-1">Max: {apiQualityReport.latencyDistribution.latencyMaxMs.value}ms</p>
+                    </div>
+                    <div className="rounded-md border p-3.5">
+                      <p className="text-xs text-muted-foreground">Valid Response & Schema Rate</p>
+                      <p className="font-semibold text-lg mt-1 font-mono">{apiQualityReport.responseQuality.validResponsePercent.value}%</p>
+                      <p className="text-xs text-muted-foreground mt-1">Schema: {apiQualityReport.responseQuality.schemaValidationPercent.value}% | Size limit: {apiQualityReport.responseQuality.withinSizeLimitPercent.value}%</p>
+                    </div>
+                    <div className="rounded-md border p-3.5">
+                      <p className="text-xs text-muted-foreground">Payment & Settlement Reliability</p>
+                      <p className="font-semibold text-lg mt-1 font-mono">{apiQualityReport.paymentAndSettlementReliability.paymentSuccessPercent.value}%</p>
+                      <p className="text-xs text-muted-foreground mt-1">Arc Settlement: {apiQualityReport.paymentAndSettlementReliability.settlementSuccessPercent.value}%</p>
+                    </div>
+                    <div className="rounded-md border p-3.5 sm:col-span-2 lg:col-span-2">
+                      <p className="text-xs text-muted-foreground">Quoted Pricing & Cost Efficiency</p>
+                      <div className="flex flex-wrap items-center gap-4 mt-1 font-mono text-sm">
+                        <span>Min: <strong>{apiQualityReport.priceAndCostEfficiency.quotedPriceMinUsdc.value}</strong> USDC</span>
+                        <span>Median: <strong>{apiQualityReport.priceAndCostEfficiency.quotedPriceMedianUsdc.value}</strong> USDC</span>
+                        <span>Max: <strong>{apiQualityReport.priceAndCostEfficiency.quotedPriceMaxUsdc.value}</strong> USDC</span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">Cost per successful result: {apiQualityReport.priceAndCostEfficiency.costPerSuccessfulResultUsdc.value} USDC</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 6. Quality Score Breakdown */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Quality Score Breakdown (0–100)
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+                    {[
+                      { label: "Availability", score: apiQualityReport.qualityScoreAndConfidence.breakdown.availabilityScore, max: 25 },
+                      { label: "Execution Reliability", score: apiQualityReport.qualityScoreAndConfidence.breakdown.executionReliabilityScore, max: 20 },
+                      { label: "Response Validity", score: apiQualityReport.qualityScoreAndConfidence.breakdown.responseValidityScore, max: 15 },
+                      { label: "Payment Success", score: apiQualityReport.qualityScoreAndConfidence.breakdown.paymentSuccessScore, max: 15 },
+                      { label: "Settlement Success", score: apiQualityReport.qualityScoreAndConfidence.breakdown.settlementSuccessScore, max: 15 },
+                      { label: "Latency Consistency", score: apiQualityReport.qualityScoreAndConfidence.breakdown.latencyConsistencyScore, max: 10 },
+                    ].map((item) => (
+                      <div key={item.label} className="rounded-md border p-3">
+                        <div className="flex justify-between items-center mb-1.5">
+                          <span className="font-medium text-foreground">{item.label}</span>
+                          <span className="font-mono font-bold">{item.score} / {item.max}</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+                          <div
+                            className="h-full bg-primary transition-all"
+                            style={{ width: `${Math.min(100, (item.score / item.max) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 7. Evidence-Backed Strengths */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Evidence-Backed Strengths
+                  </h3>
+                  {apiQualityReport.strengths?.length ? (
+                    <div className="rounded-md border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs">
+                      <ul className="grid gap-2 text-muted-foreground">
+                        {apiQualityReport.strengths.map((s, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <Check className="size-4 text-emerald-500 shrink-0 mt-0.5" />
+                            <span>{s}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No specific strengths highlighted.</p>
+                  )}
+                </div>
+
+                {/* 8. Risks and Review Items */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Risks & Review Items
+                  </h3>
+                  {apiQualityReport.risksAndReviewItems?.length ? (
+                    <div className="grid gap-3 text-xs">
+                      {apiQualityReport.risksAndReviewItems.map((risk, i) => {
+                        const badge = riskSeverityBadge(risk.severity as RiskSeverity);
+                        return (
+                          <div key={i} className={`rounded-md border p-4 ${badge.color}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2 mb-1.5">
+                              <p className="font-semibold text-sm">{risk.title}</p>
+                              <Badge variant="outline" className="text-xs font-medium">
+                                {badge.label}
+                              </Badge>
+                            </div>
+                            <p className="text-muted-foreground leading-5">{risk.description}</p>
+                            <p className="mt-2 text-[11px] font-medium text-foreground/80">Impact: {risk.impact}</p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">No significant risk factors identified by telemetry rules.</p>
+                  )}
+                </div>
+
+                {/* 9. Questions Before Integration */}
+                {apiQualityReport.questionsBeforeIntegration?.length ? (
+                  <div className="border-t pt-6">
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                      Questions Before Integration
+                    </h3>
+                    <div className="rounded-md border p-4 text-xs">
+                      <ul className="grid gap-2 text-muted-foreground">
+                        {apiQualityReport.questionsBeforeIntegration.map((q, i) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <span className="font-semibold text-primary shrink-0">{i + 1}.</span>
+                            <span>{q}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                ) : null}
+
+                {/* 10. Evidence & Telemetry Window */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+                    Evidence & Observation Telemetry Window
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 text-xs">
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Observation Window</p>
+                      <p className="font-semibold mt-1">{apiQualityReport.evidenceAndObservationWindow.windowDays} Days</p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Real Paid Executions</p>
+                      <p className="font-semibold mt-1 font-mono">{apiQualityReport.evidenceAndObservationWindow.realPaidExecutionCount.value}</p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Scheduled Probes</p>
+                      <p className="font-semibold mt-1 font-mono">{apiQualityReport.evidenceAndObservationWindow.scheduledProbeCount.value}</p>
+                    </div>
+                    <div className="rounded-md border p-3">
+                      <p className="text-xs text-muted-foreground">Historical Executions</p>
+                      <p className="font-semibold mt-1 font-mono">{apiQualityReport.evidenceAndObservationWindow.historicalExecutionCount.value}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 11. Limitations & Disclaimer */}
+                <div className="border-t pt-6">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-2">
+                    Limitations & Disclaimer
+                  </h3>
+                  <div className="rounded-md border border-amber-400/20 bg-amber-400/5 p-4 text-xs leading-5 text-amber-200/90">
+                    <p>{apiQualityReport.limitations.disclaimer}</p>
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Analysis timestamp: {apiQualityReport.limitations.analyzedAt}.
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ) : isAgentTrustWorkflow && trustReport ? (
             <AgentTrustReportView
               report={trustReport}
               copied={copied}

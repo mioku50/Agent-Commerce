@@ -69,6 +69,12 @@ const publicWorkflows: Array<{
     benefits: ["Repository health", "Maintainer activity", "Adoption risk signals"],
   },
   {
+    type: "paid_api_quality",
+    description:
+      "Evaluate and compare paid APIs using observed pricing, latency, availability, response validity, payment execution, and settlement history.",
+    benefits: ["Quality Score (0–100)", "Uptime & P95 Latency", "Side-by-side benchmarking"],
+  },
+  {
     type: "market_context",
     description:
       "Receive a current market snapshot using live provider-backed asset data.",
@@ -91,6 +97,7 @@ const publicWorkflows: Array<{
 const reportWorkflowOrder: HostedWorkflowType[] = [
   "github_due_diligence",
   "agent_trust_report",
+  "paid_api_quality",
   "market_context",
   "sentiment_tone",
   "builder_update",
