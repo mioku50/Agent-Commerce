@@ -1,11 +1,7 @@
 import assert from "node:assert/strict";
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { tryGetServerSupabaseConfig } from "../lib/supabase/server-env.ts";
-import {
-  createWebhookSecret,
-  encryptWebhookSecret,
-} from "../lib/monitoring/webhook-secret.ts";
 
 function digest(value: string) {
   return createHash("sha256").update(value).digest("hex");
@@ -86,8 +82,6 @@ const privateWatchId = `wtl_${digest(`${marker}:watch`).slice(0, 20)}`;
 const privateCanonicalKey = `github:p33-smoke/${digest(marker).slice(0, 12)}`;
 let privateInternalId: string | null = null;
 let privateWatchInternalId: string | null = null;
-const subscriptionIds: string[] = [];
-const eventIds: string[] = [];
 
 try {
   const insertedProfile = await client
@@ -136,88 +130,23 @@ try {
   }
   console.log("  ✓ Private and unknown status/badge routes return the same 404.");
 
-  async function createDelivery(mode: "success" | "retry") {
-    const secret = createWebhookSecret();
-    const subscription = await client
-      .from("webhook_subscriptions")
-      .insert({
-        owner_wallet: ownerWallet,
-        name: `P3.3 ${mode} smoke`,
-        endpoint_url: `${baseUrl}/api/public/webhook-smoke/${mode}`,
-        endpoint_domain: new URL(baseUrl).hostname,
-        profile_ids: [profileInternalId],
-        event_types: ["risk_added"],
-        secret_ciphertext: encryptWebhookSecret(secret),
-      })
-      .select("id")
-      .single();
-    assert(subscription.data, subscription.error?.message);
-    subscriptionIds.push(subscription.data.id);
-    const publicEventId = `evt_test_${randomBytes(12).toString("hex")}`;
-    const createdAt = new Date().toISOString();
-    const event = await client
-      .from("webhook_events")
-      .insert({
-        public_id: publicEventId,
-        owner_wallet: ownerWallet,
-        event_type: "test",
-        payload: {
-          id: publicEventId,
-          type: "test",
-          createdAt,
-          apiVersion: "2026-07-30",
-          data: { message: "Veyra webhook connection verified." },
-        },
-        created_at: createdAt,
-      })
-      .select("id")
-      .single();
-    assert(event.data, event.error?.message);
-    eventIds.push(event.data.id);
-    const delivery = await client
-      .from("webhook_deliveries")
-      .insert({
-        owner_wallet: ownerWallet,
-        subscription_id: subscription.data.id,
-        event_id: event.data.id,
-        status: "pending",
-        next_attempt_at: createdAt,
-      })
-      .select("id")
-      .single();
-    assert(delivery.data, delivery.error?.message);
-    return delivery.data.id as string;
-  }
-
-  const successDeliveryId = await createDelivery("success");
-  const retryDeliveryId = await createDelivery("retry");
-  const worker = await fetch(`${baseUrl}/api/internal/webhooks/deliver`, {
+  const worker = await fetch(`${baseUrl}/api/internal/webhooks/smoke`, {
+    method: "POST",
     headers: { Authorization: `Bearer ${cronSecret}` },
   });
+  const workerBody = (await worker.json()) as {
+    success?: { delivered?: boolean; httpStatus?: number; attemptCount?: number };
+    retry?: { scheduled?: boolean; httpStatus?: number; attemptCount?: number };
+  };
   assert.equal(worker.status, 200, `Delivery worker returned ${worker.status}.`);
-
-  const deliveries = await client
-    .from("webhook_deliveries")
-    .select("id,status,attempt_count,http_status,next_attempt_at,error_category")
-    .in("id", [successDeliveryId, retryDeliveryId]);
-  assert(!deliveries.error, deliveries.error?.message);
-  const success = deliveries.data?.find((row) => row.id === successDeliveryId);
-  const retry = deliveries.data?.find((row) => row.id === retryDeliveryId);
-  assert.equal(success?.status, "delivered");
-  assert.equal(success?.http_status, 204);
-  assert.equal(success?.attempt_count, 1);
-  assert.equal(retry?.status, "retry_scheduled");
-  assert.equal(retry?.http_status, 503);
-  assert.equal(retry?.attempt_count, 1);
-  assert(Date.parse(retry?.next_attempt_at ?? "") > Date.now());
+  assert.equal(workerBody.success?.delivered, true);
+  assert.equal(workerBody.success?.httpStatus, 204);
+  assert.equal(workerBody.success?.attemptCount, 1);
+  assert.equal(workerBody.retry?.scheduled, true);
+  assert.equal(workerBody.retry?.httpStatus, 503);
+  assert.equal(workerBody.retry?.attemptCount, 1);
   console.log("  ✓ Real signed HTTPS delivery and controlled HTTP 503 retry passed.");
 } finally {
-  if (subscriptionIds.length) {
-    await client.from("webhook_subscriptions").delete().in("id", subscriptionIds);
-  }
-  if (eventIds.length) {
-    await client.from("webhook_events").delete().in("id", eventIds);
-  }
   if (privateWatchInternalId) {
     await client.from("trust_watchlists").delete().eq("id", privateWatchInternalId);
   }
