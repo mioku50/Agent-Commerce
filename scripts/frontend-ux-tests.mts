@@ -70,6 +70,7 @@ assert.equal(
 );
 for (const [type, label] of [
   ["github_due_diligence", "GitHub Project Due Diligence"],
+  ["agent_trust_report", "Veyra Agent Trust Report"],
   ["market_context", "Market Context Brief"],
   ["sentiment_tone", "Sentiment & Tone Report"],
   ["builder_update", "Builder Update Summary"],
@@ -86,6 +87,8 @@ for (const template of curatedHostedWorkflowTemplates) {
   assert(typeof template.estimatedSpendUsdc === "number" && template.estimatedSpendUsdc > 0);
   if (template.value === "github_due_diligence") {
     assert.equal(formattedPrice, "From 0.0020 USDC");
+  } else if (template.value === "agent_trust_report") {
+    assert.equal(formattedPrice, "From 0.0004 USDC");
   } else {
     assert.equal(formattedPrice, "From 0.0013 USDC");
   }
@@ -93,6 +96,7 @@ for (const template of curatedHostedWorkflowTemplates) {
 
 
 assert.equal(hostedWorkflowHref("sentiment_tone"), "/agent-runner?workflow=sentiment");
+assert.equal(hostedWorkflowHref("agent_trust_report"), "/agent-runner?workflow=agent_trust");
 assert.equal(hostedWorkflowHref("builder_update"), "/agent-runner?workflow=builder_update");
 assert.equal(hostedWorkflowHref("market_context", "ETH/USD"), "/agent-runner?workflow=market_context&symbol=ETH%2FUSD");
 assert.equal(hostedWorkflowHref("custom_task"), "/agent-runner?workflow=custom");

@@ -85,6 +85,42 @@ ARC_AGENT_COMMERCE_API_KEY='aac_...' \
 The example never prints the credential. Persist explicit quote and run
 idempotency keys when an agent process must survive restarts.
 
+### Agent Trust Report
+
+`agent_trust_report` accepts at least one of `agentId`, `agentWallet`, or
+`repositoryUrl`. `contractAddress` and `serviceEndpoint` add optional public
+evidence. The endpoint must be public HTTPS; localhost, private networks,
+redirects, credentials, and DNS-rebinding targets are blocked.
+
+```ts
+const { report } = await client.executeWorkflow({
+  workflow: "agent_trust_report",
+  input: {
+    agentWallet: "0x0000000000000000000000000000000000000001",
+    repositoryUrl: "circlefin/developer-controlled-wallets-web-sdk",
+    serviceEndpoint: "https://api.example.com/health",
+  },
+}, {
+  quoteIdempotencyKey: "trust-quote-001",
+  runIdempotencyKey: "trust-run-001",
+});
+
+console.log(report.trustScore, report.verification);
+```
+
+Full TypeScript and Python examples are in
+`examples/agent-api/agent-trust-report.ts` and
+`examples/agent-api/agent_trust_report.py`. The JSON and Markdown report
+represent the same canonical result. Numeric scores are deterministic; optional
+LLM synthesis cannot change them. Missing evidence is excluded rather than
+treated as a negative signal, and fewer than two scorable categories produces
+`overall: null` with `limited_data`.
+
+The final internal x402 step costs `0.0001 USDC` and binds the deterministic
+`reportHash` to the proof registry response hash. `verifiedOnArc` becomes true
+only when that exact report-hash proof is verified; unrelated service receipt
+proofs cannot upgrade the report badge.
+
 ## HTTP quickstart
 
 Every request uses:
@@ -220,6 +256,19 @@ The SDK exposes these fields through `AgentCommerceApiError`.
 | `workflow_disabled` | 403 | Update the agent workflow policy |
 | `invalid_request` | 400 | Correct structured workflow input |
 | `invalid_repository` | 400 | Correct the public GitHub reference |
+| `agent_trust_input_required` | 400 | Add Agent ID, agent wallet, or repository |
+| `agent_not_found` | 400 | Correct the public Veyra Agent ID |
+| `agent_access_denied` | 403 | Use the credential that owns the private agent |
+| `agent_registry_unavailable` | 503 | Retry without changing the identifier |
+| `agent_trust_service_unavailable` | 503 | Retry after canonical report verification recovers |
+| `invalid_wallet` | 400 | Correct the public EVM address |
+| `contract_not_found` | 400 | Correct or remove the Arc Testnet contract |
+| `contract_provider_unavailable` | 503 | Retry or remove the optional contract |
+| `endpoint_invalid` | 400 | Use a public HTTPS URL |
+| `endpoint_private_network_blocked` | 400 | Remove localhost/private/internal endpoint |
+| `endpoint_unreachable` | 422 | Retry or remove the optional endpoint |
+| `endpoint_response_too_large` | 422 | Use a bounded health endpoint |
+| `insufficient_trust_evidence` | 422 | Add another public evidence source |
 | `idempotency_key_missing` | 400 | Add and persist a key |
 | `idempotency_conflict` | 409 | Use the original body or a new operation key |
 | `idempotency_in_progress` | 409 | Retry the same body and key |
@@ -228,6 +277,7 @@ The SDK exposes these fields through `AgentCommerceApiError`.
 | `payment_invalid` | 400 | Do not retry until transaction details are fixed |
 | `spending_limit_exceeded` | 429 | Wait for policy window or adjust policy |
 | `report_not_ready` | 400 | Poll the run before retrieving the report |
+| `report_generation_failed` | 422 | Review the run failure before retrying |
 | `provider_unavailable` | 503 | Retry according to `retryable` |
 | `internal_error` | 500 | Log `requestId`; retry only if marked retryable |
 

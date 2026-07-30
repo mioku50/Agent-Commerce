@@ -20,6 +20,7 @@ import { BatchFacilitatorClient } from "@circle-fin/x402-batching/server";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "node:crypto";
 import { after, NextRequest, NextResponse } from "next/server";
+import type { Hex } from "viem";
 import {
   attestPaymentEvent,
   createProofIdentifiers,
@@ -185,6 +186,10 @@ export function withGateway(
   price: string,
   endpoint: string,
   payTo: string = sellerAddress,
+  options: {
+    requiredPayer?: string;
+    allowCanonicalResponseHash?: boolean;
+  } = {},
 ) {
   const requirements = buildPaymentRequirements(price, payTo);
 
@@ -267,6 +272,26 @@ export function withGateway(
         );
       }
 
+      const verifiedPayer = verifyResult.payer ?? paymentSummary.payer;
+      if (
+        options.requiredPayer &&
+        (!verifiedPayer ||
+          verifiedPayer.toLowerCase() !== options.requiredPayer.toLowerCase())
+      ) {
+        return NextResponse.json(
+          {
+            error: "This paid resource is reserved for the hosted workflow payer.",
+            requestId: diagnostics.requestId,
+          },
+          {
+            status: 403,
+            headers: {
+              "X-Agent-Commerce-Request-Id": diagnostics.requestId,
+            },
+          },
+        );
+      }
+
       const settleResult = await facilitator.settle(
         paymentPayload,
         requirements,
@@ -342,6 +367,16 @@ export function withGateway(
 
       // Call the actual route handler
       const response = await handler(req);
+      const canonicalResponseHashHeader =
+        options.allowCanonicalResponseHash
+          ? response.headers.get("X-Veyra-Canonical-Response-Hash")
+          : null;
+      const canonicalResponseHash =
+        canonicalResponseHashHeader &&
+        /^0x[0-9a-fA-F]{64}$/.test(canonicalResponseHashHeader)
+          ? canonicalResponseHashHeader as Hex
+          : undefined;
+      response.headers.delete("X-Veyra-Canonical-Response-Hash");
 
       // Forward settlement info to the client
       const settleResponseHeader = Buffer.from(
@@ -372,6 +407,7 @@ export function withGateway(
                 seller: requirements.payTo,
                 request: proofRequest,
                 response: proofResponse,
+                responseHashOverride: canonicalResponseHash,
               }),
             );
           }

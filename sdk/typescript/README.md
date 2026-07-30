@@ -23,6 +23,25 @@ const { report } = await client.executeWorkflow({
 console.log(report.verdict, report.verification);
 ```
 
+Agent Trust Report uses a structured public-identifier input and the same
+quote → run → report lifecycle:
+
+```ts
+import type { AgentTrustReport } from "@arc-agent-commerce/sdk";
+
+const quote = await client.createQuote({
+  workflow: "agent_trust_report",
+  input: {
+    agentWallet: "0x0000000000000000000000000000000000000001",
+    repositoryUrl: "circlefin/developer-controlled-wallets-web-sdk",
+  },
+});
+
+// Launch and wait as above, then request the canonical typed report:
+const report = await client.getReport<AgentTrustReport>("REPORT_ID");
+console.log(report.trustScore, report.verification);
+```
+
 Mutating methods create a fresh `Idempotency-Key` by default. For durable agent
 runs, persist and pass your own quote and run idempotency keys so process
 restarts replay the same operation.

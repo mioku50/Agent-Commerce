@@ -385,9 +385,17 @@ export async function POST(request: NextRequest) {
   const serverEnforcedBody = {
     workflowType: storedQuote.workflow_type,
     inputText:
-      storedQuote.planner_snapshot?.repository?.canonicalUrl ||
-      storedQuote.input_preview,
+      storedQuote.workflow_type === "agent_trust_report"
+        ? JSON.stringify(
+            storedQuote.planner_snapshot?.metadata?.agentTrustInput ?? {},
+          )
+        : storedQuote.planner_snapshot?.repository?.canonicalUrl ||
+          storedQuote.input_preview,
     repositoryUrl: storedQuote.planner_snapshot?.repository?.canonicalUrl,
+    agentTrustInput:
+      storedQuote.workflow_type === "agent_trust_report"
+        ? storedQuote.planner_snapshot?.metadata?.agentTrustInput
+        : undefined,
     marketSymbol: storedQuote.planner_snapshot?.marketSymbol,
     task: storedQuote.task,
     budgetUsdc: storedQuote.budget_usdc,

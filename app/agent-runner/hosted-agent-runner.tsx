@@ -58,6 +58,13 @@ export function HostedAgentRunner({
   const [workflowType, setWorkflowType] = useState<HostedWorkflowType>(initial.value);
   const [task, setTask] = useState(initial.task);
   const [inputText, setInputText] = useState(initialRepository ?? "");
+  const [agentId, setAgentId] = useState("");
+  const [agentWallet, setAgentWallet] = useState("");
+  const [agentRepositoryUrl, setAgentRepositoryUrl] = useState(
+    initialWorkflowType === "agent_trust_report" ? initialRepository ?? "" : "",
+  );
+  const [contractAddress, setContractAddress] = useState("");
+  const [serviceEndpoint, setServiceEndpoint] = useState("");
   const [marketSymbol, setMarketSymbol] = useState<PythMarketSymbol>(initialMarketSymbol);
   const budget = "0.005";
   const [plan, setPlan] = useState<HostedPlannerSnapshot | null>(null);
@@ -79,11 +86,59 @@ export function HostedAgentRunner({
     }
   }
 
-  const isInputValid = workflowType === "github_due_diligence"
-    ? Boolean(repositoryRef)
-    : inputText.trim().length >= 20;
+  let agentRepositoryRef: ReturnType<typeof parseGitHubRepositoryInput> | null = null;
+  if (workflowType === "agent_trust_report" && agentRepositoryUrl.trim()) {
+    try {
+      agentRepositoryRef = parseGitHubRepositoryInput(agentRepositoryUrl);
+    } catch {
+      agentRepositoryRef = null;
+    }
+  }
+  const agentIdValid = !agentId.trim() || /^agt_[a-z0-9]{20}$/.test(agentId.trim());
+  const agentWalletValid =
+    !agentWallet.trim() || /^0x[0-9a-fA-F]{40}$/.test(agentWallet.trim());
+  const contractAddressValid =
+    !contractAddress.trim() || /^0x[0-9a-fA-F]{40}$/.test(contractAddress.trim());
+  const serviceEndpointValid = (() => {
+    if (!serviceEndpoint.trim()) return true;
+    try {
+      const url = new URL(serviceEndpoint.trim());
+      return url.protocol === "https:" && !/^(?:localhost|127\.|0\.0\.0\.0|\[?::1\]?$)/i.test(url.hostname);
+    } catch {
+      return false;
+    }
+  })();
+  const hasAgentTrustPrimaryInput =
+    Boolean(agentId.trim()) ||
+    Boolean(agentWallet.trim()) ||
+    Boolean(agentRepositoryUrl.trim());
+  const isInputValid =
+    workflowType === "github_due_diligence"
+      ? Boolean(repositoryRef)
+      : workflowType === "agent_trust_report"
+        ? hasAgentTrustPrimaryInput &&
+          agentIdValid &&
+          agentWalletValid &&
+          contractAddressValid &&
+          serviceEndpointValid &&
+          (!agentRepositoryUrl.trim() || Boolean(agentRepositoryRef))
+        : inputText.trim().length >= 20;
 
-  const inputHelper = workflowType === "github_due_diligence"
+  const inputHelper = workflowType === "agent_trust_report"
+    ? !hasAgentTrustPrimaryInput
+      ? "Provide at least one Agent ID, agent wallet, or public GitHub repository."
+      : !agentIdValid
+        ? "Check the public Agent ID. Use the agt_ identifier shown in Veyra."
+        : !agentWalletValid
+          ? "Check the agent wallet. It must be a valid EVM address."
+          : agentRepositoryUrl.trim() && !agentRepositoryRef
+            ? "Check the public GitHub repository URL."
+            : !contractAddressValid
+              ? "Check the Arc Testnet contract address."
+              : !serviceEndpointValid
+                ? "Use a public HTTPS service endpoint. Local and private networks are blocked."
+                : null
+    : workflowType === "github_due_diligence"
     ? !inputText.trim()
       ? "Enter a public GitHub repository URL (e.g. github.com/owner/repository)."
       : !repositoryRef
@@ -116,6 +171,16 @@ export function HostedAgentRunner({
       workflowType,
       task,
       inputText,
+      agentTrustInput:
+        workflowType === "agent_trust_report"
+          ? {
+              agentId: agentId.trim() || undefined,
+              agentWallet: agentWallet.trim() || undefined,
+              repositoryUrl: agentRepositoryUrl.trim() || undefined,
+              contractAddress: contractAddress.trim() || undefined,
+              serviceEndpoint: serviceEndpoint.trim() || undefined,
+            }
+          : undefined,
       marketSymbol: workflowType === "market_context" ? marketSymbol : null,
       budgetUsdc: budget,
     };
@@ -255,7 +320,78 @@ export function HostedAgentRunner({
               </select>
               <p className="text-xs text-muted-foreground">{getHostedWorkflowTemplate(workflowType)?.description}</p>
             </div>
-            {workflowType === "github_due_diligence" ? (
+            {workflowType === "agent_trust_report" ? (
+              <div className="grid gap-4">
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+                  <p className="font-semibold">Verify an AI agent before you use, pay, or integrate it.</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Start with any one primary identifier. Add optional public signals for a broader, evidence-backed report.
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="agent-trust-agent-id">Agent ID</Label>
+                  <input
+                    id="agent-trust-agent-id"
+                    value={agentId}
+                    onChange={(event) => { setAgentId(event.target.value); invalidatePlan(); }}
+                    placeholder="agt_…"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">Public Veyra Agent ID. One primary identifier is required.</p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="agent-trust-wallet">Agent wallet</Label>
+                  <input
+                    id="agent-trust-wallet"
+                    value={agentWallet}
+                    onChange={(event) => { setAgentWallet(event.target.value); invalidatePlan(); }}
+                    placeholder="0x…"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">Public EVM address associated with the agent.</p>
+                </div>
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="agent-trust-repository">GitHub repository</Label>
+                    {agentRepositoryRef ? <Badge variant="secondary" className="font-mono text-xs">{agentRepositoryRef.fullName}</Badge> : null}
+                  </div>
+                  <input
+                    id="agent-trust-repository"
+                    value={agentRepositoryUrl}
+                    onChange={(event) => { setAgentRepositoryUrl(event.target.value); invalidatePlan(); }}
+                    placeholder="https://github.com/owner/repository"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  />
+                  <p className="text-xs text-muted-foreground">Public repository only. Enables the full GitHub Due Diligence evidence pipeline.</p>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="grid gap-2">
+                    <Label htmlFor="agent-trust-contract">Arc contract <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                    <input
+                      id="agent-trust-contract"
+                      value={contractAddress}
+                      onChange={(event) => { setContractAddress(event.target.value); invalidatePlan(); }}
+                      placeholder="0x…"
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono"
+                    />
+                  </div>
+                  <div className="grid gap-2">
+                    <Label htmlFor="agent-trust-endpoint">Service endpoint <span className="font-normal text-muted-foreground">(optional)</span></Label>
+                    <input
+                      id="agent-trust-endpoint"
+                      value={serviceEndpoint}
+                      onChange={(event) => { setServiceEndpoint(event.target.value); invalidatePlan(); }}
+                      placeholder="https://api.example.com/health"
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                    />
+                  </div>
+                </div>
+                <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
+                  <p className="font-semibold">Public evidence only</p>
+                  <p className="mt-1">Do not submit secrets or credentials. Private and local endpoints are blocked, and tenant-private history is never exposed.</p>
+                </div>
+              </div>
+            ) : workflowType === "github_due_diligence" ? (
               <div className="grid gap-2">
                 <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="hosted-input">Repository URL</Label>
@@ -434,7 +570,44 @@ export function HostedAgentRunner({
                   <div className="rounded-md border bg-secondary/20 p-4">
                     <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Includes</p>
                     <ul className="grid gap-2 text-sm text-muted-foreground">
-                      {workflowType === "github_due_diligence" ? (
+                      {workflowType === "agent_trust_report" ? (
+                        <>
+                          {agentId.trim() || agentWallet.trim() ? (
+                            <li className="flex items-center gap-2">
+                              <Check className="size-4 text-emerald-500" />
+                              <span>Veyra registry identity and policy signals</span>
+                            </li>
+                          ) : null}
+                          {agentRepositoryRef ? (
+                            <li className="flex items-center gap-2">
+                              <Check className="size-4 text-emerald-500" />
+                              <span>GitHub repository intelligence and due diligence</span>
+                            </li>
+                          ) : (
+                            <li className="text-xs">GitHub evidence will be marked unavailable because no repository was provided.</li>
+                          )}
+                          {contractAddress.trim() ? (
+                            <li className="flex items-center gap-2">
+                              <Check className="size-4 text-emerald-500" />
+                              <span>Read-only Arc Testnet contract snapshot</span>
+                            </li>
+                          ) : (
+                            <li className="text-xs">Contract transparency will be excluded from scoring.</li>
+                          )}
+                          {serviceEndpoint.trim() ? (
+                            <li className="flex items-center gap-2">
+                              <Check className="size-4 text-emerald-500" />
+                              <span>Protected endpoint availability snapshot</span>
+                            </li>
+                          ) : (
+                            <li className="text-xs">Endpoint availability will be marked not provided.</li>
+                          )}
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Deterministic Trust Score, receipts, and real Arc proof status</span>
+                          </li>
+                        </>
+                      ) : workflowType === "github_due_diligence" ? (
                         <>
                           <li className="flex items-center gap-2">
                             <Check className="size-4 text-emerald-500" />

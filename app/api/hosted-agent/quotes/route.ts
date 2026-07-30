@@ -45,6 +45,11 @@ export async function POST(request: NextRequest) {
       workflowType: body.workflowType,
       inputText: body.inputText,
       repositoryUrl: body.repositoryUrl,
+      agentTrustInput: body.agentTrustInput,
+      agentId: body.agentId,
+      agentWallet: body.agentWallet,
+      contractAddress: body.contractAddress,
+      serviceEndpoint: body.serviceEndpoint,
       marketSymbol: body.marketSymbol,
       task: template.task,
       budgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
@@ -100,12 +105,29 @@ export async function POST(request: NextRequest) {
       "github-repository-intelligence",
       "github-due-diligence-analysis",
     ] as const;
+    const selected = new Set(
+      plan.selectedServices.map((service) => service.slug),
+    );
 
-    if (workflowRequest.workflowType === "github_due_diligence") {
-      const selected = new Set(
-        plan.selectedServices.map((service) => service.slug),
+    if (
+      workflowRequest.workflowType === "agent_trust_report" &&
+      !selected.has("agent-trust-finalizer")
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Agent Trust Report is temporarily unavailable because canonical Arc report verification is disabled.",
+          reason: "agent_trust_finalizer_unavailable",
+        },
+        { status: 503 },
       );
+    }
 
+    if (
+      workflowRequest.workflowType === "github_due_diligence" ||
+      (workflowRequest.workflowType === "agent_trust_report" &&
+        workflowRequest.repository)
+    ) {
       const missing = REQUIRED_GITHUB_SERVICES.filter(
         (slug) => !selected.has(slug),
       );
@@ -119,7 +141,9 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "GitHub Project Due Diligence is temporarily unavailable because one or more required analysis services are disabled.",
+              workflowRequest.workflowType === "agent_trust_report"
+                ? "The repository portion of Agent Trust Report is temporarily unavailable because required GitHub analysis services are disabled."
+                : "GitHub Project Due Diligence is temporarily unavailable because one or more required analysis services are disabled.",
             reason: "github_workflow_incomplete",
           },
           { status: 503 },

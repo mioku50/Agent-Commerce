@@ -7,6 +7,19 @@ import { NextResponse } from "next/server.js";
 import { randomUUID } from "node:crypto";
 
 export type MachineErrorCode =
+  | "agent_trust_input_required"
+  | "agent_not_found"
+  | "agent_access_denied"
+  | "agent_registry_unavailable"
+  | "agent_trust_service_unavailable"
+  | "contract_not_found"
+  | "contract_provider_unavailable"
+  | "endpoint_invalid"
+  | "endpoint_private_network_blocked"
+  | "endpoint_unreachable"
+  | "endpoint_response_too_large"
+  | "insufficient_trust_evidence"
+  | "invalid_wallet"
   | "invalid_repository"
   | "repository_not_found"
   | "repository_inaccessible"
@@ -28,6 +41,7 @@ export type MachineErrorCode =
   | "run_not_found"
   | "report_not_found"
   | "report_not_ready"
+  | "report_generation_failed"
   | "verification_pending"
   | "provider_unavailable"
   | "rate_limited"

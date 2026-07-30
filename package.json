@@ -36,6 +36,7 @@
     "github:analysis-test": "node --experimental-transform-types --no-warnings scripts/github-due-diligence-tests.mts",
     "github:provider-test": "node --experimental-transform-types --no-warnings scripts/github-provider-tests.mts",
     "github:workflow-test": "node --experimental-transform-types --no-warnings scripts/github-workflow-tests.mts",
+    "agent:trust-test": "node --experimental-transform-types --no-warnings scripts/agent-trust-tests.mts",
     "machine:api-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/machine-api-tests.mts",
     "machine:production-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-machine-schema.mts",
     "machine:production-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/production-machine-smoke.mts",

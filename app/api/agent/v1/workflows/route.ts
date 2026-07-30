@@ -12,6 +12,44 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 function buildInputSchema(workflowType: string) {
+  if (workflowType === "agent_trust_report") {
+    return {
+      type: "object",
+      properties: {
+        agentId: {
+          type: "string",
+          pattern: "^agt_[a-z0-9]{20}$",
+          description: "Public Veyra Agent ID",
+        },
+        agentWallet: {
+          type: "string",
+          pattern: "^0x[0-9a-fA-F]{40}$",
+          description: "Public EVM wallet associated with the agent",
+        },
+        repositoryUrl: {
+          type: "string",
+          description: "Public GitHub repository in owner/repo or URL format",
+        },
+        contractAddress: {
+          type: "string",
+          pattern: "^0x[0-9a-fA-F]{40}$",
+          description: "Optional Arc Testnet contract address",
+        },
+        serviceEndpoint: {
+          type: "string",
+          format: "uri",
+          description:
+            "Optional public HTTPS endpoint; private and local networks are blocked",
+        },
+      },
+      anyOf: [
+        { required: ["agentId"] },
+        { required: ["agentWallet"] },
+        { required: ["repositoryUrl"] },
+      ],
+    };
+  }
+
   if (workflowType === "github_due_diligence") {
     return {
       type: "object",

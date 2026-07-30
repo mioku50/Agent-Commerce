@@ -66,6 +66,7 @@ export type ApiService = {
   walletVerificationChallenge?: string | null;
   endpointVerificationNonce?: string | null;
   endpointVerificationExpiresAt?: string | null;
+  internalOnly?: boolean;
 };
 
 const emptyInputSchema = {
@@ -320,6 +321,55 @@ export const serviceRegistry = [
       "An agent pays for a quick text analysis step before saving structured notes into a larger workflow.",
     agentReasoningHint:
       "Use this service when the task needs deterministic text metadata and the price is lower than running a heavier model call.",
+  },
+  {
+    id: "agent-trust-finalizer",
+    slug: "agent-trust-finalizer",
+    name: "Agent Trust Report Finalizer",
+    shortDescription:
+      "Internal x402 finalization step that binds a canonical trust report hash to an Arc proof.",
+    longDescription:
+      "Validates a server-built Veyra Agent Trust Report and returns it with a canonical response hash used by the existing Arc proof registry. Only the configured hosted payer may settle this endpoint.",
+    category: "Verification",
+    method: "POST",
+    endpoint: "/api/premium/agent-trust/finalize",
+    priceLabel: "0.0001 USDC",
+    priceUsd: 0.0001,
+    status: "live",
+    sourceType: "static",
+    isPaid: true,
+    internalOnly: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        report: { type: "object" },
+      },
+      required: ["report"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        report: { type: "object" },
+        paidAmountUsdc: { type: "string" },
+      },
+      required: ["report", "paidAmountUsdc"],
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/premium/agent-trust/finalize",
+      body: { report: { kind: "agent_trust_report" } },
+    },
+    exampleResponse: {
+      report: {
+        kind: "agent_trust_report",
+        verification: { status: "verification_pending" },
+      },
+      paidAmountUsdc: "0.0001",
+    },
+    exampleUseCase:
+      "The hosted Veyra workflow purchases one final response whose canonical report hash is independently attested on Arc Testnet.",
+    agentReasoningHint:
+      "Use only as the final step of Veyra Agent Trust Report after all requested evidence sources have been collected.",
   },
   {
     id: "agent-task",

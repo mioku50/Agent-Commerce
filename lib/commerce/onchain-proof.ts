@@ -778,6 +778,7 @@ export async function attestPaymentEvent(input: {
   seller: string;
   request: Request;
   response: Response;
+  responseHashOverride?: Hex;
 }) {
   const {
     supabase,
@@ -788,14 +789,23 @@ export async function attestPaymentEvent(input: {
     seller,
     request,
     response,
+    responseHashOverride,
   } = input;
 
   try {
     const { receiptHash, serviceHash, contractAddress, chainId } =
       createProofIdentifiers(paymentEventId, endpoint);
+    const canonicalResponseHash = responseHashOverride
+      ? bytes32(responseHashOverride)
+      : null;
+    if (responseHashOverride && !canonicalResponseHash) {
+      throw new Error("Canonical proof response hash must be bytes32.");
+    }
     const [requestHash, responseHash] = await Promise.all([
       hashRequest(request, endpoint),
-      hashResponse(response),
+      canonicalResponseHash
+        ? Promise.resolve(canonicalResponseHash)
+        : hashResponse(response),
     ]);
     const attester = configuredAttesterAccount()?.address ?? null;
 

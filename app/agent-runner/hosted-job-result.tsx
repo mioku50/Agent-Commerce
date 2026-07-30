@@ -32,11 +32,13 @@ import type {
   RiskSeverity,
 } from "@/lib/agent/github-due-diligence";
 import type { GitHubRepositorySnapshot, DataConfidence } from "@/lib/providers/github-types";
+import type { AgentTrustReport } from "@/lib/agent-trust/types";
 import {
   buildGitHubPublicReport,
   formatGitHubPublicReportAsMarkdown,
 } from "@/lib/reports/github-public-report";
 import type { HostedJobView } from "./types";
+import { AgentTrustReportView } from "./agent-trust-report-view";
 
 const DEFAULT_CONSUMER_STAGES = [
   { id: "preparing", label: "Preparing report", matches: ["queued", "planning"] },
@@ -308,6 +310,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
 
   const activeStage = view.job.progressStage;
   const isGithubWorkflow = view.job.workflowType === "github_due_diligence";
+  const isAgentTrustWorkflow = view.job.workflowType === "agent_trust_report";
   const isSellerWorkflow = String(view.job.workflowType).startsWith("seller_");
   const consumerStages = isGithubWorkflow ? GITHUB_CONSUMER_STAGES : DEFAULT_CONSUMER_STAGES;
   const currentIndex = DEFAULT_CONSUMER_STAGES.findIndex((stage) =>
@@ -316,6 +319,14 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
   const active = view.job.status === "queued" || view.job.status === "running";
 
   const report = view.job.structuredResult;
+  const trustReport =
+    isAgentTrustWorkflow &&
+    (report?.workflowData as {
+      kind?: string;
+      report?: AgentTrustReport;
+    } | null)?.kind === "agent_trust_report"
+      ? ((report?.workflowData as { report: AgentTrustReport }).report)
+      : null;
   const reportInput = report?.input ?? {
     preview: view.job.inputPreview,
     sha256: view.job.inputSha256,
@@ -402,7 +413,11 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
           <div className="flex flex-wrap items-start justify-between gap-5">
             <div>
               <Badge className="mb-3">
-                {isGithubWorkflow ? "GitHub Project Intelligence · Arc Testnet" : "Shareable hosted result"}
+                {isGithubWorkflow
+                  ? "GitHub Project Intelligence · Arc Testnet"
+                  : isAgentTrustWorkflow
+                    ? "Agent trust intelligence · Arc Testnet"
+                    : "Shareable hosted result"}
               </Badge>
               <h1 className="text-3xl font-bold sm:text-4xl">
                 {isGithubWorkflow
@@ -430,7 +445,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                 isGithubWorkflow={isGithubWorkflow}
                 jobStatus={view.job.status}
               />
-              {!isGithubWorkflow && view.job.status === "completed" ? (
+              {!isGithubWorkflow && !isAgentTrustWorkflow && view.job.status === "completed" ? (
                 <Button variant="outline" onClick={copyShareLink}>
                   {copied ? <Check className="size-4 text-emerald-500" /> : <Share2 className="size-4" />}
                   {copied ? "Copied!" : "Share Report"}
@@ -572,7 +587,14 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
         )}
 
         <div className="grid content-start gap-6">
-          {isGithubWorkflow ? (
+          {isAgentTrustWorkflow && trustReport ? (
+            <AgentTrustReportView
+              report={trustReport}
+              copied={copied}
+              onShare={copyShareLink}
+              receiptUrl={view.links.workflowReceipt}
+            />
+          ) : isGithubWorkflow ? (
             <Card className="rounded-lg">
               <CardContent className="p-6 grid gap-6">
                 {/* 1. Header & Actions */}

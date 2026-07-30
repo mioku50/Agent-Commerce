@@ -118,6 +118,11 @@ export type BuyerAgentExecutionOptions = {
     method: ServiceMethod;
   }[];
   serviceSnapshot?: readonly ApiService[];
+  resolveServiceRequestBody?: (input: {
+    service: ApiService;
+    runtimeServiceOutputs: ReadonlyMap<string, unknown>;
+    paidPreviews: readonly unknown[];
+  }) => unknown | Promise<unknown>;
   requestPayload?: unknown;
   onProgress?: (progress: BuyerAgentProgress) => void | Promise<void>;
 };
@@ -1148,7 +1153,7 @@ export async function executeBuyerAgent(
     const url = serviceUrl(baseUrl, service);
     let body: unknown;
     try {
-      body = requestBodyForService(
+      const defaultBody = requestBodyForService(
         service,
         task,
         options.requestInputText,
@@ -1158,6 +1163,14 @@ export async function executeBuyerAgent(
         runtimeServiceOutputs,
         options.requestPayload,
       );
+      const resolvedBody = options.resolveServiceRequestBody
+        ? await options.resolveServiceRequestBody({
+            service,
+            runtimeServiceOutputs,
+            paidPreviews,
+          })
+        : undefined;
+      body = resolvedBody === undefined ? defaultBody : resolvedBody;
     } catch (error) {
       if (error instanceof WorkflowDependencyError) {
         updateLocalStep(runLog, stepIndex, {

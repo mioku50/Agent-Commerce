@@ -27,10 +27,12 @@ try {
   await page.getByRole("link", { name: "Developer API", exact: true }).waitFor();
   assert.equal(await page.locator("main > section").first().locator('input[name="repository"]').count(), 0);
   await page.getByRole("heading", { name: "GitHub Project Due Diligence", exact: true }).first().waitFor();
+  await page.getByRole("heading", { name: "Veyra Agent Trust Report", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Market Context Brief", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Sentiment & Tone Report", exact: true }).waitFor();
   await page.getByRole("heading", { name: "Builder Update Summary", exact: true }).waitFor();
   await page.locator('a[href="/agent-runner?workflow=github"]').first().waitFor();
+  await page.locator('a[href="/agent-runner?workflow=agent_trust"]').first().waitFor();
   await page.locator('a[href="/agent-runner?workflow=sentiment"]').first().waitFor();
   await page.locator('a[href="/agent-runner?workflow=builder_update"]').first().waitFor();
   await page.locator('a[href^="/agent-runner?workflow=market_context"]').first().waitFor();
@@ -50,6 +52,11 @@ try {
   await page.getByText("Payment wallet", { exact: false }).first().waitFor();
   await page.getByText("Sponsored workflows will not charge your wallet.", { exact: false }).first().waitFor();
   await page.getByText("Sponsored reports are free. After the free quota, this wallet confirms the displayed total price.", { exact: false }).first().waitFor();
+  await page.goto(`${baseUrl()}/agent-runner?workflow=agent_trust`, { waitUntil: "load" });
+  assert.equal(await page.locator("#workflow-type").inputValue(), "agent_trust_report");
+  await page.getByLabel("Agent ID", { exact: true }).fill("agt_0123456789abcdefghij");
+  await page.getByText("Public evidence only", { exact: true }).waitFor();
+  await page.getByText("Provide at least one Agent ID", { exact: false }).waitFor({ state: "detached" });
   await page.goto(`${baseUrl()}/agent-runner?workflow=sentiment`, { waitUntil: "load" });
   await page.getByText("AI processing", { exact: false }).waitFor();
   await page.getByLabel("Workflow", { exact: true }).focus();

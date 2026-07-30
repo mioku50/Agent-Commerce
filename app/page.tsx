@@ -57,6 +57,12 @@ const publicWorkflows: Array<{
   benefits: readonly string[];
 }> = [
   {
+    type: "agent_trust_report",
+    description:
+      "Verify an AI agent before you use, pay, or integrate it. Review identity, code health, execution history, services, payments, contract signals, and Arc verification in one evidence-backed report.",
+    benefits: ["Deterministic Trust Score", "Evidence-backed review", "Arc verification status"],
+  },
+  {
     type: "github_due_diligence",
     description:
       "Understand the health, activity, engineering signals, and adoption risks of a public repository.",
@@ -84,6 +90,7 @@ const publicWorkflows: Array<{
 
 const reportWorkflowOrder: HostedWorkflowType[] = [
   "github_due_diligence",
+  "agent_trust_report",
   "market_context",
   "sentiment_tone",
   "builder_update",
@@ -221,6 +228,9 @@ export default async function Home() {
               return (
                 <Card key={workflow.type} className="command-card flex rounded-lg">
                   <CardContent className="flex w-full flex-col p-6">
+                    {workflow.type === "agent_trust_report" ? (
+                      <Badge variant="secondary" className="mb-3 w-fit">Flagship workflow</Badge>
+                    ) : null}
                     <h3 className="text-xl font-semibold">{template.label}</h3>
                     <p className="mt-2 text-sm leading-6 text-muted-foreground">{workflow.description}</p>
                     <p className="mt-4 text-sm font-semibold text-primary">
@@ -236,7 +246,7 @@ export default async function Home() {
                     </ul>
                     <Button asChild variant="outline" className="mt-6 w-full sm:w-fit">
                       <Link href={hostedWorkflowHref(workflow.type)}>
-                        Run Workflow
+                        {workflow.type === "agent_trust_report" ? "Check an Agent" : "Run Workflow"}
                         <ArrowRight />
                       </Link>
                     </Button>

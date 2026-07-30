@@ -484,6 +484,7 @@ export async function updateAgentStatus(ownerWallet: Address, agentId: string, s
 
 const allowedWorkflowValues = [
   "github_due_diligence",
+  "agent_trust_report",
   "sentiment_tone",
   "builder_update",
   "market_context",
