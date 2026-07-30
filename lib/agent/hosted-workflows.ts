@@ -150,6 +150,7 @@ export type HostedFinalReport = {
 const WORKFLOW_LABELS: Record<HostedWorkflowType, string> = {
   github_due_diligence: "GitHub Project Due Diligence",
   agent_trust_report: `${BRAND.name} Agent Trust Report`,
+  paid_api_quality: "Paid API Quality Report",
   sentiment_tone: "Sentiment & Tone Report",
   builder_update: "Builder Update Summary",
   market_context: "Market Context Brief",
@@ -287,7 +288,7 @@ export function validateHostedWorkflowRequest(input: {
 }): HostedWorkflowRequest {
   if (!isHostedWorkflowType(input.workflowType)) {
     throw new Error(
-      "Workflow type must be github_due_diligence, agent_trust_report, sentiment_tone, builder_update, market_context, or custom_task.",
+      "Workflow type must be github_due_diligence, agent_trust_report, paid_api_quality, sentiment_tone, builder_update, market_context, or custom_task.",
     );
   }
 
@@ -336,6 +337,7 @@ export function validateHostedWorkflowRequest(input: {
   const isStandardWorkflow =
     workflowType === "github_due_diligence" ||
     workflowType === "agent_trust_report" ||
+    workflowType === "paid_api_quality" ||
     workflowType === "sentiment_tone" ||
     workflowType === "builder_update" ||
     workflowType === "market_context";
@@ -402,6 +404,9 @@ export function defaultWorkflowTask(workflowType: HostedWorkflowType) {
   if (workflowType === "agent_trust_report") {
     return "Build an evidence-backed Agent Trust Report from the supplied public identifiers and available Veyra signals.";
   }
+  if (workflowType === "paid_api_quality") {
+    return "Evaluate and compare paid APIs using observed pricing, latency, availability, response validity, payment execution, and settlement history.";
+  }
   if (workflowType === "sentiment_tone") {
     return "Analyze the submitted text and produce a sentiment and tone workflow report.";
   }
@@ -435,6 +440,9 @@ export function effectiveWorkflowTask(input: HostedWorkflowRequest) {
         ? `Analyze ${input.repository.fullName} using the existing GitHub intelligence pipeline.`
         : "Analyze the normalized public identifier record and produce the structured report without inventing unavailable evidence."
     }`;
+  }
+  if (input.workflowType === "paid_api_quality") {
+    return `${input.task} Evaluate and benchmark paid API telemetry, latency distribution, availability, response validity, and Arc settlement proofs.`;
   }
   if (input.workflowType === "sentiment_tone") {
     return `${input.task} Use paid text analysis and concise research context for the report.`;
@@ -597,6 +605,12 @@ function deterministicWorkflowFindings(request: HostedWorkflowRequest) {
     return [
       `Trust report sources supplied: ${supplied.join(", ")}.`,
       "Trust Score is deterministic; missing optional sources are excluded rather than scored as zero.",
+    ];
+  }
+  if (request.workflowType === "paid_api_quality") {
+    return [
+      `Target paid API quality input: ${request.inputText}.`,
+      "Deterministic API quality evaluation combines real observation telemetry, response validity checks, and Arc settlement proofs.",
     ];
   }
   const words: string[] = text.toLowerCase().match(/[a-z0-9'-]+/g) ?? [];

@@ -1,8 +1,12 @@
-import type {
-  HostedFinalReport,
-  HostedPlannerSnapshot,
-  HostedWorkflowType,
+import {
+  HOSTED_WORKFLOW_TYPES,
+  type HostedFinalReport,
+  type HostedPlannerSnapshot,
+  type HostedWorkflowType,
 } from "../agent/hosted-workflows.ts";
+
+export const BYOA_WORKFLOW_TYPES = HOSTED_WORKFLOW_TYPES;
+export type ByoaWorkflowType = HostedWorkflowType;
 
 export const BYOA_WORKFLOW_SCOPES = [
   "manifest:read",

@@ -52,7 +52,15 @@ export type MachineErrorCode =
   | "verification_pending"
   | "provider_unavailable"
   | "rate_limited"
-  | "internal_error";
+  | "internal_error"
+  | "api_quality_service_not_found"
+  | "api_quality_service_unavailable"
+  | "api_quality_insufficient_services"
+  | "api_quality_too_many_services"
+  | "api_quality_no_observations"
+  | "api_quality_observation_store_unavailable"
+  | "api_quality_comparison_incompatible"
+  | "api_quality_probe_budget_exceeded";
 
 export interface MachineErrorResponseBody {
   error: {
