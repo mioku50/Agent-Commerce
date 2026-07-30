@@ -3,13 +3,14 @@ import { Activity, ArrowRight, Bot, Code2, Wrench, ShieldCheck } from "lucide-re
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BRAND } from "@/lib/brand";
 
 export const metadata = {
-  title: "Agent Developer Console | Arc Agent Commerce",
-  description: "Manage Machine API credentials, inspect workflow operations, and verify Arc proof trails.",
+  title: { absolute: BRAND.developerConsole },
+  description: "Developer and operator tools for agent credentials, workflow operations, and Arc verification.",
   openGraph: {
-    title: "Agent Developer Console | Arc Agent Commerce",
-    description: "Manage Machine API credentials, inspect workflow operations, and verify Arc proof trails.",
+    title: BRAND.developerConsole,
+    description: "Developer and operator tools for agent credentials, workflow operations, and Arc verification.",
   },
 };
 
@@ -23,11 +24,11 @@ const consoleSections = [
     badge: "BYOA Agent Management",
   },
   {
-    title: "Agent Machine API",
+    title: BRAND.agentApi,
     href: "/console/agent-api",
     icon: Code2,
     description:
-      "Machine API v1 endpoints, OpenAPI 3.0 spec, credential scope reference, and interactive TypeScript & Python SDK quickstart snippets.",
+      "Machine-to-machine access for agents that discover workflows, create quotes, execute paid runs, and retrieve verified reports.",
     badge: "Machine-to-Machine API v1",
   },
   {
@@ -62,12 +63,13 @@ export default function ConsoleDashboardPage() {
       <section className="border-b bg-secondary/20">
         <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Badge variant="default">Agent Developer Console</Badge>
+            <Badge variant="default">{BRAND.developerConsole}</Badge>
             <Badge variant="outline">Arc Testnet</Badge>
           </div>
-          <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">Agent Developer Console</h1>
+          <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">{BRAND.developerConsole}</h1>
+          <p className="mt-3 text-lg font-semibold">Developer and operator tools</p>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Build with the Machine API, manage agent credentials, inspect production workflow health, and verify complete Arc proof trails.
+            Build with the {BRAND.agentApi}, manage agent credentials, inspect production workflow health, and verify complete Arc proof trails.
           </p>
         </div>
       </section>

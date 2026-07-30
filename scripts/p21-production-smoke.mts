@@ -233,7 +233,7 @@ async function run(baseUrl: URL) {
   console.log(`[p21-production-smoke] manifest=ok service=${serviceId} version=${serviceVersion}`);
 
   const payload = {
-    projectName: "Agent Commerce P2.1 production smoke",
+    projectName: "Veyra P2.1 production smoke",
     updateText: "Shipped the external seller marketplace pipeline. Next milestone is validating one isolated, idempotent, receipt-backed Arc Testnet execution.",
   };
   const quoteKey = `p21-quote-${randomUUID()}`;

@@ -2,7 +2,7 @@
 # Copyright 2026 Circle Internet Group, Inc. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 """
-Arc Agent Commerce — Machine API v1 Python Client Example
+Veyra Agent API v1 Python Client Example
 
 Usage:
   python3 examples/agent-api/python.py <BASE_URL> <API_KEY> [REPOSITORY]
@@ -61,7 +61,7 @@ class MachineApiClient:
 
     def list_workflows(self) -> list:
         """1. Discover available workflows"""
-        print("\n🔍 Step 1: Querying available Machine API workflows...")
+        print("\n🔍 Step 1: Querying available Veyra Agent API workflows...")
         res = self._http_request("GET", "/api/agent/v1/workflows")
         workflows = res.get("workflows", [])
         print(f"✅ Discovered {len(workflows)} workflow(s):")
@@ -162,7 +162,7 @@ def main():
     repo = args[2] if len(args) > 2 else "circlefin/agent-commerce"
 
     print("=================================================")
-    print("Arc Agent Commerce — Machine API v1 Python Client")
+    print("Veyra Agent API v1 Python Client")
     print("=================================================")
     print(f"Target Host: {base_url}")
     print(f"Target Repo: {repo}")
@@ -195,9 +195,9 @@ def main():
         if report_id:
             client.get_report(report_id)
 
-        print("\n🎉 Complete Machine API flow completed successfully!")
+        print("\n🎉 Complete Veyra Agent API flow completed successfully!")
     except Exception as err:
-        print(f"\n❌ Machine API flow failed: {err}")
+        print(f"\n❌ Veyra Agent API flow failed: {err}")
         sys.exit(1)
 
 

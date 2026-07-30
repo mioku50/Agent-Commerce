@@ -1,6 +1,6 @@
 # Production operations
 
-Arc Agent Commerce monitors the workflow product as four connected but
+Veyra monitors the workflow product as four connected but
 independently diagnosable layers:
 
 1. workflow execution;

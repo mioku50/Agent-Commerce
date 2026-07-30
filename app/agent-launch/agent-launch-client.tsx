@@ -61,6 +61,7 @@ import {
   ARC_TESTNET_USDC_DECIMALS,
   getArcExplorerAddressUrl,
 } from "@/lib/wallet/arc";
+import { BRAND } from "@/lib/brand";
 import { shortenHash } from "@/lib/utils";
 
 const erc20TransferAbi = [
@@ -99,7 +100,7 @@ function getExplorerTxUrl(hash: string) {
 }
 
 function buildAgentCommand(task: string, limit: string) {
-  const safeTask = task.trim() || "Create a small proof of agent commerce";
+  const safeTask = task.trim() || `Create a small ${BRAND.name} workflow proof`;
   const safeLimit = validateAmount(limit || "0.0113");
   const escapedTask = safeTask.replaceAll('"', '\\"');
 

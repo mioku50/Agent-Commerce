@@ -4,6 +4,7 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { BRAND } from "@/lib/brand";
 import { isProviderError, ProviderError } from "@/lib/providers/errors";
 import { parseGitHubRepositoryInput, InvalidGitHubRepositoryError } from "@/lib/providers/github-repository-ref";
 import { fetchGitHubRepositorySnapshot } from "@/lib/providers/github";
@@ -34,12 +35,12 @@ const handler = async (req: NextRequest) => {
       ...snapshot,
       paidAmountUsdc: PRICE_USDC,
       billing: {
-        chargedBy: "Arc Agent Commerce",
+        chargedBy: BRAND.name,
         protocol: "x402",
         network: "Arc Testnet",
       },
       attribution:
-        "Sourced live from GitHub REST API v3. The x402 payment is made to Arc Agent Commerce, not to GitHub.",
+        `Sourced live from GitHub REST API v3. The x402 payment is made to ${BRAND.name}, not to GitHub.`,
     });
   } catch (error) {
     if (error instanceof InvalidGitHubRepositoryError) {

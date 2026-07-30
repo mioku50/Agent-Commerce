@@ -43,7 +43,7 @@ import {
 import { shortenHash } from "@/lib/utils";
 
 export const metadata = {
-  title: "Commerce Receipts | Arc Agent Commerce",
+  title: "Commerce Receipts",
   description: "Public audit trail for paid x402 API purchases.",
 };
 

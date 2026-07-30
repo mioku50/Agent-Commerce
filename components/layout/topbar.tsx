@@ -7,6 +7,7 @@ import { logout } from "@/app/actions";
 import { ActivityDropdown } from "@/components/activity/ActivityDropdown";
 import { Button } from "@/components/ui/button";
 import { WalletWidget } from "@/components/wallet/WalletWidget";
+import { BRAND } from "@/lib/brand";
 
 export function Topbar({
   loggedIn,
@@ -33,16 +34,20 @@ export function Topbar({
             <Menu className="size-5" />
           </Button>
           <Link href={isConsole ? "/console" : "/"} className="flex min-w-0 items-center gap-3">
-            <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-[0_0_28px_rgb(61_126_255/0.25)]">
-              AC
+            <span
+              aria-label={`${BRAND.name} logo`}
+              data-testid="brand-monogram"
+              className="flex size-9 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-[0_0_28px_rgb(61_126_255/0.25)]"
+            >
+              {BRAND.monogram}
             </span>
             <span className="min-w-0">
               <span className="block truncate text-sm font-semibold leading-none text-foreground">
-                {isConsole ? "Agent Developer Console" : "Arc Agent Commerce"}
+                {isConsole ? BRAND.developerConsole : BRAND.name}
               </span>
               <span className="mt-1 inline-flex max-w-full items-center gap-2 text-xs text-muted-foreground">
                 <span className="truncate">
-                  {isConsole ? "Developer & Operator tools" : "Verifiable paid workflows"}
+                  {isConsole ? "Developer and operator tools" : BRAND.tagline}
                 </span>
                 {isConsole ? (
                   <span className="hidden rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 font-semibold text-amber-300 sm:inline-flex">
@@ -81,7 +86,7 @@ export function Topbar({
             <Button asChild size="sm" variant="outline" className="hidden sm:inline-flex">
               <Link href="/console">
                 <Wrench className="size-4" />
-                Agent Developer Console
+                {BRAND.developerConsole}
               </Link>
             </Button>
           )}

@@ -1,6 +1,7 @@
 import type { LlmFailureReason } from "./types.ts";
+import { BRAND } from "../brand.ts";
 
-export const LLM_PROVIDER_NAME = "FreeModel" as const;
+export const LLM_PROVIDER_NAME = "OpenRouter" as const;
 export const LLM_PROVIDER_PROTOCOL = "openai-compatible" as const;
 export const LLM_REQUEST_TIMEOUT_MS = 30_000;
 export const LLM_MAX_ATTEMPTS = 2;
@@ -64,7 +65,7 @@ export function resolveLlmConfig(
 ): LlmConfigResolution {
   const provider = normalizedEnvironmentValue(environment.LLM_PROVIDER);
   const baseUrl = normalizedEnvironmentValue(environment.LLM_BASE_URL);
-  const apiKey = normalizedEnvironmentValue(environment.LLM_API_KEY);
+  const apiKey = normalizedEnvironmentValue(environment.OPENROUTER_API_KEY);
   const model = normalizedEnvironmentValue(environment.LLM_MODEL);
 
   if (provider && provider !== LLM_PROVIDER_PROTOCOL) {
@@ -216,6 +217,8 @@ export async function generateOpenAiCompatibleText(input: {
         headers: {
           "content-type": "application/json",
           authorization: `Bearer ${config.apiKey}`,
+          "HTTP-Referer": "https://agent-commerce-six.vercel.app",
+          "X-OpenRouter-Title": BRAND.name,
         },
         body: JSON.stringify({
           model: config.model,
@@ -224,7 +227,6 @@ export async function generateOpenAiCompatibleText(input: {
             { role: "user", content: input.userPrompt },
           ],
           max_completion_tokens: LLM_MAX_COMPLETION_TOKENS,
-          reasoning_effort: "low",
         }),
         signal: controller.signal,
       });

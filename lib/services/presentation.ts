@@ -2,6 +2,7 @@ import type {
   ApiService,
   ServiceSourceType,
 } from "./registry.ts";
+import { BRAND } from "../brand.ts";
 
 export type ServiceProviderType =
   | "live_provider"
@@ -29,7 +30,7 @@ export function defaultServicePresentation(
       providerStatus: "live",
       assetSymbol: null,
       dataFreshness: null,
-      billingLabel: "USDC pays Arc Agent Commerce for access to its provider-backed API.",
+      billingLabel: `USDC pays ${BRAND.name} for access to its provider-backed API.`,
     };
   }
   if (sourceType === "seller_mock") {
@@ -39,7 +40,7 @@ export function defaultServicePresentation(
       providerStatus: "mock",
       assetSymbol: null,
       dataFreshness: null,
-      billingLabel: "Seller-created mock response fulfilled by Arc Agent Commerce.",
+      billingLabel: `Seller-created mock response fulfilled by ${BRAND.name}.`,
     };
   }
   if (sourceType === "external_placeholder") {
@@ -59,7 +60,7 @@ export function defaultServicePresentation(
       providerStatus: "external",
       assetSymbol: null,
       dataFreshness: null,
-      billingLabel: "Arc Agent Commerce validates the payment challenge and pays the external seller via x402.",
+      billingLabel: `${BRAND.name} validates the payment challenge and pays the external seller via x402.`,
     };
   }
   return {
@@ -68,7 +69,7 @@ export function defaultServicePresentation(
     providerStatus: "deterministic",
     assetSymbol: null,
     dataFreshness: null,
-    billingLabel: "USDC pays Arc Agent Commerce for this deterministic API service.",
+    billingLabel: `USDC pays ${BRAND.name} for this deterministic API service.`,
   };
 }
 

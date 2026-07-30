@@ -17,6 +17,7 @@
  */
 
 import type { ServicePresentationMetadata } from "./presentation.ts";
+import { BRAND } from "../brand.ts";
 
 export type ServiceMethod = "GET" | "POST";
 export type ServiceStatus =
@@ -171,7 +172,7 @@ export const serviceRegistry = [
     name: "Live Market Price",
     shortDescription: "Provider-backed BTC, ETH, and SOL prices from Pyth Network.",
     longDescription:
-      "Arc Agent Commerce charges the agent for a provider-backed API service through x402. The server then fetches and normalizes current price data sourced from Pyth Network. The agent pays Arc Agent Commerce, not Pyth Network.",
+      `${BRAND.name} charges the agent for a provider-backed API service through x402. The server then fetches and normalizes current price data sourced from Pyth Network. The agent pays ${BRAND.name}, not Pyth Network.`,
     category: "Market Data",
     method: "POST",
     endpoint: "/api/provider/pyth/price",
@@ -186,7 +187,7 @@ export const serviceRegistry = [
       assetSymbol: null,
       dataFreshness: "Price update age must be 120 seconds or less",
       billingLabel:
-        "0.001 USDC pays Arc Agent Commerce for access to its Pyth-backed API, not Pyth Network directly.",
+        `0.001 USDC pays ${BRAND.name} for access to its Pyth-backed API, not Pyth Network directly.`,
     },
     isPaid: true,
     inputSchema: {
@@ -432,7 +433,7 @@ export const serviceRegistry = [
       assetSymbol: null,
       dataFreshness: "Sourced from live GitHub REST API with 5-minute cache",
       billingLabel:
-        "0.0015 USDC pays Arc Agent Commerce for access to its server-side GitHub intelligence provider.",
+        `0.0015 USDC pays ${BRAND.name} for access to its server-side GitHub intelligence provider.`,
     },
     isPaid: true,
     inputSchema: {
@@ -482,7 +483,7 @@ export const serviceRegistry = [
       assetSymbol: null,
       dataFreshness: null,
       billingLabel:
-        "0.0005 USDC pays Arc Agent Commerce for deterministic due diligence analysis.",
+        `0.0005 USDC pays ${BRAND.name} for deterministic due diligence analysis.`,
     },
     isPaid: true,
     inputSchema: {

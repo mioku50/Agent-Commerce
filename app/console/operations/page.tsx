@@ -1,12 +1,13 @@
 import { Activity, AlertTriangle, CheckCircle2, Clock3, CreditCard, Gauge, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { brandPageTitle } from "@/lib/brand";
 import { getOperationsSnapshot, type OperationsSnapshot } from "@/lib/operations/health";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Production Operations | Agent Developer Console | Arc Agent Commerce",
+  title: { absolute: brandPageTitle("Production Operations") },
   description:
     "Execution, provider, payment, and Arc proof health for verifiable paid workflows.",
 };

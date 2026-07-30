@@ -35,6 +35,7 @@ import {
   type ServicePresentationMetadata,
 } from "../services/presentation.ts";
 import type { HostedReportSynthesis } from "../llm/types.ts";
+import { BRAND } from "../brand.ts";
 
 export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType };
 
@@ -75,7 +76,7 @@ export type HostedPlannerSnapshot = {
   maxPaidCalls: number;
   budgetCapUsdc: number;
   aggregationMode: "deterministic_execution_optional_llm";
-  aggregationLabel: "Deterministic paid execution with optional FreeModel synthesis";
+  aggregationLabel: "Deterministic paid execution with optional OpenRouter synthesis";
   inputPreview: string;
   inputSha256: string;
   marketSymbol: PythMarketSymbol | null;
@@ -428,7 +429,7 @@ export function createHostedWorkflowPlan(input: {
     maxPaidCalls: HOSTED_WORKFLOW_MAX_PAID_CALLS,
     budgetCapUsdc: input.request.budgetUsdc,
     aggregationMode: "deterministic_execution_optional_llm",
-    aggregationLabel: "Deterministic paid execution with optional FreeModel synthesis",
+    aggregationLabel: "Deterministic paid execution with optional OpenRouter synthesis",
     inputPreview: inputMetadata.preview,
     inputSha256: inputMetadata.sha256,
     marketSymbol: input.request.marketSymbol,
@@ -458,7 +459,7 @@ function findingForResult(result: BuyerAgentServiceResult) {
   }
   if (result.serviceSlug === "pyth-market-price" && response) {
     const interval = response.confidenceInterval as Record<string, unknown> | undefined;
-    return `Pyth Network returned ${String(response.symbol ?? "the requested symbol")} at ${String(response.price ?? "unavailable")} with confidence interval ${String(interval?.low ?? "unavailable")}–${String(interval?.high ?? "unavailable")} (±${String(response.confidence ?? "unavailable")}), published ${String(response.publishTime ?? "unknown")}, age ${String(response.priceAgeSeconds ?? "unknown")}s when fetched ${String(response.fetchedAt ?? "unknown")}; Arc Agent Commerce charged ${String(result.amountUsdc ?? response.paidAmountUsdc ?? "unknown")} USDC for access to its provider-backed service, not as a direct payment to Pyth.`;
+    return `Pyth Network returned ${String(response.symbol ?? "the requested symbol")} at ${String(response.price ?? "unavailable")} with confidence interval ${String(interval?.low ?? "unavailable")}–${String(interval?.high ?? "unavailable")} (±${String(response.confidence ?? "unavailable")}), published ${String(response.publishTime ?? "unknown")}, age ${String(response.priceAgeSeconds ?? "unknown")}s when fetched ${String(response.fetchedAt ?? "unknown")}; ${BRAND.name} charged ${String(result.amountUsdc ?? response.paidAmountUsdc ?? "unknown")} USDC for access to its provider-backed service, not as a direct payment to Pyth.`;
   }
   return `${result.serviceName} returned a structured paid API result.`;
 }

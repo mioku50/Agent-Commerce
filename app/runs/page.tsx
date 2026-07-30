@@ -33,7 +33,7 @@ import { fetchRecentAgentRuns, type PublicAgentRun } from "@/lib/agent/runs-publ
 import { RunsListClient } from "./runs-client";
 
 export const metadata = {
-  title: "Workflow Activity | Arc Agent Commerce",
+  title: "Workflow Activity",
   description: "Public hosted and operator buyer-agent activity timelines.",
 };
 

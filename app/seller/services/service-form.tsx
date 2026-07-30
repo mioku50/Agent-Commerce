@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { BRAND } from "@/lib/brand";
 
 type ManagementService = {
   id: string;
@@ -63,7 +64,7 @@ function defaultState() {
       required: ["result"],
       additionalProperties: false,
     }, null, 2),
-    healthCheckInput: JSON.stringify({ text: "Agent Commerce seller availability check" }, null, 2),
+    healthCheckInput: JSON.stringify({ text: `${BRAND.name} seller availability check` }, null, 2),
     authorizationSecret: "",
     clearAuthorizationSecret: false,
   };

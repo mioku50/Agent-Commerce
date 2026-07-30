@@ -5,7 +5,7 @@ import { SellerServiceForm } from "@/app/seller/services/service-form";
 
 type Props = { params: Promise<{ id: string }> };
 
-export const metadata = { title: "Edit Seller Service | Arc Agent Commerce" };
+export const metadata = { title: "Edit Seller Service" };
 
 export default async function EditSellerServicePage({ params }: Props) {
   const { id } = await params;

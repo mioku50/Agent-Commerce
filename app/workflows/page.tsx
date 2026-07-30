@@ -19,7 +19,7 @@ import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
 import { ServicePresentation } from "@/components/services/service-presentation";
 
 export const metadata = {
-  title: "Workflow Templates | Arc Agent Commerce",
+  title: "Workflow Templates",
   description:
     "Hosted agent workflow templates that purchase allowlisted x402 APIs and produce verified Arc reports.",
 };

@@ -3,10 +3,11 @@ import { ArrowRight, ListChecks, ShieldCheck, BadgeCheck, ReceiptText, FileCode,
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BRAND, brandPageTitle } from "@/lib/brand";
 import { serviceRegistry } from "@/lib/services/registry";
 
 export const metadata = {
-  title: "Audit & Verification | Agent Developer Console | Arc Agent Commerce",
+  title: { absolute: brandPageTitle("Audit & Verification") },
   description: "Unified audit trail for Activity, Arc Proofs, Agent Passports, Commerce Receipts, and Audited Services.",
 };
 
@@ -52,7 +53,7 @@ export default function ConsoleAuditPage() {
           </div>
           <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">Audit & Verification</h1>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Complete transparency layer for Arc Agent Commerce. Access real-time activity timelines, onchain Arc proofs, buyer agent passports, verified commerce receipts, and audited service endpoint registries.
+            Complete transparency layer for {BRAND.name}. Access real-time activity timelines, onchain Arc proofs, buyer agent passports, verified commerce receipts, and audited service endpoint registries.
           </p>
         </div>
       </section>

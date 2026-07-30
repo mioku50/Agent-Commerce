@@ -45,6 +45,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CopyButton } from "@/components/copy-button";
+import { BRAND } from "@/lib/brand";
 import type {
   ApiService,
   ServiceMethod,
@@ -139,7 +140,7 @@ export function StoreMarketplace({
       <section className="border-b bg-secondary/30">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-12 sm:px-6 lg:py-16">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="secondary">Arc Agent Commerce</Badge>
+            <Badge variant="secondary">{BRAND.name}</Badge>
             <Badge variant="outline">Developer service catalog</Badge>
           </div>
           <div className="grid gap-6 lg:grid-cols-[1fr_320px] lg:items-end">

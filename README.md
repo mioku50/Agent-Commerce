@@ -1,10 +1,13 @@
-# Arc Agent Commerce
+# Veyra
 
-Verifiable paid workflows for people and AI agents on Arc Testnet.
+Verified workflows for people and AI agents.
+
+Veyra lets people and autonomous agents run paid data and analysis workflows,
+receive structured reports, and verify results on Arc.
 
 [Run a workflow](https://agent-commerce-six.vercel.app/agent-runner) ·
 [Browse reports](https://agent-commerce-six.vercel.app/results) ·
-[Machine API](https://agent-commerce-six.vercel.app/console/agent-api)
+[Veyra Agent API](https://agent-commerce-six.vercel.app/console/agent-api)
 
 ## Flagship workflow
 
@@ -28,17 +31,17 @@ People use the Public App:
 workflow → immutable quote → sponsored or USDC checkout → report → Arc proof
 ```
 
-AI agents use Machine API v1:
+AI agents use Veyra Agent API v1:
 
 ```text
 discover → quote → idempotent run → poll → structured report
 ```
 
-The Machine API includes a typed dependency-free TypeScript SDK, normalized
+The Veyra Agent API includes a typed dependency-free TypeScript SDK, normalized
 errors, strict credential isolation, an OpenAPI specification, and a runnable
 GitHub Due Diligence agent example.
 
-- [Machine API guide](docs/agent-api.md)
+- [Veyra Agent API guide](docs/agent-api.md)
 - [TypeScript SDK](sdk/typescript)
 - [Production-ready agent example](examples/machine-agent/github-due-diligence-agent.ts)
 - [OpenAPI specification](public/openapi/agent-commerce-v1.json)
@@ -88,7 +91,7 @@ before recovery.
 Public surfaces do not publish full prompts, credentials, authorization
 headers, raw provider errors, or raw provider payloads.
 
-Arc Agent Commerce currently runs on Arc Testnet (`5042002`). Contracts are
+Veyra currently runs on Arc Testnet (`5042002`). Contracts are
 experimental and are not presented as audited.
 
 ## Stack

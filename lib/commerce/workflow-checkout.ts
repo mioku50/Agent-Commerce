@@ -29,6 +29,7 @@ import {
   ARC_TESTNET_RPC_URL,
   arcTestnetChain,
 } from "../wallet/arc.ts";
+import { BRAND } from "../brand.ts";
 
 type CheckoutLaunchReason =
   | "created"
@@ -219,7 +220,7 @@ export function sponsoredWorkflowAuthorizationMessage(
   >,
 ) {
   return [
-    "Arc Agent Commerce sponsored workflow authorization",
+    `${BRAND.name} sponsored workflow authorization`,
     `Quote: ${quote.id}`,
     `Requester: ${quote.requesterWallet}`,
     `Input SHA-256: ${quote.inputSha256}`,

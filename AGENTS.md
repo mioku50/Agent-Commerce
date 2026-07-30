@@ -1,6 +1,6 @@
 # Agent-Commerce — Agent Instructions
 
-Agent-Commerce is a workflow-first hosted agent commerce and verification layer on Arc Testnet.
+Veyra is a workflow-first hosted workflow and verification layer on Arc Testnet.
 
 The primary product is not a generic API marketplace demo. A user selects a workflow, submits real non-sensitive input, receives an immutable quote, uses sponsored quota or confirms one workflow-level USDC payment, and receives a Final Report, aggregate workflow receipt, and Arc proof trail after the hosted agent purchases allowlisted x402 services.
 

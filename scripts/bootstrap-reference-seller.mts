@@ -51,7 +51,7 @@ const serviceInput = {
     additionalProperties: false,
   },
   healthCheckInput: {
-    projectName: "Agent Commerce Reference",
+    projectName: "Veyra Reference",
     updateText: "Availability review confirms the production reference seller can issue an exact Arc Testnet x402 challenge.",
   },
   outputSchema: {
@@ -69,7 +69,7 @@ const serviceInput = {
 };
 
 await completeSellerOnboarding(ownerWallet, {
-  displayName: "Agent Commerce Reference Seller",
+  displayName: "Veyra Reference Seller",
   termsAccepted: true,
 });
 

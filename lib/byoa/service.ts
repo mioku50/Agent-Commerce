@@ -15,6 +15,7 @@ import {
 import { getServerSupabaseConfig } from "../supabase/server-env.ts";
 import { ARC_TESTNET_USDC_ADDRESS } from "../wallet/arc.ts";
 import { serviceRegistry } from "../services/registry.ts";
+import { BRAND } from "../brand.ts";
 import {
   createApiCredential,
   credentialExpiry,
@@ -331,7 +332,7 @@ export function buildByoaChallengeMessage(input: {
   expiresAt: string;
 }) {
   return [
-    "Arc Agent Commerce BYOA wallet challenge",
+    `${BRAND.name} BYOA wallet challenge`,
     "Version: 1",
     `Action: ${input.action}`,
     `Origin: ${input.origin}`,
@@ -1049,7 +1050,7 @@ export async function isByoaHostedJob(jobId: string) {
 export function byoaManifest(baseUrl: string, sellerWorkflows: unknown[] = []) {
   const config = getByoaConfig();
   return {
-    name: "Arc Agent Commerce Bring Your Own Agent",
+    name: `${BRAND.name} Bring Your Own Agent`,
     version: "1.0",
     network: "Arc Testnet",
     chainId: config.chainId,

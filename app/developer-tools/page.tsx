@@ -17,20 +17,21 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BRAND } from "@/lib/brand";
 import { getPythProviderDiagnostic } from "@/lib/providers/pyth";
 
 export const metadata = {
-  title: "Developer Tools | Arc Agent Commerce",
+  title: "Developer Tools",
   description:
-    "Advanced Machine API, API Store, planner, wallet launch, and local CLI tools for Arc Agent Commerce operators.",
+    `Advanced ${BRAND.agentApi}, API Store, planner, wallet launch, and local CLI tools for ${BRAND.name} operators.`,
 };
 
 const tools = [
   {
-    title: "Agent Machine API v1",
+    title: `${BRAND.agentApi} v1`,
     href: "/console/agent-api",
     icon: Code2,
-    body: "Machine API v1 endpoints, OpenAPI 3.0 spec, credential scope reference, and interactive TypeScript & Python SDK quickstart snippets.",
+    body: `${BRAND.agentApi} v1 endpoints, OpenAPI 3.0 spec, credential scope reference, and interactive TypeScript & Python SDK quickstart snippets.`,
   },
   {
     title: "API Store",
@@ -105,7 +106,7 @@ export default function DeveloperToolsPage() {
               <div><dt className="text-muted-foreground">Agent access price</dt><dd className="font-mono">{provider.priceUsdc} USDC</dd></div>
               <div><dt className="text-muted-foreground">Freshness threshold</dt><dd>{provider.maxPriceAgeSeconds} seconds</dd></div>
             </dl>
-            <p className="text-sm leading-6 text-muted-foreground">Arc Agent Commerce charges the buyer-agent through x402, then obtains and normalizes Pyth Network data. The agent does not pay Pyth directly. Feed IDs and the upstream host are fixed server-side; arbitrary provider proxying is disabled.</p>
+            <p className="text-sm leading-6 text-muted-foreground">{BRAND.name} charges the buyer-agent through x402, then obtains and normalizes Pyth Network data. The agent does not pay Pyth directly. Feed IDs and the upstream host are fixed server-side; arbitrary provider proxying is disabled.</p>
             <p className="rounded-md bg-secondary/30 p-3 text-xs text-muted-foreground">{provider.dataBoundary}</p>
           </CardContent>
         </Card>

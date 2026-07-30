@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
+import { BRAND } from "@/lib/brand";
 
 const machineScopes = ["workflows:read", "quotes:create", "runs:create", "results:read"] as const;
 
@@ -109,7 +110,7 @@ export function MachineCredentialsClient() {
         method: "POST",
         body: JSON.stringify({
           credentialType: "machine_api",
-          label: "Machine API Credential",
+          label: `${BRAND.agentApi} Credential`,
           scopes: machineScopes,
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString(),
         }),
@@ -185,7 +186,7 @@ export function MachineCredentialsClient() {
         </div>
       ) : (
         <Button onClick={() => void createCredential()} disabled={busy || selectedAgent?.status !== "active"}>
-          <KeyRound className="mr-2 size-4" /> Create Machine API Credential
+          <KeyRound className="mr-2 size-4" /> Create {BRAND.agentApi} Credential
         </Button>
       )}
 
@@ -237,7 +238,7 @@ export function ProductionSmokeInstructions() {
       <CardHeader>
         <CardTitle>Production A/B smoke setup</CardTitle>
         <CardDescription>
-          Use two active Machine API credentials belonging to two different agents. BYOA, same-agent, incomplete-scope, expired, or revoked credentials are rejected by the smoke verifier.
+          Use two active {BRAND.agentApi} credentials belonging to two different agents. BYOA, same-agent, incomplete-scope, expired, or revoked credentials are rejected by the smoke verifier.
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 text-sm">

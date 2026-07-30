@@ -41,7 +41,7 @@ type RunDetailPageProps = {
 };
 
 export const metadata = {
-  title: "Agent Run | Arc Agent Commerce",
+  title: "Agent Run",
 };
 
 function statusVariant(status: string) {

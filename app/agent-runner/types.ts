@@ -77,7 +77,7 @@ export type HostedFinalReport = {
   aggregationLabel: string;
   synthesis?: {
     status: "ai_generated" | "deterministic_fallback";
-    provider: "FreeModel" | null;
+    provider: "OpenRouter" | null;
     protocol: "openai-compatible" | null;
     model: string | null;
     attempted: boolean;

@@ -146,7 +146,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     );
   }
 
-  // Enforce strict Machine API credential ownership
+  // Enforce strict Veyra Agent API credential ownership.
   const isOwner =
     job.byoa_agent_id === context.agentId &&
     job.machine_credential_id === context.credential.id;

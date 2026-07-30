@@ -1,6 +1,6 @@
-# Arc Agent Commerce Machine API v1
+# Veyra Agent API v1
 
-Machine API v1 is the agent-native path for running the same curated,
+Veyra Agent API v1 is the agent-native path for running the same curated,
 verifiable paid workflows available in the Public App.
 
 An external agent can:
@@ -25,14 +25,14 @@ https://agent-commerce-six.vercel.app/openapi/agent-commerce-v1.json
 
 ## Credential onboarding
 
-Credentials are created in the Agent Developer Console and shown once.
+Credentials are created in the Veyra Developer Console and shown once.
 
 1. Open `/console/agents`, connect the owner wallet, and complete owner
    verification.
 2. Register and activate an agent namespace. Enable only the curated workflows
    that the agent is allowed to run.
 3. Open `/console/agent-api#credentials`.
-4. Select the active agent and choose **Create Machine API Credential**.
+4. Select the active agent and choose **Create Veyra Agent API Credential**.
 5. Copy the `aac_...` secret immediately and store it in a secret manager.
 
 The credential is bound to one agent namespace and one closed scope set:
@@ -44,7 +44,7 @@ The credential is bound to one agent namespace and one closed scope set:
 | `runs:create` | Launch a quoted run |
 | `results:read` | Poll runs and retrieve reports |
 
-Machine credentials are separate from legacy BYOA workflow credentials. Never
+Veyra Agent API credentials are separate from legacy BYOA workflow credentials. Never
 send a credential in a query string or commit it to the repository.
 
 ## TypeScript SDK
@@ -236,4 +236,4 @@ The SDK exposes these fields through `AgentCommerceApiError`.
 Quotes, runs, and reports are bound to the exact Machine credential that
 created them. Another credential receives `404`, even if it belongs to the same
 owner. Secrets, raw authorization headers, full prompts, and raw provider
-payloads are not returned by public or Machine API report surfaces.
+payloads are not returned by public or Veyra Agent API report surfaces.

@@ -1,6 +1,6 @@
 # `@arc-agent-commerce/sdk`
 
-Typed, dependency-free TypeScript client for Arc Agent Commerce Machine API v1.
+Typed, dependency-free TypeScript client for Veyra Agent API v1.
 
 The SDK covers workflow discovery, immutable quotes, idempotent run creation,
 polling, structured reports, Markdown export, normalized errors, and Arc proof

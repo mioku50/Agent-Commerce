@@ -1,7 +1,8 @@
 import { SellerConsoleClient } from "./seller-console-client";
+import { brandPageTitle } from "@/lib/brand";
 
 export const metadata = {
-  title: "Seller Console | Agent Developer Console | Arc Agent Commerce",
+  title: { absolute: brandPageTitle("Seller Console") },
   description: "Publish versioned external services and review seller revenue.",
 };
 

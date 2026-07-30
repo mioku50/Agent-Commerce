@@ -4,6 +4,7 @@
  */
 
 import { after, NextRequest, NextResponse } from "next/server.js";
+import { BRAND } from "../../../../../lib/brand.ts";
 import {
   authenticateMachineRequest,
   enforceRunCreationPolicy,
@@ -148,7 +149,9 @@ async function launchMachineSellerRun(input: {
     byoa_agent_id: input.context.agentId,
     machine_credential_id: input.context.credential.id,
   }).eq("id", jobId);
-  if (ownershipUpdate.error) throw new Error("Unable to persist Machine API job credential ownership.");
+  if (ownershipUpdate.error) {
+    throw new Error(`Unable to persist ${BRAND.agentApi} job credential ownership.`);
+  }
 
   const responsePayload = { runId: jobId, status: "queued", pollAfterMs: 2000 };
   await saveMachineIdempotency(
@@ -545,7 +548,7 @@ export async function POST(request: NextRequest) {
         .eq("id", jobId);
       if (ownershipUpdateError) {
         throw new Error(
-          "Unable to persist Machine API job credential ownership.",
+          `Unable to persist ${BRAND.agentApi} job credential ownership.`,
         );
       }
     }

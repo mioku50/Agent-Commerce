@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getHostedAgentJobView, redactPublicSellerAccounting } from "@/lib/agent/hosted-jobs";
+import { BRAND } from "@/lib/brand";
 import { isByoaHostedJob } from "@/lib/byoa/service";
 
 export const dynamic = "force-dynamic";
@@ -36,7 +37,7 @@ export default async function WorkflowReceiptPage({ params }: PageProps) {
 
       <section className="mx-auto grid w-full max-w-5xl gap-6 px-4 py-8 sm:px-6">
         <Card className="rounded-lg">
-          <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="flex items-center gap-2"><CreditCard className="size-5 text-primary" />User → Agent Commerce</CardTitle><Badge variant={payment?.status === "credit_issued" ? "secondary" : "default"}>{payment?.status ?? view.job.paymentMode}</Badge></div></CardHeader>
+          <CardHeader><div className="flex flex-wrap items-center justify-between gap-3"><CardTitle className="flex items-center gap-2"><CreditCard className="size-5 text-primary" />User → {BRAND.name}</CardTitle><Badge variant={payment?.status === "credit_issued" ? "secondary" : "default"}>{payment?.status ?? view.job.paymentMode}</Badge></div></CardHeader>
           <CardContent className="grid gap-5">
             {payment ? <>
               <dl className={`grid gap-4 text-sm sm:grid-cols-2 ${isSellerWorkflow ? "lg:grid-cols-3" : "lg:grid-cols-4"}`}>
@@ -52,7 +53,7 @@ export default async function WorkflowReceiptPage({ params }: PageProps) {
         </Card>
 
         <Card className="rounded-lg">
-          <CardHeader><CardTitle className="flex items-center gap-2"><ReceiptText className="size-5 text-primary" />Agent Commerce → API providers</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="flex items-center gap-2"><ReceiptText className="size-5 text-primary" />{BRAND.name} → API providers</CardTitle></CardHeader>
           <CardContent className="grid gap-3">
             {view.services.filter((service) => service.receiptId).map((service) => (
               <div key={service.receiptId} className="flex min-w-0 flex-col gap-3 rounded-md border p-4 sm:flex-row sm:items-center sm:justify-between">

@@ -40,7 +40,7 @@ import {
 } from "@/lib/agent/passport-persistence";
 
 export const metadata = {
-  title: "Agent Passports | Arc Agent Commerce",
+  title: "Agent Passports",
   description: "Public buyer-agent identity and reputation passports.",
 };
 

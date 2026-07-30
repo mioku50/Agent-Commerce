@@ -13,6 +13,7 @@ import {
 import { CopyButton } from "@/components/copy-button";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BRAND } from "@/lib/brand";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -140,7 +141,7 @@ function DecisionCard({ decision }: { decision: PlanDecisionSummary }) {
 
 export function AgentControlClient({ categories }: AgentControlClientProps) {
   const [task, setTask] = useState(
-    "Analyze the sentiment and tone of an Arc Agent Commerce demo using paid APIs only when useful.",
+    `Analyze the sentiment and tone of a ${BRAND.name} demo using paid APIs only when useful.`,
   );
   const [budget, setBudget] = useState("0.005");
   const [maxPrice, setMaxPrice] = useState("");

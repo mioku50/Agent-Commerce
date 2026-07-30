@@ -24,7 +24,7 @@ import { shortenHash } from "@/lib/utils";
 import { ProviderResponseDetails } from "@/components/services/provider-response-details";
 
 export const metadata = {
-  title: "Arc Proofs | Arc Agent Commerce",
+  title: "Arc Proofs",
   description:
     "Verified, pending, and failed app-owned AgentCommerceProofRegistry records on Arc Testnet.",
 };

@@ -35,12 +35,13 @@ import {
   curatedHostedWorkflowTemplates,
   hostedWorkflowTemplates,
 } from "../lib/agent/workflow-templates.ts";
+import { BRAND } from "../lib/brand.ts";
 
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 assert(readme.split(/\r?\n/).length <= 220, "README must remain under 220 lines");
 assert(readme.trim().split(/\s+/).length <= 1_500, "README must remain under 1,500 words");
 assert(!/FreeModel|Phase\s+\d+|Canary deployment|treasury address|HMAC implementation/i.test(readme));
-assert(readme.includes("Verifiable paid workflows for people and AI agents"));
+assert(readme.includes(BRAND.tagline));
 assert(readme.includes("External seller commerce remains an internal capability"));
 assert(readme.includes("docs/agent-api.md"));
 assert(readme.includes("public/openapi/agent-commerce-v1.json"));
@@ -52,10 +53,12 @@ const proofsSource = readFileSync(
   new URL("../app/proofs/page.tsx", import.meta.url),
   "utf8",
 );
-assert(homeSource.includes("Verified workflows for people and AI agents"));
-assert(homeSource.includes("Agent Commerce on Arc Testnet"));
+assert(homeSource.includes("BRAND.name"));
+assert(homeSource.includes("BRAND.tagline"));
+assert(homeSource.includes("BRAND.description"));
+assert(homeSource.includes("Arc Testnet"));
 assert(homeSource.includes("Built for humans and autonomous agents"));
-assert(homeSource.includes("Agent Machine API"));
+assert(homeSource.includes("BRAND.agentApi"));
 assert.match(
   homeSource,
   /sanitizePublicReportText\(\s*report\.inputPreview \|\| report\.workflowLabel/,
@@ -183,12 +186,12 @@ assert.deepEqual(
 );
 assert.deepEqual(sidebarNavigation, publicSidebarNavigation);
 
-assert.deepEqual(consoleSidebarNavigation.map(({ label }) => label), ["Agent Developer Console"]);
+assert.deepEqual(consoleSidebarNavigation.map(({ label }) => label), [BRAND.developerConsole]);
 assert.deepEqual(
   consoleSidebarNavigation[0].items.map(({ label, href }) => ({ label, href })),
   [
     { label: "Console Home", href: "/console" },
-    { label: "Machine API", href: "/console/agent-api" },
+    { label: BRAND.agentApi, href: "/console/agent-api" },
     { label: "Agent Credentials", href: "/console/agents" },
     { label: "Operations", href: "/console/operations" },
     { label: "Audit & Verification", href: "/console/audit" },

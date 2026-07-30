@@ -4,6 +4,7 @@
  */
 
 import type { ServicePresentationMetadata } from "../services/presentation.ts";
+import { BRAND } from "../brand.ts";
 
 export const HOSTED_WORKFLOW_TYPES = [
   "github_due_diligence",
@@ -69,7 +70,7 @@ const githubServices: HostedWorkflowTemplate["services"] = [
       assetSymbol: null,
       dataFreshness: "Sourced from live GitHub REST API with 5-minute cache",
       billingLabel:
-        "0.0015 USDC pays Arc Agent Commerce for access to its server-side GitHub intelligence provider.",
+        `0.0015 USDC pays ${BRAND.name} for access to its server-side GitHub intelligence provider.`,
     },
   },
   {
@@ -85,7 +86,7 @@ const githubServices: HostedWorkflowTemplate["services"] = [
       assetSymbol: null,
       dataFreshness: null,
       billingLabel:
-        "0.0005 USDC pays Arc Agent Commerce for deterministic due diligence analysis.",
+        `0.0005 USDC pays ${BRAND.name} for deterministic due diligence analysis.`,
     },
   },
 ];
@@ -102,7 +103,7 @@ const commonServices: HostedWorkflowTemplate["services"] = [
       providerStatus: "deterministic",
       assetSymbol: null,
       dataFreshness: null,
-      billingLabel: "USDC pays Arc Agent Commerce for this deterministic API service.",
+      billingLabel: `USDC pays ${BRAND.name} for this deterministic API service.`,
     },
   },
   {
@@ -116,7 +117,7 @@ const commonServices: HostedWorkflowTemplate["services"] = [
       providerStatus: "deterministic",
       assetSymbol: null,
       dataFreshness: null,
-      billingLabel: "USDC pays Arc Agent Commerce for this deterministic API service.",
+      billingLabel: `USDC pays ${BRAND.name} for this deterministic API service.`,
     },
   },
 ];
@@ -133,7 +134,7 @@ const marketServices: HostedWorkflowTemplate["services"] = [
       providerStatus: "deterministic",
       assetSymbol: null,
       dataFreshness: null,
-      billingLabel: "USDC pays Arc Agent Commerce for this deterministic API service.",
+      billingLabel: `USDC pays ${BRAND.name} for this deterministic API service.`,
     },
   },
   {
@@ -147,7 +148,7 @@ const marketServices: HostedWorkflowTemplate["services"] = [
       providerStatus: "live",
       assetSymbol: null,
       dataFreshness: "Price update age must be 120 seconds or less",
-      billingLabel: "0.001 USDC pays Arc Agent Commerce for access to its Pyth-backed API, not Pyth Network directly.",
+      billingLabel: `0.001 USDC pays ${BRAND.name} for access to its Pyth-backed API, not Pyth Network directly.`,
     },
   },
 ];

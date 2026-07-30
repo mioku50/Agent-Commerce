@@ -26,6 +26,7 @@ import {
   consoleSidebarNavigation,
   type SidebarIconName,
 } from "@/lib/navigation/sidebar";
+import { BRAND } from "@/lib/brand";
 
 type NavItem = {
   href: string;
@@ -199,15 +200,19 @@ export function MobileSidebar({
         aria-label="Primary navigation"
       >
         <div className="mb-5 flex items-center gap-3">
-          <span className="flex size-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
-            AC
+          <span
+            aria-label={`${BRAND.name} logo`}
+            data-testid="brand-monogram"
+            className="flex size-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground"
+          >
+            {BRAND.monogram}
           </span>
           <div>
             <p className="text-sm font-semibold">
-              {isConsole ? "Agent Developer Console" : "Arc Agent Commerce"}
+              {isConsole ? BRAND.developerConsole : BRAND.name}
             </p>
             <p className="text-xs text-muted-foreground">
-              {isConsole ? "Developer & Operator tools" : "Verifiable paid workflows"}
+              {isConsole ? "Developer and operator tools" : BRAND.tagline}
             </p>
           </div>
         </div>

@@ -413,13 +413,13 @@ async function checkReviewStatus(baseUrl: string) {
       detail: `configured=${json.provider?.configured === true ? "yes" : "no"} endpoint=${json.provider?.paidEndpoint ?? "missing"} freshness=${json.provider?.maxPriceAgeSeconds ?? "missing"}s`,
     },
     {
-      name: "review status exposes FreeModel synthesis without credentials or endpoint",
+      name: "review status exposes OpenRouter synthesis without credentials or endpoint",
       ok:
         json.checks?.llmSynthesisConfigured === true &&
         json.llm?.configured === true &&
-        json.llm.provider === "FreeModel" &&
+        json.llm.provider === "OpenRouter" &&
         json.llm.protocol === "openai-compatible" &&
-        json.llm.model === "gpt-5.4-mini" &&
+        json.llm.model === "nvidia/nemotron-3-super-120b-a12b:free" &&
         json.llm.externalProcessing === true &&
         json.llm.deterministicFallback === true &&
         json.llm.legacyOpenAiKeyUsed === false &&
@@ -570,7 +570,7 @@ function printResults(
   const passed = results.filter((result) => result.ok);
   const failed = results.filter((result) => !result.ok);
 
-  console.log("\nArc Agent Commerce review smoke");
+  console.log("\nVeyra review smoke");
   console.log(`Production URL: ${baseUrl}`);
   console.log(`Passed: ${passed.length}`);
   console.log(`Failed: ${failed.length}`);
@@ -604,27 +604,27 @@ async function main() {
   let reviewStatus: ReviewStatus | null = null;
   let reviewStatusWarning: string | null = null;
 
-  const pageChecks = [
-    "/",
-    "/review",
-    "/demo",
-    "/agent-runner",
-    "/workflows",
-    "/results",
-    "/proofs",
-    "/developer-tools",
-    "/store",
-    "/agent-control",
-    "/agent-launch",
-    "/runs",
-    "/receipts",
-    "/agents",
-    "/my-agents",
+  const pageChecks: Array<[path: string, expectedStatus: number]> = [
+    ["/", 200],
+    ["/review", 307],
+    ["/demo", 307],
+    ["/agent-runner", 200],
+    ["/workflows", 200],
+    ["/results", 200],
+    ["/proofs", 200],
+    ["/developer-tools", 200],
+    ["/store", 200],
+    ["/agent-control", 200],
+    ["/agent-launch", 200],
+    ["/runs", 200],
+    ["/receipts", 200],
+    ["/agents", 200],
+    ["/my-agents", 200],
   ];
 
-  for (const path of pageChecks) {
-    const result = await safelyRun(`${path} returns 200`, () =>
-      checkStatus(baseUrl, path, 200),
+  for (const [path, expectedStatus] of pageChecks) {
+    const result = await safelyRun(`${path} returns ${expectedStatus}`, () =>
+      checkStatus(baseUrl, path, expectedStatus),
     );
     results.push(...(Array.isArray(result) ? result : [result]));
   }

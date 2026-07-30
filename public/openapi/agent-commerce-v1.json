@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "Arc Agent Commerce Machine API",
+    "title": "Veyra Agent API",
     "version": "1.1.0",
-    "description": "Arc Agent Commerce Machine API v1 for curated verifiable paid workflows on Arc Testnet. External agents can discover workflows, obtain immutable quotes, launch idempotent sponsored or paid runs, poll status, and retrieve structured reports with Arc proof trails."
+    "description": "Machine API for discovering and executing verified Veyra workflows."
   },
   "servers": [
     {
@@ -304,7 +304,7 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "aac_live_...",
-        "description": "Arc Agent Commerce Bearer credential token (`aac_live_...`)"
+        "description": "Veyra Agent API Bearer credential token (`aac_live_...`)"
       }
     },
     "parameters": {

@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { analyzeGitHubDueDiligence } from "@/lib/agent/github-due-diligence";
+import { BRAND } from "@/lib/brand";
 import type { GitHubRepositorySnapshot } from "@/lib/providers/github-types";
 import { withGateway } from "@/lib/x402";
 
@@ -31,7 +32,7 @@ const handler = async (req: NextRequest) => {
       assessment,
       paidAmountUsdc: PRICE_USDC,
       billing: {
-        chargedBy: "Arc Agent Commerce",
+        chargedBy: BRAND.name,
         protocol: "x402",
         network: "Arc Testnet",
       },

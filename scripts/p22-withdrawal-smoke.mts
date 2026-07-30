@@ -3,7 +3,7 @@
  *
  * The seller key is read only by the local process. It is used to create the
  * owner session, sign the Gateway burn intent, and send the Arc mint call; it
- * is never sent to Agent Commerce or printed.
+ * is never sent to Veyra or printed.
  */
 import { randomUUID } from "node:crypto";
 import { createPublicClient, createWalletClient, getAddress, http, isAddress, type Address, type Hex } from "viem";

@@ -19,13 +19,19 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { BRAND } from "@/lib/brand";
 import { AgentApiInteractiveClient } from "./agent-api-interactive-client";
 import { MachineCredentialsClient } from "./machine-credentials-client";
 
 export const metadata = {
-  title: "Agent API | Agent Developer Console | Arc Agent Commerce",
+  title: { absolute: BRAND.agentApi },
   description:
-    "Machine API v1 developer quickstart, credential scopes, OpenAPI 3.0 spec, and interactive code snippets.",
+    "Machine-to-machine access for agents that discover workflows, create quotes, execute paid runs, and retrieve verified reports.",
+  openGraph: {
+    title: BRAND.agentApi,
+    description:
+      "Machine-to-machine access for agents that discover workflows, create quotes, execute paid runs, and retrieve verified reports.",
+  },
 };
 
 const credentialScopes = [
@@ -58,15 +64,15 @@ export default function AgentApiConsolePage() {
       <section className="border-b bg-secondary/20">
         <div className="mx-auto w-full max-w-6xl px-4 py-12 sm:px-6">
           <div className="mb-4 flex flex-wrap items-center gap-2">
-            <Badge variant="default">Agent Developer Console</Badge>
-            <Badge variant="outline">Machine API v1</Badge>
+            <Badge variant="default">{BRAND.developerConsole}</Badge>
+            <Badge variant="outline">{BRAND.agentApi} v1</Badge>
             <Badge variant="secondary">Arc Testnet · Chain 5042002</Badge>
           </div>
           <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">
-            Machine API v1
+            {BRAND.agentApi}
           </h1>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Allow external AI agents and automated microservices to discover workflows, create binding quotes, launch sponsored or paid runs, poll status, and retrieve verified structured reports with Arc proof trails.
+            Machine-to-machine access for agents that discover workflows, create quotes, execute paid runs, and retrieve verified reports.
           </p>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -87,10 +93,10 @@ export default function AgentApiConsolePage() {
       </section>
 
       {/* Main Content Grid */}
-      <section className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 sm:px-6">
+      <section className="mx-auto grid w-full max-w-6xl grid-cols-[minmax(0,1fr)] gap-8 px-4 py-8 sm:px-6">
         <Card className="rounded-lg border-primary/30" id="credentials">
           <CardHeader>
-            <CardTitle>Machine API Credentials</CardTitle>
+            <CardTitle>{BRAND.agentApi} Credentials</CardTitle>
             <CardDescription>
               Complete the three onboarding steps, then create a namespace-bound credential. Secrets are shown only once.
             </CardDescription>
@@ -225,7 +231,7 @@ export default function AgentApiConsolePage() {
               <div>
                 <h3 className="font-semibold text-foreground">OpenAPI 3.0.3 Specification</h3>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Import our complete Machine API specification into Postman, Insomnia, or Swagger UI.
+                  Import the complete {BRAND.agentApi} specification into Postman, Insomnia, or Swagger UI.
                 </p>
               </div>
             </div>

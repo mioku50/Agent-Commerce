@@ -20,8 +20,9 @@ try {
   const page = await browser.newPage({ viewport: { width: 1366, height: 768 } });
 
   await page.goto(`${baseUrl()}/`, { waitUntil: "load" });
-  await page.getByRole("heading", { name: "Verified workflows for people and AI agents", exact: true }).waitFor();
-  await page.getByText("Agent Commerce on Arc Testnet", { exact: true }).waitFor();
+  await page.getByRole("heading", { name: "Veyra", exact: true }).waitFor();
+  await page.getByText("Verified workflows for people and AI agents", { exact: true }).first().waitFor();
+  await page.getByText("Arc Testnet", { exact: true }).first().waitFor();
   await page.locator('a[href="/agent-runner"]').filter({ hasText: "Explore Workflows" }).waitFor();
   await page.getByRole("link", { name: "Developer API", exact: true }).waitFor();
   assert.equal(await page.locator("main > section").first().locator('input[name="repository"]').count(), 0);
@@ -60,7 +61,7 @@ try {
   await page.locator('a[href="/agent-runner?workflow=github"]').waitFor();
   const provider = page.locator('[data-provider-type="live_provider"]').first();
   await provider.getByText("Live Provider · GitHub API", { exact: true }).waitFor();
-  await provider.getByText("USDC pays Arc Agent Commerce", { exact: false }).waitFor();
+  await provider.getByText("USDC pays Veyra", { exact: false }).waitFor();
 
   await page.goto(`${baseUrl()}/results?workflow=market_context&status=warnings&sort=oldest&q=ETH`, { waitUntil: "load" });
   assert.equal(await page.getByLabel("Search reports").inputValue(), "ETH");

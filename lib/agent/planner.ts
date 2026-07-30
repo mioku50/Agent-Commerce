@@ -1,7 +1,8 @@
 import type { ApiService } from "@/lib/services/registry";
+import { BRAND } from "../brand.ts";
 
 export const DEFAULT_AGENT_TASK =
-  "Explore the API Store and buy the minimum useful services to produce a short agent commerce proof.";
+  `Explore the API Store and buy the minimum useful services to produce a short ${BRAND.name} workflow proof.`;
 export const DEFAULT_AGENT_BUDGET_USDC = 0.0113;
 
 const PURCHASE_ORDER = [

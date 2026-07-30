@@ -25,6 +25,7 @@ import { useArcWallet } from "@/components/wallet/use-arc-wallet";
 import { shortenHash } from "@/lib/utils";
 import { signAndSendByoaX402Payment } from "@/lib/byoa/x402-client";
 import type { FundingIntent, FundingMethod } from "@/lib/byoa/funding";
+import { BRAND } from "@/lib/brand";
 
 
 type Diagnostic = {
@@ -409,7 +410,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
         method: "POST",
         body: JSON.stringify({
           credentialType,
-          label: credentialType === "machine_api" ? "Machine API Credential" : "BYOA Workflow Credential",
+          label: credentialType === "machine_api" ? `${BRAND.agentApi} Credential` : "BYOA Workflow Credential",
           scopes: credentialPermissions[credentialType],
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString(),
         }),
@@ -1135,7 +1136,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="rounded-md border border-primary/40 bg-primary/5 p-3 text-xs">
                         <div className="flex items-center justify-between gap-2">
-                          <span className="font-semibold">Machine API Credential</span>
+                          <span className="font-semibold">{BRAND.agentApi} Credential</span>
                           <Badge>Recommended</Badge>
                         </div>
                         <p className="mt-2 text-muted-foreground">For autonomous clients using only <code>/api/agent/v1/*</code>.</p>
@@ -1164,7 +1165,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                       <div className="rounded-md border border-amber-400/40 bg-amber-400/10 p-3 text-xs grid gap-2">
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-amber-500">
-                            {oneTimeCredential.credentialType === "machine_api" ? "Machine API" : "BYOA Workflow"} secret (displayed once)
+                            {oneTimeCredential.credentialType === "machine_api" ? BRAND.agentApi : "BYOA Workflow"} secret (displayed once)
                           </span>
                           <Button size="sm" variant="outline" onClick={() => void navigator.clipboard.writeText(oneTimeCredential.token)}>
                             <Copy className="mr-1 size-3" /> Copy once
@@ -1183,7 +1184,7 @@ export function MyAgentsClient({ diagnostic }: { diagnostic: Diagnostic }) {
                               {cred.revokedAt ? "Revoked" : "Active"}
                             </Badge>
                           </div>
-                          <span className="text-muted-foreground">Type: {cred.credentialType === "machine_api" ? "Machine API" : "BYOA Workflow"}</span>
+                          <span className="text-muted-foreground">Type: {cred.credentialType === "machine_api" ? BRAND.agentApi : "BYOA Workflow"}</span>
                           <span className="text-muted-foreground">Scopes: {cred.scopes.join(", ")}</span>
                           <span className="text-muted-foreground">Created: {new Date(cred.createdAt).toLocaleString()}</span>
                           <span className="text-muted-foreground">Expires: {new Date(cred.expiresAt).toLocaleString()}</span>
@@ -1467,7 +1468,7 @@ const quote = await fetch(\`${"${API}"}/api/byoa/v1/quotes\`, {
       <CardHeader><CardTitle>Manifest → quote → HTTP 402 → payment → execute → poll</CardTitle></CardHeader>
       <CardContent>
         <p className="mb-3 text-sm text-muted-foreground">
-          The external agent keeps its signer locally. Arc Agent Commerce receives only the signed x402 payload and the scoped API credential.
+          The external agent keeps its signer locally. {BRAND.name} receives only the signed x402 payload and the scoped API credential.
         </p>
         <pre className="max-w-full overflow-x-auto rounded-md bg-black/40 p-4 text-xs leading-5">
           <code>{sample}</code>

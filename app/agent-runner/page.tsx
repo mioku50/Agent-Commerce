@@ -11,7 +11,7 @@ import { parseHostedRunnerQuery } from "@/lib/agent/workflow-links";
 import { getHostedWorkflowCheckoutDiagnostic } from "@/lib/agent/workflow-pricing";
 
 export const metadata = {
-  title: "Real-Input Hosted Agent Workflows | Arc Agent Commerce",
+  title: "Real-Input Hosted Agent Workflows",
   description: "Submit real text to allowlisted multi-service x402 workflows with privacy-safe dynamic reports and verified Arc proofs.",
 };
 

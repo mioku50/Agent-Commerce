@@ -28,10 +28,10 @@ export const publicSidebarNavigation = [
 
 export const consoleSidebarNavigation = [
   {
-    label: "Agent Developer Console",
+    label: BRAND.developerConsole,
     items: [
       { href: "/console", label: "Console Home", icon: "console" },
-      { href: "/console/agent-api", label: "Machine API", icon: "agent" },
+      { href: "/console/agent-api", label: BRAND.agentApi, icon: "agent" },
       { href: "/console/agents", label: "Agent Credentials", icon: "my-agents" },
       { href: "/console/operations", label: "Operations", icon: "activity" },
       { href: "/console/audit", label: "Audit & Verification", icon: "proof" },
@@ -47,3 +47,4 @@ export const sidebarNavigation = publicSidebarNavigation;
 
 export const DESKTOP_SIDEBAR_SCROLL_CLASS = "overflow-y-auto overscroll-contain";
 export const MOBILE_SIDEBAR_SCROLL_CLASS = "overflow-y-auto overscroll-contain";
+import { BRAND } from "../brand.ts";

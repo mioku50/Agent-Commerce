@@ -26,7 +26,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 
 export const metadata = {
-  title: "API Store for AI Agents | Arc Agent Commerce",
+  title: "API Store for AI Agents",
   description:
     "Discover x402-powered paid APIs that AI agents can buy with USDC on Arc.",
 };

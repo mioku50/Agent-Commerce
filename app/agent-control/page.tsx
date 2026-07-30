@@ -12,7 +12,7 @@ import {
 } from "@/lib/services/store-service-persistence";
 
 export const metadata = {
-  title: "Buyer Agent Control Center | Arc Agent Commerce",
+  title: "Buyer Agent Control Center",
   description:
     "Plan buyer-agent tasks, budgets, and service-selection policy without moving funds.",
 };

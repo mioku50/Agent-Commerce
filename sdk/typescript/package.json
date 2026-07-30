@@ -1,7 +1,7 @@
 {
   "name": "@arc-agent-commerce/sdk",
   "version": "1.0.0",
-  "description": "Typed Machine API client for Arc Agent Commerce verifiable paid workflows.",
+  "description": "Typed Veyra Agent API client for verified paid workflows.",
   "type": "module",
   "license": "Apache-2.0",
   "private": true,

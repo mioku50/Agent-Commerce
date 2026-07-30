@@ -21,11 +21,12 @@ import { Bot, Fuel, ShieldCheck, Store } from "lucide-react";
 import { LocalAgentSetupGuide } from "@/components/agent/local-agent-setup-guide";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BRAND } from "@/lib/brand";
 
 export const metadata = {
-  title: "Local Agent Setup | Arc Agent Commerce",
+  title: "Local Agent Setup",
   description:
-    "Reviewer and developer guide for running the Arc Agent Commerce buyer-agent locally.",
+    `Reviewer and developer guide for running the ${BRAND.name} buyer-agent locally.`,
 };
 
 export default function AgentSetupPage() {

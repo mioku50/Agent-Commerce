@@ -48,6 +48,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ArcWalletWidget } from "@/components/wallet/arc-wallet-widget";
+import { BRAND } from "@/lib/brand";
 import { cn } from "@/lib/utils";
 
 type GlobalNavClientProps = {
@@ -117,15 +118,19 @@ export function GlobalNavClient({ loggedIn }: GlobalNavClientProps) {
       <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3 sm:px-6 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <Link href="/" className="flex shrink-0 items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm">
-              AC
+            <span
+              aria-label={`${BRAND.name} logo`}
+              data-testid="brand-monogram"
+              className="flex size-9 items-center justify-center rounded-md bg-primary text-sm font-bold text-primary-foreground shadow-sm"
+            >
+              {BRAND.monogram}
             </span>
             <span>
               <span className="block text-sm font-semibold leading-none text-foreground">
-                Arc Agent Commerce
+                {BRAND.name}
               </span>
               <span className="mt-1 block text-xs text-muted-foreground">
-                Hosted paid API workflows
+                {BRAND.tagline}
               </span>
             </span>
           </Link>

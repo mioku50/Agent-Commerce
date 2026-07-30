@@ -6,7 +6,7 @@ import {
 const credential = process.env.ARC_AGENT_COMMERCE_API_KEY;
 if (!credential) {
   throw new Error(
-    "Set ARC_AGENT_COMMERCE_API_KEY to a Machine API credential shown once in Agent Developer Console.",
+    "Set ARC_AGENT_COMMERCE_API_KEY to a Veyra Agent API credential shown once in Veyra Developer Console.",
   );
 }
 
@@ -68,7 +68,7 @@ try {
 } catch (error) {
   if (error instanceof AgentCommerceApiError) {
     process.stderr.write(
-      `Machine API error code=${error.code} status=${error.status} retryable=${error.retryable} requestId=${error.requestId ?? "n/a"}: ${error.message}\n`,
+      `Veyra Agent API error code=${error.code} status=${error.status} retryable=${error.retryable} requestId=${error.requestId ?? "n/a"}: ${error.message}\n`,
     );
   } else {
     process.stderr.write(

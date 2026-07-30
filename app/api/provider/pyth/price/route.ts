@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { BRAND } from "@/lib/brand";
 import { isProviderError } from "@/lib/providers/errors";
 import { getPythMarketPrice } from "@/lib/providers/pyth";
 import { withGateway } from "@/lib/x402";
@@ -14,12 +15,12 @@ const handler = async (req: NextRequest) => {
       ...result,
       paidAmountUsdc: PRICE_USDC,
       billing: {
-        chargedBy: "Arc Agent Commerce",
+        chargedBy: BRAND.name,
         protocol: "x402",
         network: "Arc Testnet",
       },
       attribution:
-        "Underlying market data is sourced from Pyth Network. The x402 payment is made to Arc Agent Commerce, not to Pyth Network.",
+        `Underlying market data is sourced from Pyth Network. The x402 payment is made to ${BRAND.name}, not to Pyth Network.`,
     });
   } catch (error) {
     if (!isProviderError(error)) throw error;

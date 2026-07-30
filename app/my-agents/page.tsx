@@ -1,11 +1,12 @@
 import { Badge } from "@/components/ui/badge";
+import { BRAND } from "@/lib/brand";
 import { getByoaDiagnostic } from "@/lib/byoa/config";
 import { MyAgentsClient } from "./my-agents-client";
 
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "My Agents | Arc Agent Commerce",
+  title: "My Agents",
   description: "Register a non-custodial external agent, verify its Arc wallet, and manage API spending policy.",
 };
 
@@ -22,7 +23,7 @@ export default function MyAgentsPage() {
           <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">My Agents</h1>
           <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
             Bind an owner wallet to an external agent wallet, set atomic spending limits,
-            and issue revocable API credentials. Arc Agent Commerce never asks for or
+            and issue revocable API credentials. {BRAND.name} never asks for or
             stores either wallet&apos;s private key.
           </p>
         </div>

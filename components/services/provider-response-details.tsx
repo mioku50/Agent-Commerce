@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { BRAND } from "@/lib/brand";
 import { providerResponsePresentation } from "@/lib/services/presentation";
 
 export function ProviderResponseDetails({ value }: { value: unknown }) {
@@ -23,7 +24,7 @@ export function ProviderResponseDetails({ value }: { value: unknown }) {
         {provider.paidAmountUsdc ? <div><dt className="text-muted-foreground">Provider-backed API price</dt><dd className="font-mono">{provider.paidAmountUsdc} USDC</dd></div> : null}
       </dl>
       <p className="mt-3 text-xs leading-5 text-muted-foreground">
-        USDC pays Arc Agent Commerce for access to this provider-backed API; it is not a direct payment to the underlying data provider.
+        USDC pays {BRAND.name} for access to this provider-backed API; it is not a direct payment to the underlying data provider.
       </p>
     </div>
   );

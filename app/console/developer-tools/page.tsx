@@ -1,8 +1,9 @@
 import DeveloperToolsPage, { metadata as devToolsMetadata } from "@/app/developer-tools/page";
+import { brandPageTitle } from "@/lib/brand";
 
 export const metadata = {
   ...devToolsMetadata,
-  title: "Developer Tools | Agent Developer Console | Arc Agent Commerce",
+  title: { absolute: brandPageTitle("Developer Tools") },
 };
 
 export default DeveloperToolsPage;

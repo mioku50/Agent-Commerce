@@ -222,7 +222,7 @@ function isMachineErrorBody(value: unknown): value is MachineErrorBody {
 function mergeSignals(signal: AbortSignal | undefined, timeoutMs: number) {
   const controller = new AbortController();
   const timeout = setTimeout(
-    () => controller.abort(new Error(`Machine API request timed out after ${timeoutMs}ms.`)),
+    () => controller.abort(new Error(`Veyra Agent API request timed out after ${timeoutMs}ms.`)),
     timeoutMs,
   );
   const onAbort = () => controller.abort(signal?.reason);
@@ -245,10 +245,10 @@ export class AgentCommerceClient {
   constructor(options: AgentCommerceClientOptions) {
     const baseUrl = new URL(options.baseUrl);
     if (!["http:", "https:"].includes(baseUrl.protocol)) {
-      throw new Error("Machine API baseUrl must use http or https.");
+      throw new Error("Veyra Agent API baseUrl must use http or https.");
     }
     if (!options.credential.trim()) {
-      throw new Error("Machine API credential is required.");
+      throw new Error("Veyra Agent API credential is required.");
     }
     this.baseUrl = baseUrl.toString().replace(/\/$/, "");
     this.credential = options.credential.trim();
@@ -295,7 +295,7 @@ export class AgentCommerceClient {
         throw new AgentCommerceApiError({
           status: response.status,
           code: "invalid_response",
-          message: `Machine API returned HTTP ${response.status} without a valid error body.`,
+          message: `Veyra Agent API returned HTTP ${response.status} without a valid error body.`,
           retryable: response.status >= 500,
           requestId: response.headers.get("x-request-id"),
         });
@@ -307,14 +307,14 @@ export class AgentCommerceClient {
         throw new AgentCommerceApiError({
           status: 0,
           code: "request_timeout",
-          message: "Machine API request timed out or was aborted.",
+          message: "Veyra Agent API request timed out or was aborted.",
           retryable: true,
         });
       }
       throw new AgentCommerceApiError({
         status: 0,
         code: "network_error",
-        message: error instanceof Error ? error.message : "Machine API network request failed.",
+        message: error instanceof Error ? error.message : "Veyra Agent API network request failed.",
         retryable: true,
       });
     } finally {
@@ -452,7 +452,7 @@ export class AgentCommerceClient {
         throw new AgentCommerceApiError({
           status: response.status,
           code: "invalid_response",
-          message: `Machine API returned HTTP ${response.status}.`,
+          message: `Veyra Agent API returned HTTP ${response.status}.`,
           retryable: response.status >= 500,
         });
       }
@@ -463,7 +463,7 @@ export class AgentCommerceClient {
         throw new AgentCommerceApiError({
           status: 0,
           code: "request_timeout",
-          message: "Machine API request timed out or was aborted.",
+          message: "Veyra Agent API request timed out or was aborted.",
           retryable: true,
         });
       }
@@ -473,7 +473,7 @@ export class AgentCommerceClient {
         message:
           error instanceof Error
             ? error.message
-            : "Machine API network request failed.",
+            : "Veyra Agent API network request failed.",
         retryable: true,
       });
     } finally {

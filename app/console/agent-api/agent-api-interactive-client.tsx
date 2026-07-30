@@ -106,9 +106,9 @@ export function AgentApiInteractiveClient() {
   }
 
   return (
-    <div className="grid gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-3">
-        <div className="flex gap-2">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b pb-3">
+        <div className="flex min-w-0 flex-wrap gap-2">
           <Button
             size="sm"
             variant={activeTab === "typescript" ? "default" : "outline"}
@@ -144,8 +144,8 @@ export function AgentApiInteractiveClient() {
         </Button>
       </div>
 
-      <div className="relative rounded-md bg-zinc-950 p-4 font-mono text-xs text-zinc-100">
-        <pre className="overflow-x-auto whitespace-pre leading-relaxed">
+      <div className="relative min-w-0 max-w-full overflow-hidden rounded-md bg-zinc-950 p-4 font-mono text-xs text-zinc-100">
+        <pre className="max-w-full overflow-x-auto whitespace-pre leading-relaxed">
           <code>{codeExamples[activeTab]}</code>
         </pre>
       </div>

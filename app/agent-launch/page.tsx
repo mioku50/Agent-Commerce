@@ -24,7 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 export const metadata = {
-  title: "Fund Local CLI Agent | Arc Agent Commerce",
+  title: "Fund Local CLI Agent",
   description:
     "Connect an Arc Testnet wallet, fund a buyer-agent wallet, and launch the existing local CLI buyer-agent flow.",
 };

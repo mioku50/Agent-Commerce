@@ -28,15 +28,18 @@ import {
 } from "@/lib/agent/workflow-templates";
 import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
 import { sanitizePublicReportText } from "@/lib/agent/public-report-copy";
+import { BRAND, BRAND_TITLE } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "Arc Agent Commerce — Verified Workflows for People and AI Agents",
-  description:
-    "Run paid data and analysis workflows, generate structured reports, and verify results on Arc Testnet.",
+  title: { absolute: BRAND_TITLE },
+  description: BRAND.description,
   openGraph: {
-    title: "Arc Agent Commerce — Verified Workflows for People and AI Agents",
-    description:
-      "Run paid data and analysis workflows, generate structured reports, and verify results on Arc Testnet.",
+    title: BRAND_TITLE,
+    description: BRAND.description,
+  },
+  twitter: {
+    title: BRAND_TITLE,
+    description: BRAND.description,
   },
 };
 
@@ -132,12 +135,15 @@ export default async function Home() {
     <main className="min-h-screen bg-background">
       <section className="border-b bg-secondary/20">
         <div className="mx-auto flex w-full max-w-7xl flex-col items-center px-4 py-16 text-center sm:px-6 sm:py-20">
-          <Badge className="mb-5">Agent Commerce on Arc Testnet</Badge>
+          <Badge className="mb-5">Arc Testnet</Badge>
           <h1 className="max-w-5xl text-4xl font-bold leading-[1.05] tracking-normal text-foreground sm:text-6xl">
-            Verified workflows for people and AI agents
+            {BRAND.name}
           </h1>
-          <p className="mt-5 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
-            Run paid data and analysis workflows, receive structured reports, and verify the results on Arc.
+          <p className="mt-5 max-w-3xl text-lg font-semibold leading-7 text-foreground sm:text-xl">
+            {BRAND.tagline}
+          </p>
+          <p className="mt-3 max-w-3xl text-base leading-7 text-muted-foreground sm:text-lg">
+            {BRAND.description}
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
             <Button asChild size="lg">
@@ -261,7 +267,7 @@ export default async function Home() {
           </Card>
           <Card className="rounded-lg">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Code2 className="size-5" /> Agent Machine API</CardTitle>
+              <CardTitle className="flex items-center gap-2"><Code2 className="size-5" /> {BRAND.agentApi}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-5">
               <p className="text-sm leading-6 text-muted-foreground">

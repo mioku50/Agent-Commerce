@@ -20,6 +20,7 @@ import type { Metadata } from "next";
 import { DM_Sans, JetBrains_Mono } from "next/font/google";
 import { GlobalNav } from "@/components/global-nav";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { BRAND, BRAND_TITLE } from "@/lib/brand";
 import { Toaster } from "sonner";
 import "./globals.css";
 
@@ -29,9 +30,34 @@ const defaultUrl = process.env.VERCEL_URL
 
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
-  title: "Arc Agent Commerce | Verifiable Paid Workflows",
-  description:
-    "Run verifiable paid workflows for people and AI agents, receive structured reports, and verify receipts on Arc Testnet.",
+  applicationName: BRAND.name,
+  title: {
+    default: BRAND_TITLE,
+    template: `%s | ${BRAND.name}`,
+  },
+  description: BRAND.description,
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }],
+    shortcut: "/icon.svg",
+    apple: "/icon.svg",
+  },
+  appleWebApp: {
+    capable: true,
+    title: BRAND.name,
+    statusBarStyle: "black-translucent",
+  },
+  openGraph: {
+    type: "website",
+    siteName: BRAND.name,
+    title: BRAND_TITLE,
+    description: BRAND.description,
+  },
+  twitter: {
+    card: "summary",
+    title: BRAND_TITLE,
+    description: BRAND.description,
+  },
 };
 
 const dmSans = DM_Sans({

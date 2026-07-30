@@ -106,12 +106,12 @@ export async function generateMetadata({
 
   if (!service) {
     return {
-      title: "API Service | Arc Agent Commerce",
+      title: "API Service",
     };
   }
 
   return {
-    title: `${service.name} | API Store | Arc Agent Commerce`,
+    title: `${service.name} | API Store`,
     description: service.shortDescription,
   };
 }

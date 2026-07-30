@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { SellerServiceForm } from "@/app/seller/services/service-form";
 
 export const metadata = {
-  title: "Create API Service | Arc Agent Commerce",
+  title: "Create API Service",
 };
 
 export default function NewSellerServicePage() {

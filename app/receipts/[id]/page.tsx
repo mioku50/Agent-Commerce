@@ -48,7 +48,7 @@ type ReceiptDetailPageProps = {
 };
 
 export const metadata = {
-  title: "Commerce Receipt | Arc Agent Commerce",
+  title: "Commerce Receipt",
 };
 
 function formatDate(value: string) {

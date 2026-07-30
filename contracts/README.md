@@ -1,4 +1,4 @@
-# Agent Commerce Proof Registry
+# Veyra Proof Registry
 
 This isolated Foundry workspace contains the Arc Testnet proof registry used by
 the application after a successful x402 settlement. The registry stores compact

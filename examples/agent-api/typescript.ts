@@ -2,7 +2,7 @@
  * Copyright 2026 Circle Internet Group, Inc. All rights reserved.
  * SPDX-License-Identifier: Apache-2.0
  *
- * Arc Agent Commerce — Machine API v1 TypeScript Client Example
+ * Veyra Agent API v1 TypeScript Client Example
  *
  * Usage:
  *   npx tsx examples/agent-api/typescript.ts <BASE_URL> <API_KEY> [REPOSITORY]
@@ -137,7 +137,7 @@ export class MachineApiClient {
    * 1. Discover available workflows
    */
   async listWorkflows(): Promise<WorkflowTemplate[]> {
-    console.log("\n🔍 Step 1: Querying available Machine API workflows...");
+    console.log("\n🔍 Step 1: Querying available Veyra Agent API workflows...");
     const res = await fetch(`${this.baseUrl}/api/agent/v1/workflows`, {
       method: "GET",
       headers: this.headers,
@@ -330,7 +330,7 @@ async function main() {
   const repo = args[2] || "circlefin/agent-commerce";
 
   console.log("=================================================");
-  console.log("Arc Agent Commerce — Machine API v1 TS Example");
+  console.log("Veyra Agent API v1 TS Example");
   console.log("=================================================");
   console.log(`Target Host: ${baseUrl}`);
   console.log(`Target Repo: ${repo}`);
@@ -364,9 +364,9 @@ async function main() {
     if (finalStatus.reportId) {
       await client.getReport(finalStatus.reportId);
     }
-    console.log("\n🎉 Complete Machine API flow completed successfully!");
+    console.log("\n🎉 Complete Veyra Agent API flow completed successfully!");
   } catch (err) {
-    console.error("\n❌ Machine API flow failed:", err);
+    console.error("\n❌ Veyra Agent API flow failed:", err);
     process.exit(1);
   }
 }

@@ -3,11 +3,12 @@ import { ArrowRight, Bot, FileCheck2, KeyRound, ShieldCheck } from "lucide-react
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { BRAND } from "@/lib/brand";
 
 export const metadata = {
-  title: "About | Arc Agent Commerce",
+  title: "About",
   description:
-    "Arc Agent Commerce runs verifiable paid workflows for people and AI agents.",
+    BRAND.description,
 };
 
 const paths = [
@@ -19,11 +20,11 @@ const paths = [
     action: "Run a workflow",
   },
   {
-    title: "Machine API",
+    title: BRAND.agentApi,
     icon: Bot,
     body: "External agents discover schemas, create idempotent quotes and runs, then retrieve structured reports and Arc proofs.",
     href: "/console/agent-api",
-    action: "Open Machine API",
+    action: `Open ${BRAND.agentApi}`,
   },
 ];
 
@@ -34,10 +35,11 @@ export default function AboutPage() {
         <div className="mx-auto w-full max-w-6xl px-4 py-16 sm:px-6">
           <Badge className="mb-5">Verifiable paid workflows</Badge>
           <h1 className="max-w-4xl text-4xl font-bold tracking-normal sm:text-6xl">
-            A report product built on agent commerce
+            {BRAND.name}
           </h1>
+          <p className="mt-4 text-xl font-semibold">{BRAND.tagline}</p>
           <p className="mt-5 max-w-3xl text-lg leading-8 text-muted-foreground">
-            Arc Agent Commerce turns real input into a priced workflow, purchases
+            {BRAND.name} turns real input into a priced workflow, purchases
             only allowlisted x402 services, and returns a structured result with
             receipts and an Arc Testnet proof trail.
           </p>

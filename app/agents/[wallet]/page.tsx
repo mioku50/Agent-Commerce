@@ -53,7 +53,7 @@ type AgentPassportPageProps = {
 };
 
 export const metadata = {
-  title: "Agent Passport | Arc Agent Commerce",
+  title: "Agent Passport",
 };
 
 function statusVariant(status: string) {

@@ -5,6 +5,7 @@ import { ArrowUpFromLine, LoaderCircle, RefreshCw, WalletCards } from "lucide-re
 import { type Address, type Hex } from "viem";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { BRAND } from "@/lib/brand";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -170,7 +171,7 @@ export function SellerWithdrawalClient({ ownerWallet }: { ownerWallet: string })
       <Card>
         <CardHeader><CardTitle>Non-custodial Arc Testnet withdrawal</CardTitle></CardHeader>
         <CardContent className="grid gap-5">
-          <p className="text-sm leading-6 text-muted-foreground">x402 already pays the registered seller wallet directly in Gateway. This flow only moves that seller-owned Gateway balance back to the same Arc wallet. The browser wallet signs the burn intent and submits the mint transaction; Agent Commerce never receives a seller private key.</p>
+          <p className="text-sm leading-6 text-muted-foreground">x402 already pays the registered seller wallet directly in Gateway. This flow only moves that seller-owned Gateway balance back to the same Arc wallet. The browser wallet signs the burn intent and submits the mint transaction; {BRAND.name} never receives a seller private key.</p>
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Available Gateway USDC</p><p className="mt-1 font-mono text-lg">{balance?.availableUsdc ?? "—"}</p></div>
             <div className="rounded-md border p-3"><p className="text-xs text-muted-foreground">Withdrawing</p><p className="mt-1 font-mono text-lg">{balance?.withdrawingUsdc ?? "—"}</p></div>
