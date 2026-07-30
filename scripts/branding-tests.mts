@@ -105,9 +105,9 @@ const openApi = JSON.parse(
 assert.equal(openApi.info?.title, BRAND.agentApi);
 assert.equal(
   openApi.info?.description,
-  "Machine API for discovering and executing verified Veyra workflows.",
+  "Machine API for verified Veyra workflows, continuous trust monitoring, alerts, signed webhooks, and public trust badges.",
 );
-assert.equal(openApi.info?.version, "1.1.0");
+assert.equal(openApi.info?.version, "1.4.0");
 assert.equal(openApi.servers?.[0]?.url, "https://agent-commerce-six.vercel.app");
 for (const path of [
   "/api/agent/v1/workflows",
@@ -115,6 +115,10 @@ for (const path of [
   "/api/agent/v1/runs",
   "/api/agent/v1/runs/{runId}",
   "/api/agent/v1/reports/{reportId}",
+  "/api/agent/v1/alerts",
+  "/api/agent/v1/webhooks",
+  "/api/public/trust/{publicId}/status",
+  "/api/trust/{publicId}/badge.svg",
 ]) {
   assert(path in (openApi.paths ?? {}), `OpenAPI path changed or disappeared: ${path}`);
 }

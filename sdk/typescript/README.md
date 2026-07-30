@@ -4,7 +4,9 @@ Typed, dependency-free TypeScript client for Veyra Agent API v1.
 
 The SDK covers workflow discovery, immutable quotes, idempotent run creation,
 polling, structured reports, Markdown export, normalized errors, and Arc proof
-metadata. It works in Node.js 20+ and runtimes that provide `fetch`,
+metadata. It also covers trust watchlists, public status, alerts, and signed
+webhook management when the credential has explicit trust automation scopes.
+It works in Node.js 20+ and runtimes that provide `fetch`,
 `AbortController`, and `crypto.randomUUID`.
 
 ```ts

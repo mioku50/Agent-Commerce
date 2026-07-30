@@ -185,6 +185,7 @@ assert.deepEqual(
   [
     { label: "Home", href: "/" },
     { label: "New Report", href: "/agent-runner" },
+    { label: "Monitoring", href: "/monitoring" },
     { label: "Reports", href: "/results" },
   ],
 );

@@ -10,7 +10,8 @@ An external agent can:
 3. launch exactly one sponsored or paid run;
 4. poll until the run reaches a terminal state;
 5. retrieve structured JSON or Markdown with Arc Testnet proof metadata.
-6. save trust watchlists and trigger repeat checks with deterministic deltas.
+6. save trust watchlists and trigger repeat checks with deterministic deltas;
+7. read trust alerts and manage signed webhook subscriptions when explicitly authorized.
 
 Production base URL:
 
@@ -36,7 +37,8 @@ Credentials are created in the Veyra Developer Console and shown once.
 4. Select the active agent and choose **Create Veyra Agent API Credential**.
 5. Copy the `aac_...` secret immediately and store it in a secret manager.
 
-The credential is bound to one agent namespace and one closed scope set:
+The credential is bound to one agent namespace. Every Machine credential starts
+with the closed core scope set:
 
 | Scope | Purpose |
 | --- | --- |
@@ -44,6 +46,16 @@ The credential is bound to one agent namespace and one closed scope set:
 | `quotes:create` | Create immutable, idempotent quotes |
 | `runs:create` | Launch a quoted run |
 | `results:read` | Poll runs and retrieve reports |
+
+Trust automation permissions are opt-in during credential creation and are
+never added to existing credentials:
+
+| Optional scope | Purpose |
+| --- | --- |
+| `alerts:read` | List credential-owned trust alerts |
+| `alerts:write` | Mark credential-owned alerts as read |
+| `webhooks:read` | List webhook subscriptions and sanitized deliveries |
+| `webhooks:write` | Create, update, test, rotate, and delete webhooks |
 
 Veyra Agent API credentials are separate from legacy BYOA workflow credentials. Never
 send a credential in a query string or commit it to the repository.
@@ -135,6 +147,7 @@ const watch = await client.createWatchlist({
     repositoryUrl: "owner/repository",
   },
   cadence: "weekly",
+  visibility: "public",
 });
 
 const { report, history } = await client.recheckWatchlist(watch.id, {
@@ -144,6 +157,8 @@ const { report, history } = await client.recheckWatchlist(watch.id, {
 
 console.log(history.currentDelta?.changes);
 console.log(history.history[0]?.proofUrl);
+console.log(watch.profileId);
+const publicProfile = await client.getPublicTrustProfile(watch.profileId);
 ```
 
 `manual`, `daily`, and `weekly` are valid cadences. A Machine API recheck first
@@ -152,11 +167,51 @@ creates an immutable quote at
 through the existing run endpoint. Sponsored and paid checkout remain separate;
 Machine API never receives an implicit payment authorization.
 
+Machine-created watchlists are private unless `visibility: "public"` is
+explicitly supplied. Published subjects resolve through the unauthenticated
+`GET /api/monitoring/public/{profileId}` endpoint and the shareable
+`/trust/{profileId}` page. Private and unknown profiles intentionally return
+the same `404 Trust profile not found` response. Public payloads contain safe
+trust signals and Arc proofs, never the owner wallet, machine credential,
+schedule, cron, quote, or internal payment records.
+
 Each snapshot stores the canonical Agent Trust Report hash and the exact Arc
 proof transaction. Deltas are deterministic comparisons between two snapshots:
 Trust Score movement, new/resolved risks, repository activity, agent status,
 service health, endpoint availability, contract signals, and Arc verification
 coverage.
+
+### Alerts, webhooks, badges, and compact status
+
+With explicit trust automation scopes, the SDK exposes `listAlerts`,
+`markAlertRead`, `listWebhooks`, `createWebhook`, `updateWebhook`,
+`sendWebhookTest`, `rotateWebhookSecret`, and `listWebhookDeliveries`.
+Credential isolation is fail-closed: a foreign alert, webhook, or delivery
+returns the same `404` as an unknown resource.
+
+Webhook secrets are shown once. Events use HMAC-SHA256 over
+`{timestamp}.{rawBody}`, DNS-pinned public HTTPS delivery, no redirects, an
+eight-second timeout, and six bounded attempts. See
+[Trust webhooks and HMAC verification](webhooks.md).
+
+Public Trust Profiles expose:
+
+```text
+GET /api/public/trust/vtr_.../status
+GET /api/trust/vtr_.../badge.svg?variant=score
+GET /api/trust/vtr_.../badge.svg?variant=status
+GET /api/trust/vtr_.../badge.svg?variant=arc
+```
+
+Badge Markdown:
+
+```md
+[![Veyra Trust](https://agent-commerce-six.vercel.app/api/trust/vtr_.../badge.svg)](https://agent-commerce-six.vercel.app/trust/vtr_...)
+```
+
+Status and SVG responses use snapshot-derived ETags and mandatory
+revalidation, so a new canonical snapshot invalidates the previous badge
+without publishing owner, credential, job, quote, or payment data.
 
 ## HTTP quickstart
 

@@ -34,17 +34,27 @@ async function main() {
   });
   const watchlist = await server
     .from("trust_watchlists")
-    .select("id,public_id")
+    .select("id,public_id,profile_id")
     .eq("public_id", watchlistId)
     .single();
   assert(
     !watchlist.error && watchlist.data,
     `Production watchlist lookup failed: ${watchlist.error?.message}`,
   );
+  const profile = await server
+    .from("trust_profiles")
+    .select("public_id")
+    .eq("id", watchlist.data.profile_id)
+    .single();
+  assert(
+    !profile.error && profile.data,
+    `Production trust profile lookup failed: ${profile.error?.message}`,
+  );
+  const profileId = profile.data.public_id as string;
 
-  const before = await json(`/api/monitoring/public/${watchlistId}`);
+  const before = await json(`/api/monitoring/public/${profileId}`);
   const previousSnapshot = (
-    before.body.history as Array<{ snapshotId?: string }> | undefined
+    before.body.snapshots as Array<{ snapshotId?: string }> | undefined
   )?.[0]?.snapshotId;
   assert(previousSnapshot, "The scheduler smoke requires an existing baseline snapshot.");
 
@@ -102,33 +112,47 @@ async function main() {
     let history:
       | {
           currentDelta?: { previousSnapshotId?: string | null };
-          history?: Array<{
+          snapshots?: Array<{
             snapshotId?: string;
-            jobId?: string;
             reportHash?: string;
             verificationStatus?: string;
             proofTransactionHash?: string | null;
           }>;
-        }
+      }
       | undefined;
+    let privateSnapshotId: string | null = null;
     for (let attempt = 0; attempt < 100; attempt += 1) {
       await new Promise((resolve) => setTimeout(resolve, 5_000));
-      const result = await json(`/api/monitoring/public/${watchlistId}`);
+      const persisted = await server
+        .from("trust_monitoring_snapshots")
+        .select("public_id,verification_status,proof_transaction_hash")
+        .eq("job_id", jobId)
+        .maybeSingle();
+      assert(
+        !persisted.error,
+        `Scheduled snapshot lookup failed: ${persisted.error?.message}`,
+      );
+      privateSnapshotId = persisted.data?.public_id ?? null;
+      const result = await json(`/api/monitoring/public/${profileId}`);
       assert(
         result.response.ok,
         `Public trust history failed with HTTP ${result.response.status}.`,
       );
       history = result.body;
       if (
-        history.history?.[0]?.jobId === jobId &&
-        history.history[0].verificationStatus === "verified" &&
-        history.history[0].proofTransactionHash
+        privateSnapshotId &&
+        history.snapshots?.[0]?.snapshotId === privateSnapshotId &&
+        history.snapshots[0].verificationStatus === "verified" &&
+        history.snapshots[0].proofTransactionHash
       ) {
         break;
       }
     }
-    const snapshot = history?.history?.[0];
-    assert(snapshot?.jobId === jobId, "Scheduled snapshot was not persisted.");
+    const snapshot = history?.snapshots?.[0];
+    assert(
+      privateSnapshotId && snapshot?.snapshotId === privateSnapshotId,
+      "Scheduled snapshot was not persisted.",
+    );
     assert(
       history?.currentDelta?.previousSnapshotId === previousSnapshot,
       "Scheduled delta is not linked to the previous immutable snapshot.",

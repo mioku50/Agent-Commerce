@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import { trustMonitoringErrorResponse } from "@/lib/monitoring/http";
-import { getPublicTrustHistory } from "@/lib/monitoring/service";
+import { getPublicTrustProfile } from "@/lib/monitoring/service";
 
-type RouteContext = { params: Promise<{ watchlistId: string }> };
+type RouteContext = { params: Promise<{ publicId: string }> };
 
 export const dynamic = "force-dynamic";
 
 export async function GET(_request: Request, { params }: RouteContext) {
   try {
-    const { watchlistId } = await params;
-    return NextResponse.json(await getPublicTrustHistory(watchlistId), {
+    const { publicId } = await params;
+    return NextResponse.json(await getPublicTrustProfile(publicId), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {

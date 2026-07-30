@@ -18,6 +18,18 @@ export const MACHINE_API_SCOPES = [
   "results:read",
 ] as const;
 
+export const MACHINE_API_OPTIONAL_SCOPES = [
+  "alerts:read",
+  "alerts:write",
+  "webhooks:read",
+  "webhooks:write",
+] as const;
+
+export const MACHINE_API_AVAILABLE_SCOPES = [
+  ...MACHINE_API_SCOPES,
+  ...MACHINE_API_OPTIONAL_SCOPES,
+] as const;
+
 export const BYOA_SCOPES = [
   "manifest:read",
   "quotes:create",
@@ -25,6 +37,10 @@ export const BYOA_SCOPES = [
   "results:read",
   "workflows:read",
   "runs:create",
+  "alerts:read",
+  "alerts:write",
+  "webhooks:read",
+  "webhooks:write",
 ] as const;
 
 export type ByoaScope = (typeof BYOA_SCOPES)[number];

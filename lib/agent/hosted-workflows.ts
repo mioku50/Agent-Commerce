@@ -149,7 +149,7 @@ export type HostedFinalReport = {
 
 const WORKFLOW_LABELS: Record<HostedWorkflowType, string> = {
   github_due_diligence: "GitHub Project Due Diligence",
-  agent_trust_report: "Veyra Agent Trust Report",
+  agent_trust_report: `${BRAND.name} Agent Trust Report`,
   sentiment_tone: "Sentiment & Tone Report",
   builder_update: "Builder Update Summary",
   market_context: "Market Context Brief",
@@ -420,7 +420,7 @@ export function effectiveWorkflowTask(input: HostedWorkflowRequest) {
   }
   if (input.workflowType === "agent_trust_report") {
     const sources = [
-      input.agentTrustInput?.agentId ? "Veyra agent identity" : null,
+      input.agentTrustInput?.agentId ? `${BRAND.name} agent identity` : null,
       input.agentTrustInput?.agentWallet ? "registered wallet signals" : null,
       input.repository ? "GitHub repository intelligence" : null,
       input.agentTrustInput?.contractAddress

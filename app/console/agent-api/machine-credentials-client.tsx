@@ -9,7 +9,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Label } from "@/components/ui/label";
 import { BRAND } from "@/lib/brand";
 
-const machineScopes = ["workflows:read", "quotes:create", "runs:create", "results:read"] as const;
+const machineCoreScopes = ["workflows:read", "quotes:create", "runs:create", "results:read"] as const;
+const trustAutomationScopes = [
+  "alerts:read",
+  "alerts:write",
+  "webhooks:read",
+  "webhooks:write",
+] as const;
 
 type AgentSummary = {
   id: string;
@@ -48,6 +54,7 @@ export function MachineCredentialsClient() {
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [credentials, setCredentials] = useState<MachineCredential[]>([]);
   const [oneTimeSecret, setOneTimeSecret] = useState<string | null>(null);
+  const [trustAutomation, setTrustAutomation] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -111,7 +118,10 @@ export function MachineCredentialsClient() {
         body: JSON.stringify({
           credentialType: "machine_api",
           label: `${BRAND.agentApi} Credential`,
-          scopes: machineScopes,
+          scopes: [
+            ...machineCoreScopes,
+            ...(trustAutomation ? trustAutomationScopes : []),
+          ],
           expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1_000).toISOString(),
         }),
       });
@@ -185,9 +195,26 @@ export function MachineCredentialsClient() {
           <Button asChild className="mt-3" variant="outline"><Link href="/console/agents">Register agent namespace</Link></Button>
         </div>
       ) : (
-        <Button onClick={() => void createCredential()} disabled={busy || selectedAgent?.status !== "active"}>
-          <KeyRound className="mr-2 size-4" /> Create {BRAND.agentApi} Credential
-        </Button>
+        <div className="grid gap-3">
+          <label className="flex items-start gap-3 rounded-md border p-3 text-sm">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={trustAutomation}
+              onChange={(event) => setTrustAutomation(event.target.checked)}
+            />
+            <span>
+              <span className="block font-medium">Enable Trust Alerts & Webhooks</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Explicitly adds alerts:read/write and webhooks:read/write. Existing
+                credentials are never upgraded automatically.
+              </span>
+            </span>
+          </label>
+          <Button onClick={() => void createCredential()} disabled={busy || selectedAgent?.status !== "active"}>
+            <KeyRound className="mr-2 size-4" /> Create {BRAND.agentApi} Credential
+          </Button>
+        </div>
       )}
 
       {oneTimeSecret ? (

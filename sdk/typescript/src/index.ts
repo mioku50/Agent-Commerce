@@ -118,8 +118,16 @@ export type TrustMonitoringCadence = "manual" | "daily" | "weekly";
 
 export type TrustWatchlist = {
   id: string;
+  profileId: string;
   label: string;
   input: AgentTrustReportInput;
+  objectType:
+    | "github_repository"
+    | "ai_agent"
+    | "wallet"
+    | "arc_contract"
+    | "service_endpoint";
+  visibility: "private" | "public";
   cadence: TrustMonitoringCadence;
   status: "active" | "paused";
   nextRecheckAt: string | null;
@@ -169,8 +177,11 @@ export type TrustDeltaReport = {
 export type TrustHistory = {
   watchlist: {
     id: string;
+    profileId: string;
     label: string;
     input: AgentTrustReportInput;
+    objectType: TrustWatchlist["objectType"];
+    visibility: "private" | "public";
     cadence: TrustMonitoringCadence;
     status: "active" | "paused";
     lastCheckedAt: string | null;
@@ -192,6 +203,109 @@ export type TrustHistory = {
     delta: TrustDeltaReport;
     reportUrl: string;
   }>;
+};
+
+export type PublicTrustProfile = {
+  profile: {
+    id: string;
+    name: string;
+    objectType: TrustWatchlist["objectType"];
+    identity: {
+      agentId: string | null;
+      repositoryUrl: string | null;
+      wallet: string | null;
+      contractAddress: string | null;
+      serviceEndpoint: string | null;
+    };
+    currentScore: number | null;
+    trustStatus: string | null;
+    scoreChange: number | null;
+    lastCheckedAt: string | null;
+    lastVerifiedOnArcAt: string | null;
+    snapshotCount: number;
+  };
+  currentReport: AgentTrustReport | null;
+  currentDelta: TrustDeltaReport | null;
+  snapshots: Array<{
+    snapshotId: string;
+    sequence: number;
+    score: number | null;
+    trustStatus: string;
+    reportHash: string;
+    verificationStatus: string;
+    verifiedOnArc: boolean;
+    proofTransactionHash: string | null;
+    proofUrl: string | null;
+    observedAt: string;
+    newRiskCount: number;
+    resolvedRiskCount: number;
+    delta: TrustDeltaReport;
+    fullReportUrl: string;
+  }>;
+};
+
+export type PublicTrustStatus = {
+  profileId: string;
+  score: number | null;
+  status: string | null;
+  verifiedOnArc: boolean;
+  lastCheckedAt: string | null;
+  profileUrl: string;
+};
+
+export type TrustAlertEventType =
+  | "trust_score_changed"
+  | "trust_status_changed"
+  | "risk_added"
+  | "risk_resolved"
+  | "verification_failed"
+  | "recheck_failed"
+  | "subject_unavailable";
+
+export type TrustAlert = {
+  id: string;
+  type: TrustAlertEventType;
+  state: "unread" | "read" | "archived";
+  message: string;
+  profileId: string;
+  profileUrl: string;
+  snapshotId: string | null;
+  snapshotUrl: string;
+  change: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type WebhookSubscription = {
+  id: string;
+  name: string;
+  endpointUrl: string;
+  endpointDomain: string;
+  profileIds: string[];
+  eventTypes: TrustAlertEventType[];
+  status: "active" | "paused";
+  lastSuccessfulDelivery: string | null;
+  lastFailedDelivery: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WebhookDelivery = {
+  id: string;
+  eventId: string;
+  eventType: TrustAlertEventType | "test";
+  eventCreatedAt: string;
+  attemptNumber: number;
+  httpStatus: number | null;
+  durationMs: number | null;
+  status:
+    | "pending"
+    | "delivering"
+    | "delivered"
+    | "retry_scheduled"
+    | "failed";
+  nextRetryAt: string | null;
+  errorCategory: string | null;
+  deliveredAt: string | null;
 };
 
 export type TrustRecheckQuote = {
@@ -558,6 +672,7 @@ export class AgentCommerceClient {
       label?: string;
       input: AgentTrustReportInput;
       cadence?: TrustMonitoringCadence;
+      visibility?: "private" | "public";
     },
     options: { idempotencyKey?: string; signal?: AbortSignal } = {},
   ) {
@@ -581,6 +696,159 @@ export class AgentCommerceClient {
       { method: "GET" },
       options,
     );
+  }
+
+  async getPublicTrustProfile(
+    profileId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<PublicTrustProfile>(
+      `/api/monitoring/public/${encodeURIComponent(profileId)}`,
+      { method: "GET" },
+      options,
+    );
+  }
+
+  async getPublicTrustStatus(
+    profileId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<PublicTrustStatus>(
+      `/api/public/trust/${encodeURIComponent(profileId)}/status`,
+      { method: "GET" },
+      options,
+    );
+  }
+
+  async listAlerts(
+    filters: {
+      profileId?: string;
+      type?: TrustAlertEventType;
+      state?: "unread" | "read" | "archived";
+      signal?: AbortSignal;
+    } = {},
+  ) {
+    const params = new URLSearchParams();
+    if (filters.profileId) params.set("profileId", filters.profileId);
+    if (filters.type) params.set("type", filters.type);
+    if (filters.state) params.set("state", filters.state);
+    return this.request<{ alerts: TrustAlert[]; unreadCount: number }>(
+      `/api/agent/v1/alerts${params.size ? `?${params}` : ""}`,
+      { method: "GET" },
+      { signal: filters.signal },
+    );
+  }
+
+  async markAlertRead(
+    alertId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<{ id: string; state: "read" }>(
+      `/api/agent/v1/alerts/${encodeURIComponent(alertId)}/read`,
+      { method: "POST", body: "{}" },
+      options,
+    );
+  }
+
+  async listWebhooks(options: { signal?: AbortSignal } = {}) {
+    const result = await this.request<{ webhooks: WebhookSubscription[] }>(
+      "/api/agent/v1/webhooks",
+      { method: "GET" },
+      options,
+    );
+    return result.webhooks;
+  }
+
+  async createWebhook(
+    input: {
+      name: string;
+      endpointUrl: string;
+      profileIds: string[];
+      eventTypes: TrustAlertEventType[];
+    },
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<{
+      webhook: WebhookSubscription;
+      secret: string;
+      warning: string;
+    }>(
+      "/api/agent/v1/webhooks",
+      { method: "POST", body: JSON.stringify(input) },
+      options,
+    );
+  }
+
+  async updateWebhook(
+    webhookId: string,
+    input: Partial<{
+      name: string;
+      endpointUrl: string;
+      profileIds: string[];
+      eventTypes: TrustAlertEventType[];
+      status: "active" | "paused";
+    }>,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<WebhookSubscription>(
+      `/api/agent/v1/webhooks/${encodeURIComponent(webhookId)}`,
+      { method: "PATCH", body: JSON.stringify(input) },
+      options,
+    );
+  }
+
+  async deleteWebhook(
+    webhookId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<{ deleted: true }>(
+      `/api/agent/v1/webhooks/${encodeURIComponent(webhookId)}`,
+      { method: "DELETE" },
+      options,
+    );
+  }
+
+  async sendWebhookTest(
+    webhookId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<{
+      eventId: string;
+      deliveryId: string | null;
+      scheduled: true;
+    }>(
+      `/api/agent/v1/webhooks/${encodeURIComponent(webhookId)}/test`,
+      { method: "POST", body: "{}" },
+      options,
+    );
+  }
+
+  async rotateWebhookSecret(
+    webhookId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<{
+      webhook: WebhookSubscription;
+      secret: string;
+      previousSecretValidUntil: string;
+      warning: string;
+    }>(
+      `/api/agent/v1/webhooks/${encodeURIComponent(webhookId)}/rotate-secret`,
+      { method: "POST", body: "{}" },
+      options,
+    );
+  }
+
+  async listWebhookDeliveries(
+    webhookId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    const result = await this.request<{ deliveries: WebhookDelivery[] }>(
+      `/api/agent/v1/webhooks/${encodeURIComponent(webhookId)}/deliveries`,
+      { method: "GET" },
+      options,
+    );
+    return result.deliveries;
   }
 
   async createWatchlistRecheck(

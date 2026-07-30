@@ -193,7 +193,7 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
   },
   {
     value: "agent_trust_report",
-    label: "Veyra Agent Trust Report",
+    label: `${BRAND.name} Agent Trust Report`,
     shortLabel: "Agent Trust Report",
     description:
       "Review identity, code health, execution history, service reliability, payments, and verification signals in one report.",

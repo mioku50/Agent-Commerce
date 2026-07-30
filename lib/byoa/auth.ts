@@ -4,6 +4,7 @@ import { getByoaConfig } from "./config.ts";
 import {
   BYOA_SCOPES,
   BYOA_WORKFLOW_SCOPES,
+  MACHINE_API_AVAILABLE_SCOPES,
   MACHINE_API_SCOPES,
   type ByoaScope,
   type CredentialType,
@@ -96,6 +97,24 @@ export function scopesForCredentialType(type: CredentialType): readonly ByoaScop
 export function normalizeCredentialScopes(value: unknown, type: CredentialType): ByoaScope[] {
   const scopes = normalizeScopes(value);
   const required = scopesForCredentialType(type);
+  if (type === "machine_api") {
+    if (
+      required.some((scope) => !scopes.includes(scope)) ||
+      scopes.some(
+        (scope) =>
+          !MACHINE_API_AVAILABLE_SCOPES.includes(
+            scope as (typeof MACHINE_API_AVAILABLE_SCOPES)[number],
+          ),
+      )
+    ) {
+      throw new Error(
+        "Machine API credentials require the core permission set and only support explicit alerts/webhooks additions.",
+      );
+    }
+    return MACHINE_API_AVAILABLE_SCOPES.filter((scope) =>
+      scopes.includes(scope),
+    );
+  }
   if (
     scopes.length !== required.length ||
     required.some((scope) => !scopes.includes(scope))

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { BRAND } from "../brand.ts";
 import type { GitHubCategoryAssessment } from "../agent/github-due-diligence.ts";
 import { createEvidenceItem, evidenceConfidence } from "./evidence.ts";
 import { calculateTrustScore, scoreCategory } from "./scoring.ts";
@@ -98,7 +99,7 @@ function identityCategory(
           detail: unavailable
             ? "Try again or add another public data source."
             : "No matching public Agent ID or registered wallet was found.",
-          source: "Veyra Agent Registry",
+          source: `${BRAND.name} Agent Registry`,
           observedAt: identity.checkedAt,
         }),
       ],
@@ -120,7 +121,7 @@ function identityCategory(
       signal: positive ? "positive" : "review",
       title,
       detail,
-      source: "Veyra Agent Registry",
+      source: `${BRAND.name} Agent Registry`,
       observedAt: identity.checkedAt,
     });
     (positive ? positiveSignals : reviewItems).push(item);
@@ -213,8 +214,8 @@ function executionCategory(
     detail: `${success}% success rate across the available terminal workflow history.`,
     source:
       execution.status === "restricted"
-        ? "Veyra Agent Passport aggregate"
-        : "Veyra workflow history",
+        ? `${BRAND.name} Agent Passport aggregate`
+        : `${BRAND.name} workflow history`,
     observedAt: execution.checkedAt,
   });
   (success >= 80 ? positiveSignals : reviewItems).push(successItem);
@@ -224,7 +225,7 @@ function executionCategory(
       signal: verification >= 75 ? "positive" : "review",
       title: "Verification coverage",
       detail: `${verification}% of the available completed history has verified proof coverage.`,
-      source: "Veyra Arc proof aggregates",
+      source: `${BRAND.name} Arc proof aggregates`,
       observedAt: execution.checkedAt,
     });
     (verification >= 75 ? positiveSignals : reviewItems).push(item);
@@ -270,7 +271,7 @@ function paymentCategory(
     signal: "positive",
     title: "Receipts recorded",
     detail: `${history.receiptsCount} receipt(s) and ${history.totalPaidUsdc ?? "unknown"} USDC in available workflow spend were recorded.`,
-    source: "Veyra payment aggregates",
+    source: `${BRAND.name} payment aggregates`,
     observedAt: history.checkedAt,
   });
   const proofItem = evidence({
@@ -278,7 +279,7 @@ function paymentCategory(
     signal: verification >= 75 ? "positive" : "review",
     title: "Receipt proof coverage",
     detail: `${verification}% verification coverage was observed.`,
-    source: "Veyra Arc proof aggregates",
+    source: `${BRAND.name} Arc proof aggregates`,
     observedAt: history.checkedAt,
   });
   return scoreCategory({
@@ -306,7 +307,7 @@ function serviceCategory(
       signal: active ? "positive" : "review",
       title: `${service.name} publication status`,
       detail: `Version ${service.version} is ${service.status} at ${service.priceUsdc} USDC.`,
-      source: "Veyra public seller catalog",
+      source: `${BRAND.name} public seller catalog`,
       observedAt: sources.services.checkedAt,
     });
     (active ? positiveSignals : reviewItems).push(statusItem);
@@ -324,7 +325,7 @@ function serviceCategory(
         signal: healthy ? "positive" : "review",
         title: `${service.name} availability`,
         detail: `Latest persisted service availability status is ${service.availabilityStatus}.`,
-        source: "Veyra seller availability monitor",
+        source: `${BRAND.name} seller availability monitor`,
         observedAt: sources.services.checkedAt,
       });
       (healthy ? positiveSignals : reviewItems).push(item);
@@ -337,7 +338,7 @@ function serviceCategory(
         signal: reliable ? "positive" : "review",
         title: `${service.name} execution outcomes`,
         detail: `${service.successfulExecutions ?? 0} successful execution(s) and ${service.failureRate}% failure/reversal rate are present in the persisted seller ledger aggregate.`,
-        source: "Veyra seller revenue ledger aggregate",
+        source: `${BRAND.name} seller revenue ledger aggregate`,
         observedAt: sources.services.checkedAt,
       });
       (reliable ? positiveSignals : reviewItems).push(item);
@@ -349,7 +350,7 @@ function serviceCategory(
           signal: "positive",
           title: `${service.name} verified settlements`,
           detail: `${service.verifiedSettlementCount} settlement(s) reached the persisted settled state.`,
-          source: "Veyra seller settlement aggregate",
+          source: `${BRAND.name} seller settlement aggregate`,
           observedAt: sources.services.checkedAt,
         }),
       );
@@ -366,7 +367,7 @@ function serviceCategory(
       detail: reachable
         ? `One protected read-only check returned ${endpoint.httpStatusCategory ?? "an HTTP response"} in ${endpoint.responseTimeMs ?? "unknown"}ms. This is not an uptime measurement.`
         : `The protected one-request snapshot failed with ${endpoint.errorCategory ?? "endpoint_unreachable"}. This is not an uptime measurement.`,
-      source: "Veyra SSRF-safe endpoint probe",
+      source: `${BRAND.name} SSRF-safe endpoint probe`,
       observedAt: endpoint.checkedAt,
     });
     (reachable ? positiveSignals : reviewItems).push(item);
@@ -454,7 +455,7 @@ function contractCategory(
         signal: "neutral",
         title: "Source verification unavailable",
         detail: "Explorer source verification was not included in this snapshot.",
-        source: "Veyra contract snapshot",
+        source: `${BRAND.name} contract snapshot`,
         observedAt: contract.checkedAt,
       }),
     );
@@ -512,7 +513,7 @@ export function buildAgentTrustReport(input: {
   const excluded = trustScore.excludedCategories
     .map((key) => CATEGORY_LABELS[key as keyof typeof CATEGORY_LABELS] ?? key);
   const executiveSummary = [
-    `Veyra evaluated ${subjectName} using ${evidenceItems.length} evidence item(s) from the sources available for this snapshot.`,
+    `${BRAND.name} evaluated ${subjectName} using ${evidenceItems.length} evidence item(s) from the sources available for this snapshot.`,
     trustScore.overall === null
       ? "There were fewer than two scorable categories, so no overall Trust Score was produced."
       : `The deterministic Trust Score is ${trustScore.overall}/100 with status ${trustScore.status.replaceAll("_", " ")}.`,
@@ -528,7 +529,9 @@ export function buildAgentTrustReport(input: {
   ];
   const unavailableSources = [
     input.sources.code.status === "unavailable" ? "GitHub intelligence" : null,
-    input.sources.identity.status === "unavailable" ? "Veyra Agent Registry" : null,
+    input.sources.identity.status === "unavailable"
+      ? `${BRAND.name} Agent Registry`
+      : null,
     input.sources.execution.status === "unavailable" ? "Execution history" : null,
     input.sources.services.status === "unavailable" ? "Seller services" : null,
     input.sources.contract.status === "unavailable" ? "Arc contract provider" : null,
@@ -587,13 +590,13 @@ export function buildAgentTrustReport(input: {
           }]
         : []),
       {
-        source: "Veyra Agent Registry",
+        source: `${BRAND.name} Agent Registry`,
         fetchedAt: input.sources.identity.checkedAt,
         cacheMode: "server_read",
         upstreamStatus: input.sources.identity.status,
       },
       {
-        source: "Veyra workflow and receipt aggregates",
+        source: `${BRAND.name} workflow and receipt aggregates`,
         fetchedAt: input.sources.execution.checkedAt,
         cacheMode: "server_read",
         upstreamStatus: input.sources.execution.status,

@@ -1,0 +1,36 @@
+import { after, NextRequest, NextResponse } from "next/server";
+import { authenticateMachineRequest } from "@/lib/api/machine-auth";
+import { monitoringMachineError } from "@/lib/monitoring/machine-http";
+import {
+  createTestWebhookEvent,
+  deliverDueWebhooks,
+} from "@/lib/monitoring/webhooks";
+
+type Context = { params: Promise<{ webhookId: string }> };
+export const dynamic = "force-dynamic";
+
+export async function POST(request: NextRequest, { params }: Context) {
+  const auth = await authenticateMachineRequest(request, "webhooks:write");
+  if (!auth.ok) return auth.response;
+  try {
+    const { webhookId } = await params;
+    const result = await createTestWebhookEvent(
+      {
+        ownerWallet: auth.context.ownerWallet,
+        byoaAgentId: auth.context.agentId,
+        machineCredentialId: auth.context.credential.id,
+      },
+      webhookId,
+    );
+    after(() => deliverDueWebhooks(10).catch(() => undefined));
+    return NextResponse.json(result, {
+      status: 202,
+      headers: { "Cache-Control": "no-store" },
+    });
+  } catch (error) {
+    return monitoringMachineError(
+      error,
+      "/api/agent/v1/webhooks/[webhookId]/test",
+    );
+  }
+}

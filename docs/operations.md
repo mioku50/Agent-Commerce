@@ -25,6 +25,28 @@ Threshold alerts are emitted as structured Vercel error logs. If
 is delivered with two transient-network retries. The webhook payload contains
 only alert codes, severity, messages, retry policy, environment, and timestamp.
 
+## Trust webhook delivery
+
+Trust alerts use a separate durable delivery queue. Production Supabase Cron
+invokes `/api/internal/webhooks/deliver` every minute because the current
+Vercel plan only supports daily native cron jobs. The worker is authorized by
+the dedicated sensitive `WEBHOOK_DELIVERY_CRON_SECRET`; its URL and bearer
+token are stored in Supabase Vault and are not embedded in the migration or
+cron command. `CRON_SECRET` remains a supported route fallback for Vercel's
+native internal cron calls.
+
+After applying migrations, configure the production scheduler once:
+
+```bash
+npx vercel env run -e production -- \
+  npm run webhooks:production-configure -- \
+  --confirm-production https://agent-commerce-six.vercel.app
+```
+
+The worker claims at most 25 due deliveries atomically. Retry timestamps remain
+1 minute, 5 minutes, 30 minutes, 2 hours, and 12 hours after successive failed
+attempts. Webhook failure never changes the canonical monitoring snapshot.
+
 ## Signals
 
 - workflow failure rate and executions stale for at least ten minutes;

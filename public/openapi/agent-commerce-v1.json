@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Veyra Agent API",
-    "version": "1.2.0",
-    "description": "Machine API for verified Veyra workflows and continuous trust monitoring."
+    "version": "1.4.0",
+    "description": "Machine API for verified Veyra workflows, continuous trust monitoring, alerts, signed webhooks, and public trust badges."
   },
   "servers": [
     {
@@ -347,6 +347,12 @@
                     "type": "string",
                     "enum": ["manual", "daily", "weekly"],
                     "default": "manual"
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": ["private", "public"],
+                    "default": "private",
+                    "description": "Explicit publication control. Omitted Machine API watchlists remain private."
                   }
                 }
               }
@@ -446,6 +452,235 @@
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
+    },
+    "/api/monitoring/public/{publicId}": {
+      "get": {
+        "summary": "Retrieve a public Veyra Trust Profile",
+        "operationId": "getPublicTrustProfile",
+        "security": [],
+        "description": "Returns only canonical public trust information and Arc proofs. Private or unknown profiles both return 404.",
+        "parameters": [{
+          "name": "publicId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" }
+        }],
+        "responses": {
+          "200": {
+            "description": "Public trust profile",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PublicTrustProfile" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/public/trust/{publicId}/status": {
+      "get": {
+        "summary": "Retrieve compact public Trust Profile status",
+        "operationId": "getPublicTrustStatus",
+        "security": [],
+        "description": "Returns the current public score, status, latest Arc verification state, freshness, and canonical profile URL. Private and unknown profiles return the same 404.",
+        "parameters": [{
+          "name": "publicId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" }
+        }],
+        "responses": {
+          "200": {
+            "description": "Compact public trust status",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PublicTrustStatus" }
+              }
+            }
+          },
+          "304": { "description": "The supplied ETag is still current" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/trust/{publicId}/badge.svg": {
+      "get": {
+        "summary": "Render a public Veyra Trust SVG badge",
+        "operationId": "getTrustBadge",
+        "security": [],
+        "description": "Server-rendered SVG. Use variant=score, status, or arc. Private and unknown profiles return the same 404. ETag changes with public status and snapshot freshness.",
+        "parameters": [
+          {
+            "name": "publicId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" }
+          },
+          {
+            "name": "variant",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": ["score", "status", "arc"], "default": "score" }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Veyra Trust SVG badge",
+            "content": {
+              "image/svg+xml": { "schema": { "type": "string" } }
+            }
+          },
+          "304": { "description": "The supplied ETag is still current" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/agent/v1/alerts": {
+      "get": {
+        "summary": "List credential-scoped trust alerts",
+        "operationId": "listTrustAlerts",
+        "description": "Requires the explicitly granted `alerts:read` scope. Existing credentials do not receive this permission automatically.",
+        "responses": {
+          "200": {
+            "description": "Alerts and unread count",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["alerts", "unreadCount"],
+                  "properties": {
+                    "alerts": { "type": "array", "items": { "$ref": "#/components/schemas/TrustAlert" } },
+                    "unreadCount": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      }
+    },
+    "/api/agent/v1/alerts/{alertId}/read": {
+      "post": {
+        "summary": "Mark a credential-scoped trust alert as read",
+        "operationId": "markTrustAlertRead",
+        "description": "Requires `alerts:write`. A foreign alert returns 404.",
+        "parameters": [{
+          "name": "alertId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^evt_[0-9a-f]{24}$" }
+        }],
+        "responses": {
+          "200": { "description": "Alert state updated" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/agent/v1/webhooks": {
+      "get": {
+        "summary": "List credential-scoped webhook subscriptions",
+        "operationId": "listWebhooks",
+        "description": "Requires the explicitly granted `webhooks:read` scope.",
+        "responses": {
+          "200": {
+            "description": "Webhook subscriptions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "webhooks": { "type": "array", "items": { "$ref": "#/components/schemas/WebhookSubscription" } }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" }
+        }
+      },
+      "post": {
+        "summary": "Create a signed webhook subscription",
+        "operationId": "createWebhook",
+        "description": "Requires `webhooks:write`. The HMAC secret is returned once.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/WebhookSubscriptionInput" }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Webhook and one-time signing secret" },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/agent/v1/webhooks/{webhookId}": {
+      "patch": {
+        "summary": "Update or pause a webhook",
+        "operationId": "updateWebhook",
+        "description": "Requires `webhooks:write`. A foreign webhook returns 404.",
+        "parameters": [{ "$ref": "#/components/parameters/WebhookId" }],
+        "responses": {
+          "200": { "description": "Updated webhook" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "summary": "Delete a webhook",
+        "operationId": "deleteWebhook",
+        "parameters": [{ "$ref": "#/components/parameters/WebhookId" }],
+        "responses": {
+          "200": { "description": "Webhook deleted" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/agent/v1/webhooks/{webhookId}/test": {
+      "post": {
+        "summary": "Schedule a signed test event",
+        "operationId": "sendWebhookTest",
+        "parameters": [{ "$ref": "#/components/parameters/WebhookId" }],
+        "responses": {
+          "202": { "description": "Test delivery scheduled" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/agent/v1/webhooks/{webhookId}/rotate-secret": {
+      "post": {
+        "summary": "Rotate the webhook signing secret",
+        "operationId": "rotateWebhookSecret",
+        "description": "Returns the new secret once. The previous secret is included in signatures for a ten-minute grace period.",
+        "parameters": [{ "$ref": "#/components/parameters/WebhookId" }],
+        "responses": {
+          "200": { "description": "Secret rotated" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/agent/v1/webhooks/{webhookId}/deliveries": {
+      "get": {
+        "summary": "List sanitized webhook delivery history",
+        "operationId": "listWebhookDeliveries",
+        "parameters": [{ "$ref": "#/components/parameters/WebhookId" }],
+        "responses": {
+          "200": { "description": "Delivery metadata without response bodies or secrets" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
     }
   },
   "components": {
@@ -467,9 +702,101 @@
           "type": "string",
           "example": "idemp_9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
         }
+      },
+      "WebhookId": {
+        "name": "webhookId",
+        "in": "path",
+        "required": true,
+        "schema": { "type": "string", "pattern": "^whk_[0-9a-f]{24}$" }
       }
     },
     "schemas": {
+      "PublicTrustStatus": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["profileId", "score", "status", "verifiedOnArc", "lastCheckedAt", "profileUrl"],
+        "properties": {
+          "profileId": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" },
+          "score": { "type": "integer", "minimum": 0, "maximum": 100, "nullable": true },
+          "status": {
+            "type": "string",
+            "enum": ["strong_signals", "review_recommended", "high_attention", "limited_data"],
+            "nullable": true
+          },
+          "verifiedOnArc": { "type": "boolean" },
+          "lastCheckedAt": { "type": "string", "format": "date-time", "nullable": true },
+          "profileUrl": { "type": "string", "format": "uri" }
+        }
+      },
+      "TrustAlertEventType": {
+        "type": "string",
+        "enum": [
+          "trust_score_changed",
+          "trust_status_changed",
+          "risk_added",
+          "risk_resolved",
+          "verification_failed",
+          "recheck_failed",
+          "subject_unavailable"
+        ]
+      },
+      "TrustAlert": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "state", "message", "profileId", "profileUrl", "snapshotId", "snapshotUrl", "change", "createdAt"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^evt_[0-9a-f]{24}$" },
+          "type": { "$ref": "#/components/schemas/TrustAlertEventType" },
+          "state": { "type": "string", "enum": ["unread", "read", "archived"] },
+          "message": { "type": "string" },
+          "profileId": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" },
+          "profileUrl": { "type": "string" },
+          "snapshotId": { "type": "string", "nullable": true },
+          "snapshotUrl": { "type": "string" },
+          "change": { "type": "object" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "WebhookSubscriptionInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "endpointUrl", "profileIds", "eventTypes"],
+        "properties": {
+          "name": { "type": "string", "minLength": 2, "maxLength": 80 },
+          "endpointUrl": { "type": "string", "format": "uri", "pattern": "^https://" },
+          "profileIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" }
+          },
+          "eventTypes": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/TrustAlertEventType" }
+          }
+        }
+      },
+      "WebhookSubscription": {
+        "allOf": [
+          { "$ref": "#/components/schemas/WebhookSubscriptionInput" },
+          {
+            "type": "object",
+            "required": ["id", "endpointDomain", "status", "createdAt", "updatedAt"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^whk_[0-9a-f]{24}$" },
+              "endpointDomain": { "type": "string" },
+              "status": { "type": "string", "enum": ["active", "paused"] },
+              "lastSuccessfulDelivery": { "type": "string", "format": "date-time", "nullable": true },
+              "lastFailedDelivery": { "type": "string", "format": "date-time", "nullable": true },
+              "createdAt": { "type": "string", "format": "date-time" },
+              "updatedAt": { "type": "string", "format": "date-time" }
+            }
+          }
+        ]
+      },
       "MachineError": {
         "type": "object",
         "required": ["error"],
@@ -549,13 +876,19 @@
       "TrustWatchlist": {
         "type": "object",
         "required": [
-          "id", "label", "input", "cadence", "status", "currentScore",
+          "id", "profileId", "label", "input", "objectType", "visibility", "cadence", "status", "currentScore",
           "verificationStatus", "publicHistoryUrl", "createdAt", "updatedAt"
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" },
+          "profileId": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" },
           "label": { "type": "string" },
           "input": { "$ref": "#/components/schemas/AgentTrustReportInput" },
+          "objectType": {
+            "type": "string",
+            "enum": ["github_repository", "ai_agent", "wallet", "arc_contract", "service_endpoint"]
+          },
+          "visibility": { "type": "string", "enum": ["private", "public"] },
           "cadence": { "type": "string", "enum": ["manual", "daily", "weekly"] },
           "status": { "type": "string", "enum": ["active", "paused"] },
           "nextRecheckAt": { "type": "string", "format": "date-time", "nullable": true },
@@ -613,11 +946,17 @@
         "properties": {
           "watchlist": {
             "type": "object",
-            "required": ["id", "label", "input", "cadence", "status", "lastCheckedAt", "nextRecheckAt"],
+            "required": ["id", "profileId", "label", "input", "objectType", "visibility", "cadence", "status", "lastCheckedAt", "nextRecheckAt"],
             "properties": {
               "id": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" },
+              "profileId": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" },
               "label": { "type": "string" },
               "input": { "$ref": "#/components/schemas/AgentTrustReportInput" },
+              "objectType": {
+                "type": "string",
+                "enum": ["github_repository", "ai_agent", "wallet", "arc_contract", "service_endpoint"]
+              },
+              "visibility": { "type": "string", "enum": ["private", "public"] },
               "cadence": { "type": "string", "enum": ["manual", "daily", "weekly"] },
               "status": { "type": "string", "enum": ["active", "paused"] },
               "lastCheckedAt": { "type": "string", "format": "date-time", "nullable": true },
@@ -654,6 +993,75 @@
                 "observedAt": { "type": "string", "format": "date-time" },
                 "delta": { "$ref": "#/components/schemas/TrustDeltaReport" },
                 "reportUrl": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "PublicTrustProfile": {
+        "type": "object",
+        "required": ["profile", "currentReport", "currentDelta", "snapshots"],
+        "properties": {
+          "profile": {
+            "type": "object",
+            "required": ["id", "name", "objectType", "identity", "currentScore", "trustStatus", "scoreChange", "lastCheckedAt", "lastVerifiedOnArcAt", "snapshotCount"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" },
+              "name": { "type": "string" },
+              "objectType": {
+                "type": "string",
+                "enum": ["github_repository", "ai_agent", "wallet", "arc_contract", "service_endpoint"]
+              },
+              "identity": {
+                "type": "object",
+                "properties": {
+                  "agentId": { "type": "string", "nullable": true },
+                  "repositoryUrl": { "type": "string", "nullable": true },
+                  "wallet": { "type": "string", "nullable": true },
+                  "contractAddress": { "type": "string", "nullable": true },
+                  "serviceEndpoint": { "type": "string", "nullable": true }
+                }
+              },
+              "currentScore": { "type": "integer", "nullable": true },
+              "trustStatus": { "type": "string", "nullable": true },
+              "scoreChange": { "type": "integer", "nullable": true },
+              "lastCheckedAt": { "type": "string", "format": "date-time", "nullable": true },
+              "lastVerifiedOnArcAt": { "type": "string", "format": "date-time", "nullable": true },
+              "snapshotCount": { "type": "integer" }
+            }
+          },
+          "currentReport": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/AgentTrustReportResponse" },
+              { "type": "null" }
+            ]
+          },
+          "currentDelta": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/TrustDeltaReport" },
+              { "type": "null" }
+            ]
+          },
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["snapshotId", "sequence", "score", "trustStatus", "reportHash", "verificationStatus", "verifiedOnArc", "proofTransactionHash", "proofUrl", "observedAt", "newRiskCount", "resolvedRiskCount", "delta", "fullReportUrl"],
+              "properties": {
+                "snapshotId": { "type": "string" },
+                "sequence": { "type": "integer" },
+                "score": { "type": "integer", "nullable": true },
+                "trustStatus": { "type": "string" },
+                "reportHash": { "type": "string" },
+                "verificationStatus": { "type": "string" },
+                "verifiedOnArc": { "type": "boolean" },
+                "proofTransactionHash": { "type": "string", "nullable": true },
+                "proofUrl": { "type": "string", "nullable": true },
+                "observedAt": { "type": "string", "format": "date-time" },
+                "newRiskCount": { "type": "integer" },
+                "resolvedRiskCount": { "type": "integer" },
+                "delta": { "$ref": "#/components/schemas/TrustDeltaReport" },
+                "fullReportUrl": { "type": "string" }
               }
             }
           }

@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { BRAND } from "@/lib/brand";
 import { TrustMonitoringClient } from "./trust-monitoring-client";
+import { WebhookSettings } from "./webhook-settings";
 
 export const metadata = {
   title: "Continuous Trust Monitoring",
@@ -64,6 +65,7 @@ export default async function MonitoringPage({ searchParams }: MonitoringPagePro
           serviceEndpoint: first(query.serviceEndpoint),
         }}
       />
+      <WebhookSettings />
     </main>
   );
 }

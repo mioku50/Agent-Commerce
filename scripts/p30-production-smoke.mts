@@ -85,10 +85,10 @@ async function main() {
     `Watchlist creation failed with HTTP ${watchlistResult.response.status}.`,
   );
   const watchlist = watchlistResult.body.watchlist as
-    | { id?: string; publicHistoryUrl?: string }
+    | { id?: string; profileId?: string; publicHistoryUrl?: string }
     | undefined;
   assert(
-    watchlist?.id && watchlist.publicHistoryUrl,
+    watchlist?.id && watchlist.profileId && watchlist.publicHistoryUrl,
     "Watchlist response is incomplete.",
   );
   console.log(`[p30-smoke] Watchlist=${watchlist.id}`);
@@ -191,9 +191,8 @@ async function main() {
         currentDelta?: {
           previousSnapshotId?: string | null;
         };
-        history?: Array<{
+        snapshots?: Array<{
           snapshotId?: string;
-          jobId?: string;
           reportHash?: string;
           verificationStatus?: string;
           proofTransactionHash?: string | null;
@@ -202,22 +201,39 @@ async function main() {
       }
     | undefined;
   for (let attempt = 0; attempt < 60; attempt += 1) {
-    const history = await request(`/api/monitoring/public/${watchlist.id}`);
+    const history = await request(
+      `/api/monitoring/public/${watchlist.profileId}`,
+    );
     assert(
       history.response.ok,
       `Public trust history failed with HTTP ${history.response.status}.`,
     );
     verifiedHistory = history.body;
     if (
-      verifiedHistory.history?.[0]?.verificationStatus === "verified" &&
-      verifiedHistory.history[0].proofTransactionHash
+      verifiedHistory.snapshots?.[0]?.verificationStatus === "verified" &&
+      verifiedHistory.snapshots[0].proofTransactionHash
     ) {
       break;
     }
     await new Promise((resolve) => setTimeout(resolve, 5_000));
   }
-  const snapshot = verifiedHistory?.history?.[0];
-  assert(snapshot?.jobId === jobId, "Trust history is not linked to the smoke job.");
+  const snapshot = verifiedHistory?.snapshots?.[0];
+  const privateHistory = await request(
+    `/api/monitoring/watchlists/${watchlist.id}`,
+    { method: "GET" },
+    ownerA.cookie,
+  );
+  const privateSnapshot = (
+    privateHistory.body.history as
+      | Array<{ snapshotId?: string; jobId?: string }>
+      | undefined
+  )?.[0];
+  assert(
+    privateHistory.response.ok &&
+      privateSnapshot?.jobId === jobId &&
+      privateSnapshot.snapshotId === snapshot?.snapshotId,
+    "The owner-only monitoring history is not linked to the smoke job.",
+  );
   assert(
     snapshot.reportHash ===
       verifiedHistory?.currentReport?.verification?.reportHash,

@@ -13,7 +13,10 @@ import type {
   ByoaCredentialRow,
   ByoaPolicyRow,
 } from "../byoa/types.ts";
-import { MACHINE_API_SCOPES } from "../byoa/types.ts";
+import {
+  MACHINE_API_AVAILABLE_SCOPES,
+  MACHINE_API_SCOPES,
+} from "../byoa/types.ts";
 
 export interface MachineAuthContext {
   credential: ByoaCredentialRow;
@@ -145,8 +148,12 @@ export async function authenticateMachineRequest(
   // Check Scope
   const grantedScopes = new Set<string>(credential.scopes || []);
   const hasClosedMachineScopeSet =
-    grantedScopes.size === MACHINE_API_SCOPES.length &&
-    MACHINE_API_SCOPES.every((scope) => grantedScopes.has(scope));
+    MACHINE_API_SCOPES.every((scope) => grantedScopes.has(scope)) &&
+    [...grantedScopes].every((scope) =>
+      MACHINE_API_AVAILABLE_SCOPES.includes(
+        scope as (typeof MACHINE_API_AVAILABLE_SCOPES)[number],
+      ),
+    );
   const hasScope = hasClosedMachineScopeSet && grantedScopes.has(requiredScope);
 
   if (!hasScope) {
