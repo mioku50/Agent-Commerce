@@ -213,6 +213,19 @@ export function toPublicHostedWorkflowQuote(row: HostedWorkflowQuoteRow) {
   return publicQuote(row);
 }
 
+export function plannerSnapshotForHostedQuote(
+  plan: HostedPlannerSnapshot,
+  metadata: Record<string, unknown>,
+): HostedPlannerSnapshot {
+  return {
+    ...plan,
+    metadata: {
+      ...(plan.metadata ?? {}),
+      ...metadata,
+    },
+  };
+}
+
 export function sponsoredWorkflowAuthorizationMessage(
   quote: Pick<
     PublicHostedWorkflowQuote,
@@ -353,10 +366,7 @@ export async function createHostedWorkflowQuote(input: {
     input_preview: inputMetadata.preview,
     input_hash: inputMetadata.sha256,
     budget_usdc: input.request.budgetUsdc,
-    planner_snapshot: {
-      ...input.plan,
-      metadata: quoteMeta,
-    },
+    planner_snapshot: plannerSnapshotForHostedQuote(input.plan, quoteMeta),
     selected_services: input.plan.selectedServices,
     estimated_provider_cost_usdc: pricing.estimatedProviderCostUsdc,
     platform_fee_usdc: pricing.platformFeeUsdc,

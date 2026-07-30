@@ -11,6 +11,7 @@ import {
   priceHostedWorkflow,
 } from "../lib/agent/workflow-pricing.ts";
 import {
+  plannerSnapshotForHostedQuote,
   sponsoredWorkflowAuthorizationMessage,
   validateHostedWorkflowPaymentEvidence,
 } from "../lib/commerce/workflow-checkout.ts";
@@ -67,6 +68,30 @@ async function main() {
   assert(pricing.listPriceUsdc === 0.002, "Workflow list price is not 0.002 USDC.");
   assert(config.sponsoredQuota === 2, "Sponsored quota configuration is incorrect.");
   assert(config.chainId === ARC_TESTNET_CHAIN_ID, "Checkout is not restricted to Arc Testnet.");
+
+  const trustInput = { agentId: "agt_0123456789abcdefghij" };
+  const trustPlan = {
+    ...plan,
+    version: 4 as const,
+    workflowType: "agent_trust_report" as const,
+    metadata: {
+      agentTrustInput: trustInput,
+      requestedSources: { agentRegistry: true },
+    },
+  };
+  const persistedTrustPlan = plannerSnapshotForHostedQuote(trustPlan, {
+    machine_credential_id: "credential-internal-id",
+  });
+  assert(
+    JSON.stringify(persistedTrustPlan.metadata?.agentTrustInput) ===
+      JSON.stringify(trustInput),
+    "Immutable Agent Trust input was dropped from the quote planner snapshot.",
+  );
+  assert(
+    persistedTrustPlan.metadata?.machine_credential_id ===
+      "credential-internal-id",
+    "Internal quote ownership metadata was not merged into the planner snapshot.",
+  );
 
   expectFailure(
     () => priceHostedWorkflow({ ...plan, estimatedSpendUsdc: 0.0044 }, config),
