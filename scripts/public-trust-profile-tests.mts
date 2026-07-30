@@ -108,6 +108,7 @@ for (const expected of [
   "New risks:",
   "Resolved risks:",
   "Arc verified",
+  "available evidence is not yet sufficient",
   "onMouseEnter",
   "onFocus",
 ]) {

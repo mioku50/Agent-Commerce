@@ -291,7 +291,10 @@ export default async function PublicTrustProfilePage({ params }: RouteContext) {
                 <div className="grid content-start gap-3">
                   <p className="font-medium">
                     {snapshot.delta.previousSnapshotId
-                      ? `Trust Score ${snapshot.delta.score.before ?? "—"} → ${snapshot.delta.score.after ?? "—"}`
+                      ? snapshot.delta.score.before === null &&
+                        snapshot.delta.score.after === null
+                        ? "Trust Score remains limited by available evidence"
+                        : `Trust Score ${snapshot.delta.score.before ?? "—"} → ${snapshot.delta.score.after ?? "—"}`
                       : `Baseline Trust Score ${snapshot.score ?? "—"}`}
                   </p>
                   {snapshot.delta.changes.length === 0 ? (

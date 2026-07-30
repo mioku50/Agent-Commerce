@@ -40,7 +40,9 @@ export function TrustScoreChart({ snapshots }: { snapshots: TrustScorePoint[] })
   if (points.length === 0) {
     return (
       <p className="py-16 text-center text-sm text-muted-foreground">
-        Run the first check to establish a Trust Score baseline.
+        {snapshots.length === 0
+          ? "Run the first check to establish a Trust Score baseline."
+          : "Snapshots are verified, but the available evidence is not yet sufficient for a numeric Trust Score."}
       </p>
     );
   }
