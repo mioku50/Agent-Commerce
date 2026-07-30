@@ -487,18 +487,23 @@ export function createHostedWorkflowPlan(input: {
     ),
   ).filter(
     (service) => {
-      if (input.request.workflowType !== "agent_trust_report") return true;
-      if (input.request.repository) {
+      if (input.request.workflowType === "agent_trust_report") {
+        if (input.request.repository) {
+          return [
+            "github-repository-intelligence",
+            "github-due-diligence-analysis",
+            "agent-trust-finalizer",
+          ].includes(service.slug);
+        }
         return [
-          "github-repository-intelligence",
-          "github-due-diligence-analysis",
+          "text-analyzer",
           "agent-trust-finalizer",
         ].includes(service.slug);
       }
-      return [
-        "text-analyzer",
-        "agent-trust-finalizer",
-      ].includes(service.slug);
+      if (input.request.workflowType === "paid_api_quality") {
+        return service.slug === "api-quality-finalizer";
+      }
+      return true;
     },
   );
   const effectiveTask = effectiveWorkflowTask(input.request);
@@ -564,6 +569,9 @@ function findingForResult(result: BuyerAgentServiceResult) {
     return `${result.serviceName} failed; the report preserves the partial result without retrying a payment automatically.`;
   }
   const response = result.response as Record<string, unknown> | null;
+  if (result.serviceSlug === "api-quality-finalizer" && response) {
+    return `API Quality Report Finalizer validated canonical quality report and published hash attestation for Arc Testnet proof settlement.`;
+  }
   if (result.serviceSlug === "github-repository-intelligence" && response) {
     const repoInfo = response.repository as Record<string, unknown> | undefined;
     return `GitHub Repository Intelligence fetched metadata, recent commits, and releases for ${String(repoInfo?.fullName ?? "the repository")}.`;

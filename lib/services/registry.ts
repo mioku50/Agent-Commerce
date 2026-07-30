@@ -372,6 +372,56 @@ export const serviceRegistry = [
       "Use only as the final step of Veyra Agent Trust Report after all requested evidence sources have been collected.",
   },
   {
+    id: "api-quality-finalizer",
+    slug: "api-quality-finalizer",
+    name: "API Quality Report Finalizer",
+    shortDescription:
+      "Internal x402 finalization step that computes canonical API quality report hash and prepares Arc proof attestation.",
+    longDescription:
+      "Validates and finalizes an API Quality Report, computes its canonical response hash, verifies telemetry observations, and prepares proof publishing on Arc Testnet. Only the configured hosted payer may settle this endpoint.",
+    category: "Verification",
+    method: "POST",
+    endpoint: "/api/provider/api-quality-finalizer",
+    priceLabel: "0.002 USDC",
+    priceUsd: 0.002,
+    status: "live",
+    sourceType: "static",
+    isPaid: true,
+    internalOnly: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        report: { type: "object" },
+      },
+      required: ["report"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        report: { type: "object" },
+        paidAmountUsdc: { type: "string" },
+      },
+      required: ["report", "paidAmountUsdc"],
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/provider/api-quality-finalizer",
+      body: { report: { kind: "api_quality_report" } },
+    },
+    exampleResponse: {
+      report: {
+        kind: "api_quality_report",
+        verification: { status: "verification_pending" },
+      },
+      paidAmountUsdc: "0.0020",
+    },
+    exampleUseCase:
+      "The hosted Veyra workflow purchases final response hash attestation for an API Quality Report on Arc Testnet.",
+    agentReasoningHint:
+      "Use as the final step of Paid API Quality Report to finalize telemetry evaluation and bind canonical report hash to an Arc proof.",
+  },
+
+  {
     id: "agent-task",
     slug: "agent-task",
     name: "Agent Task",

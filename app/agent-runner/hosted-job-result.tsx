@@ -686,7 +686,9 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                         {apiQualityReport.targetServices.join(", ")}
                       </Badge>
                       <Badge className={qualityStatusBadge(apiQualityReport.overallStatus).color}>
-                        Score: {apiQualityReport.overallScore}/100 ({apiQualityReport.overallStatus})
+                        {apiQualityReport.overallScore !== null && apiQualityReport.overallScore !== undefined
+                          ? `Score: ${apiQualityReport.overallScore}/100 (${apiQualityReport.overallStatus})`
+                          : `Insufficient data`}
                       </Badge>
                       <Badge variant="outline" className="text-xs">
                         {apiQualityReport.confidence} confidence
@@ -798,16 +800,18 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                                   {s.serviceName}
                                   <code className="block text-[10px] text-muted-foreground font-mono">{s.serviceId}</code>
                                 </td>
-                                <td className="p-3 font-bold font-mono text-sm">{s.qualityScore ?? 0}/100</td>
+                                <td className="p-3 font-bold font-mono text-sm">
+                                  {s.qualityScore !== null && s.qualityScore !== undefined ? `${s.qualityScore}/100` : "N/A"}
+                                </td>
                                 <td className="p-3">
                                   <Badge className={qualityStatusBadge(s.status).color}>
                                     {s.status ?? "Insufficient data"}
                                   </Badge>
                                 </td>
                                 <td className="p-3 font-mono">{s.observationCount.value}</td>
-                                <td className="p-3 font-mono">{match ? `${match.metrics.latencyP50Ms}ms` : "N/A"}</td>
-                                <td className="p-3 font-mono">{match ? `${match.metrics.uptimePercent}%` : "N/A"}</td>
-                                <td className="p-3 font-mono">{match ? `${match.metrics.costPerSuccessfulResultUsdc} USDC` : "N/A"}</td>
+                                <td className="p-3 font-mono">{match && match.metrics.latencyP50Ms > 0 ? `${match.metrics.latencyP50Ms}ms` : "N/A"}</td>
+                                <td className="p-3 font-mono">{match && match.metrics.uptimePercent !== null ? `${match.metrics.uptimePercent}%` : "N/A"}</td>
+                                <td className="p-3 font-mono">{match && match.metrics.costPerSuccessfulResultUsdc !== null ? `${match.metrics.costPerSuccessfulResultUsdc} USDC` : "N/A"}</td>
                               </tr>
                             );
                           })}
@@ -825,32 +829,68 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-sm">
                     <div className="rounded-md border p-3.5">
                       <p className="text-xs text-muted-foreground">Observed Uptime</p>
-                      <p className="font-semibold text-lg mt-1">{apiQualityReport.availability.uptimePercent.value}%</p>
-                      <p className="text-xs text-muted-foreground mt-1">{apiQualityReport.availability.totalObservations.value} total observation(s)</p>
+                      <p className="font-semibold text-lg mt-1">
+                        {apiQualityReport.availability.uptimePercent.value !== null
+                          ? `${apiQualityReport.availability.uptimePercent.value}%`
+                          : "N/A"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {(apiQualityReport.availability.totalObservations.value ?? 0) > 0
+                          ? `${apiQualityReport.availability.totalObservations.value} total observation(s)`
+                          : "No observations"}
+                      </p>
                     </div>
                     <div className="rounded-md border p-3.5">
                       <p className="text-xs text-muted-foreground">Latency (P50 / P95 / Max)</p>
-                      <p className="font-semibold text-lg mt-1 font-mono">{apiQualityReport.latencyDistribution.latencyP50Ms.value}ms / {apiQualityReport.latencyDistribution.latencyP95Ms.value}ms</p>
-                      <p className="text-xs text-muted-foreground mt-1">Max: {apiQualityReport.latencyDistribution.latencyMaxMs.value}ms</p>
+                      <p className="font-semibold text-lg mt-1 font-mono">
+                        {(apiQualityReport.availability.totalObservations.value ?? 0) > 0
+                          ? `${apiQualityReport.latencyDistribution.latencyP50Ms.value}ms / ${apiQualityReport.latencyDistribution.latencyP95Ms.value}ms`
+                          : "N/A"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {(apiQualityReport.availability.totalObservations.value ?? 0) > 0
+                          ? `Max: ${apiQualityReport.latencyDistribution.latencyMaxMs.value}ms`
+                          : "No observations"}
+                      </p>
                     </div>
                     <div className="rounded-md border p-3.5">
                       <p className="text-xs text-muted-foreground">Valid Response & Schema Rate</p>
-                      <p className="font-semibold text-lg mt-1 font-mono">{apiQualityReport.responseQuality.validResponsePercent.value}%</p>
-                      <p className="text-xs text-muted-foreground mt-1">Schema: {apiQualityReport.responseQuality.schemaValidationPercent.value}% | Size limit: {apiQualityReport.responseQuality.withinSizeLimitPercent.value}%</p>
+                      <p className="font-semibold text-lg mt-1 font-mono">
+                        {apiQualityReport.responseQuality.validResponsePercent.value !== null
+                          ? `${apiQualityReport.responseQuality.validResponsePercent.value}%`
+                          : "N/A"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {(apiQualityReport.availability.totalObservations.value ?? 0) > 0
+                          ? `Schema: ${apiQualityReport.responseQuality.schemaValidationPercent.value}% | Size limit: ${apiQualityReport.responseQuality.withinSizeLimitPercent.value}%`
+                          : "No observations"}
+                      </p>
                     </div>
                     <div className="rounded-md border p-3.5">
                       <p className="text-xs text-muted-foreground">Payment & Settlement Reliability</p>
-                      <p className="font-semibold text-lg mt-1 font-mono">{apiQualityReport.paymentAndSettlementReliability.paymentSuccessPercent.value}%</p>
-                      <p className="text-xs text-muted-foreground mt-1">Arc Settlement: {apiQualityReport.paymentAndSettlementReliability.settlementSuccessPercent.value}%</p>
+                      <p className="font-semibold text-lg mt-1 font-mono">
+                        {apiQualityReport.paymentAndSettlementReliability.paymentSuccessPercent.value !== null
+                          ? `${apiQualityReport.paymentAndSettlementReliability.paymentSuccessPercent.value}%`
+                          : "N/A"}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Arc Settlement: {apiQualityReport.paymentAndSettlementReliability.settlementSuccessPercent.value !== null
+                          ? `${apiQualityReport.paymentAndSettlementReliability.settlementSuccessPercent.value}%`
+                          : "N/A"}
+                      </p>
                     </div>
                     <div className="rounded-md border p-3.5 sm:col-span-2 lg:col-span-2">
                       <p className="text-xs text-muted-foreground">Quoted Pricing & Cost Efficiency</p>
                       <div className="flex flex-wrap items-center gap-4 mt-1 font-mono text-sm">
-                        <span>Min: <strong>{apiQualityReport.priceAndCostEfficiency.quotedPriceMinUsdc.value}</strong> USDC</span>
-                        <span>Median: <strong>{apiQualityReport.priceAndCostEfficiency.quotedPriceMedianUsdc.value}</strong> USDC</span>
-                        <span>Max: <strong>{apiQualityReport.priceAndCostEfficiency.quotedPriceMaxUsdc.value}</strong> USDC</span>
+                        <span>Min: <strong>{(apiQualityReport.availability.totalObservations.value ?? 0) > 0 ? `${apiQualityReport.priceAndCostEfficiency.quotedPriceMinUsdc.value} USDC` : "N/A"}</strong></span>
+                        <span>Median: <strong>{(apiQualityReport.availability.totalObservations.value ?? 0) > 0 ? `${apiQualityReport.priceAndCostEfficiency.quotedPriceMedianUsdc.value} USDC` : "N/A"}</strong></span>
+                        <span>Max: <strong>{(apiQualityReport.availability.totalObservations.value ?? 0) > 0 ? `${apiQualityReport.priceAndCostEfficiency.quotedPriceMaxUsdc.value} USDC` : "N/A"}</strong></span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">Cost per successful result: {apiQualityReport.priceAndCostEfficiency.costPerSuccessfulResultUsdc.value} USDC</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cost per successful result: {apiQualityReport.priceAndCostEfficiency.costPerSuccessfulResultUsdc.value !== null
+                          ? `${apiQualityReport.priceAndCostEfficiency.costPerSuccessfulResultUsdc.value} USDC`
+                          : "N/A"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -860,29 +900,44 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
                   <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
                     Quality Score Breakdown (0–100)
                   </h3>
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs">
-                    {[
-                      { label: "Availability", score: apiQualityReport.qualityScoreAndConfidence.breakdown.availabilityScore, max: 25 },
-                      { label: "Execution Reliability", score: apiQualityReport.qualityScoreAndConfidence.breakdown.executionReliabilityScore, max: 20 },
-                      { label: "Response Validity", score: apiQualityReport.qualityScoreAndConfidence.breakdown.responseValidityScore, max: 15 },
-                      { label: "Payment Success", score: apiQualityReport.qualityScoreAndConfidence.breakdown.paymentSuccessScore, max: 15 },
-                      { label: "Settlement Success", score: apiQualityReport.qualityScoreAndConfidence.breakdown.settlementSuccessScore, max: 15 },
-                      { label: "Latency Consistency", score: apiQualityReport.qualityScoreAndConfidence.breakdown.latencyConsistencyScore, max: 10 },
-                    ].map((item) => (
-                      <div key={item.label} className="rounded-md border p-3">
-                        <div className="flex justify-between items-center mb-1.5">
-                          <span className="font-medium text-foreground">{item.label}</span>
-                          <span className="font-mono font-bold">{item.score} / {item.max}</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
-                          <div
-                            className="h-full bg-primary transition-all"
-                            style={{ width: `${Math.min(100, (item.score / item.max) * 100)}%` }}
-                          />
-                        </div>
+                  {apiQualityReport.overallScore === null || apiQualityReport.qualityScoreAndConfidence.overallScore === null ? (
+                    <div className="rounded-md border p-4 bg-muted/20 text-center">
+                      <div className="inline-flex items-center gap-2 mb-2">
+                        <Badge variant="outline" className="bg-muted text-muted-foreground">
+                          Insufficient data
+                        </Badge>
                       </div>
-                    ))}
-                  </div>
+                      <p className="text-xs text-muted-foreground">
+                        At least 10 observations are required to compute a high-confidence Quality Score. Current observation count: {apiQualityReport.availability.totalObservations.value ?? 0}.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 text-xs">
+                      {[
+                        { label: "Availability", score: apiQualityReport.qualityScoreAndConfidence.breakdown.availabilityScore, max: 25 },
+                        { label: "Execution Reliability", score: apiQualityReport.qualityScoreAndConfidence.breakdown.executionReliabilityScore, max: 20 },
+                        { label: "Response Validity", score: apiQualityReport.qualityScoreAndConfidence.breakdown.responseValidityScore, max: 15 },
+                        { label: "Payment Success", score: apiQualityReport.qualityScoreAndConfidence.breakdown.paymentSuccessScore, max: 15 },
+                        { label: "Settlement Success", score: apiQualityReport.qualityScoreAndConfidence.breakdown.settlementSuccessScore, max: 15 },
+                        { label: "Latency Consistency", score: apiQualityReport.qualityScoreAndConfidence.breakdown.latencyConsistencyScore, max: 10 },
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-md border p-3">
+                          <div className="flex justify-between items-center mb-1.5">
+                            <span className="font-medium text-foreground">{item.label}</span>
+                            <span className="font-mono font-bold">
+                              {item.score !== null && item.score !== undefined ? `${item.score} / ${item.max}` : "N/A"}
+                            </span>
+                          </div>
+                          <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
+                            <div
+                              className="h-full bg-primary transition-all"
+                              style={{ width: item.score !== null && item.score !== undefined ? `${Math.min(100, (item.score / item.max) * 100)}%` : "0%" }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* 7. Evidence-Backed Strengths */}

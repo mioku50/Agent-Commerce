@@ -39,17 +39,17 @@ export interface ApiQualityObservation {
   serviceId: string;
   sellerPublicId?: string | null;
   startedAt: string;
-  completedAt: string;
-  quotedPriceUsdc: number;
-  paidAmountUsdc: number;
-  latencyMs: number;
+  completedAt: string | null;
+  quotedPriceUsdc: number | null;
+  paidAmountUsdc: number | null;
+  latencyMs: number | null;
   httpStatusClass: HttpStatusClass;
   endpointReached: boolean;
-  responseSchemaValid: boolean;
-  responseWithinSizeLimit: boolean;
+  responseSchemaValid: boolean | null;
+  responseWithinSizeLimit: boolean | null;
   paymentRequired: boolean;
-  paymentAuthorized: boolean;
-  paymentSettled: boolean;
+  paymentAuthorized: boolean | null;
+  paymentSettled: boolean | null;
   executionCompleted: boolean;
   arcProofVerified: boolean;
   errorCategory: ErrorCategory;
@@ -62,17 +62,17 @@ export type ApiQualityObservationRow = {
   service_id: string;
   seller_public_id: string | null;
   started_at: string;
-  completed_at: string;
-  quoted_price_usdc: string | number;
-  paid_amount_usdc: string | number;
-  latency_ms: number;
+  completed_at: string | null;
+  quoted_price_usdc: string | number | null;
+  paid_amount_usdc: string | number | null;
+  latency_ms: number | null;
   http_status_class: HttpStatusClass;
   endpoint_reached: boolean;
-  response_schema_valid: boolean;
-  response_within_size_limit: boolean;
+  response_schema_valid: boolean | null;
+  response_within_size_limit: boolean | null;
   payment_required: boolean;
-  payment_authorized: boolean;
-  payment_settled: boolean;
+  payment_authorized: boolean | null;
+  payment_settled: boolean | null;
   execution_completed: boolean;
   arc_proof_verified: boolean;
   error_category: ErrorCategory;
@@ -90,31 +90,33 @@ export type ApiQualityObservationInput = Omit<
 
 export interface ApiQualityMetrics {
   totalObservations: number;
-  uptimePercent: number;
-  executionSuccessPercent: number;
-  paymentSuccessPercent: number;
-  settlementSuccessPercent: number;
-  validResponsePercent: number;
+  uptimePercent: number | null;
+  executionSuccessPercent: number | null;
+  paymentSuccessPercent: number | null;
+  settlementSuccessPercent: number | null;
+  validResponsePercent: number | null;
   latencyP50Ms: number;
   latencyP95Ms: number;
   latencyMaxMs: number;
   quotedPriceMinUsdc: number;
   quotedPriceMedianUsdc: number;
   quotedPriceMaxUsdc: number;
-  costPerSuccessfulResultUsdc: number;
+  costPerSuccessfulResultUsdc: number | null;
   firstObservedAt: string | null;
   lastObservedAt: string | null;
 }
 
 export interface ApiQualityScore {
-  overallScore: number;
-  availabilityScore: number;
-  executionReliabilityScore: number;
-  responseValidityScore: number;
-  paymentSuccessScore: number;
-  settlementSuccessScore: number;
-  latencyConsistencyScore: number;
+  overallScore: number | null;
+  qualityScore?: number | null;
+  availabilityScore: number | null;
+  executionReliabilityScore: number | null;
+  responseValidityScore: number | null;
+  paymentSuccessScore: number | null;
+  settlementSuccessScore: number | null;
+  latencyConsistencyScore: number | null;
   status: QualityStatus;
+  qualityStatus?: QualityStatus;
   confidenceLevel: ConfidenceLevel;
   hasSufficientData: boolean;
 }
@@ -181,12 +183,12 @@ export interface ApiQualityProbeConfig {
 
 export interface ApiQualityDelta {
   serviceId: string;
-  previousScore: number;
-  newScore: number;
-  scoreDelta: number;
-  previousUptimePercent: number;
-  newUptimePercent: number;
-  uptimeDelta: number;
+  previousScore: number | null;
+  newScore: number | null;
+  scoreDelta: number | null;
+  previousUptimePercent: number | null;
+  newUptimePercent: number | null;
+  uptimeDelta: number | null;
   previousLatencyP95Ms: number;
   newLatencyP95Ms: number;
   latencyDeltaMs: number;

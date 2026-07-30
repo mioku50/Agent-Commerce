@@ -12,7 +12,7 @@ export const HOSTED_AGENT_MIN_BUDGET_USDC = 0.001;
 export const HOSTED_AGENT_MAX_TASK_LENGTH = 500;
 export const HOSTED_AGENT_MIN_TASK_LENGTH = 10;
 
-const SAFE_HOSTED_SERVICES = [
+export const SAFE_HOSTED_SERVICES = [
   {
     slug: "premium-quote",
     endpoint: "/api/premium/quote",
@@ -26,6 +26,11 @@ const SAFE_HOSTED_SERVICES = [
   {
     slug: "agent-trust-finalizer",
     endpoint: "/api/premium/agent-trust/finalize",
+    method: "POST" as const,
+  },
+  {
+    slug: "api-quality-finalizer",
+    endpoint: "/api/provider/api-quality-finalizer",
     method: "POST" as const,
   },
   {
@@ -98,7 +103,7 @@ export function hostedServiceAllowlist() {
   const requested = new Set(
     (
       process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS ??
-      "premium-quote,text-analyzer,agent-trust-finalizer,pyth-market-price,github-repository-intelligence,github-due-diligence-analysis"
+      "premium-quote,text-analyzer,agent-trust-finalizer,api-quality-finalizer,pyth-market-price,github-repository-intelligence,github-due-diligence-analysis"
     )
       .split(",")
       .map((value) => value.trim())

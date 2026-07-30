@@ -10,6 +10,7 @@ const PURCHASE_ORDER = [
   "github-due-diligence-analysis",
   "text-analyzer",
   "agent-trust-finalizer",
+  "api-quality-finalizer",
   "pyth-market-price",
   "premium-quote",
   "market-snapshot",
@@ -161,6 +162,10 @@ function serviceReasonForSelection(service: ApiService, task: string) {
     return "The final paid response binds the deterministic Agent Trust Report hash to its Arc proof.";
   }
 
+  if (service.slug === "api-quality-finalizer") {
+    return "The final paid response binds the deterministic API Quality Report hash to its Arc proof.";
+  }
+
   if (service.slug === "agent-task") {
     return "The task justifies a higher-value multi-step agent task, and the remaining budget can cover it.";
   }
@@ -198,6 +203,9 @@ function shouldSelectLiveService(service: ApiService, task: string, budget: numb
   }
   if (service.slug === "agent-trust-finalizer") {
     return matches(task, /\b(agent trust|trust report|trust score)\b/);
+  }
+  if (service.slug === "api-quality-finalizer") {
+    return matches(task, /\b(api quality|quality report|benchmark|quality score|telemetry|evaluate|paid api)\b/);
   }
   if (service.slug === "agent-task") {
     return (

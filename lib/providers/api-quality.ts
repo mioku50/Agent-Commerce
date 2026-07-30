@@ -29,9 +29,130 @@ import type {
   ServiceQualityInput,
 } from "./api-quality-types.ts";
 
+import { getServiceById, getServiceBySlug } from "../services/registry.ts";
+import {
+  getDynamicStoreServiceRowById,
+  getDynamicStoreServiceRowBySlug,
+} from "../services/store-service-persistence.ts";
+
 const inMemoryObservations: ApiQualityObservation[] = [];
 const inMemoryAlerts: ApiQualityAlert[] = [];
 
+export class ApiQualityStoreUnavailableError extends Error {
+  readonly status = 503;
+  readonly code = "api_quality_observation_store_unavailable";
+  readonly unavailable = true;
+
+  constructor(message = "api_quality_observation_store_unavailable") {
+    super(message);
+    this.name = "ApiQualityStoreUnavailableError";
+  }
+}
+
+export class ApiQualityServiceNotFoundError extends Error {
+  readonly status = 404;
+  readonly code = "api_quality_service_not_found";
+
+  constructor(
+    message = "The requested service could not be found or evaluated.",
+  ) {
+    super(message);
+    this.name = "ApiQualityServiceNotFoundError";
+  }
+}
+
+export const API_QUALITY_SERVICE_NOT_FOUND_RESPONSE = {
+  error: {
+    code: "api_quality_service_not_found",
+    message: "The requested service could not be found or evaluated.",
+  },
+} as const;
+
+/**
+ * Validates that a requested service exists, is public, live, and NOT private, draft, disabled, or internalOnly.
+ * If service is missing, private, draft, disabled, or internalOnly, returns null (or throws ApiQualityServiceNotFoundError).
+ */
+export async function validatePublicServiceForQualityEvaluation(
+  serviceId: string,
+  options: { throwOnError?: boolean } = {},
+): Promise<{ id: string; name: string; slug: string; status: string } | null> {
+  if (!serviceId || typeof serviceId !== "string" || !serviceId.trim()) {
+    if (options.throwOnError) {
+      throw new ApiQualityServiceNotFoundError();
+    }
+    return null;
+  }
+
+  const idToLookup = serviceId.trim();
+
+  // 1. Check static service registry
+  const staticService =
+    getServiceById(idToLookup) || getServiceBySlug(idToLookup);
+
+  if (staticService) {
+    const isLive = staticService.status === "live";
+    const isInternal = Boolean(staticService.internalOnly);
+    const isPrivate = Boolean(
+      (staticService as any).isPrivate || (staticService as any).private,
+    );
+
+    if (isLive && !isInternal && !isPrivate) {
+      return {
+        id: staticService.id,
+        name: staticService.name,
+        slug: staticService.slug,
+        status: staticService.status,
+      };
+    }
+  } else {
+    // 2. Check dynamic store services
+    try {
+      const dynamicRow =
+        (await getDynamicStoreServiceRowById(idToLookup)) ||
+        (await getDynamicStoreServiceRowBySlug(idToLookup));
+
+      if (dynamicRow) {
+        const isLive = dynamicRow.status === "live";
+        const isInternal = Boolean(
+          (dynamicRow as any).internalOnly || dynamicRow.raw?.internalOnly,
+        );
+        const isPrivate = Boolean(
+          (dynamicRow as any).isPrivate ||
+            (dynamicRow as any).private ||
+            dynamicRow.raw?.isPrivate ||
+            dynamicRow.raw?.private,
+        );
+
+        if (isLive && !isInternal && !isPrivate) {
+          return {
+            id: dynamicRow.id,
+            name: dynamicRow.name,
+            slug: dynamicRow.slug,
+            status: dynamicRow.status,
+          };
+        }
+      }
+    } catch {
+      // Ignore DB errors during validation lookup
+    }
+  }
+
+  if (options.throwOnError) {
+    throw new ApiQualityServiceNotFoundError();
+  }
+
+  return null;
+}
+
+/**
+ * Returns true if in-memory store fallback is allowed (test environment or explicit env override).
+ */
+export function isMemoryFallbackAllowed(): boolean {
+  return (
+    process.env.NODE_ENV === "test" ||
+    process.env.API_QUALITY_ALLOW_MEMORY_STORE === "true"
+  );
+}
 
 /**
  * Converts a database row to the canonical ApiQualityObservation object.
@@ -42,28 +163,46 @@ export function rowToObservation(
   return {
     observationId: row.observation_id,
     serviceId: row.service_id,
-    sellerPublicId: row.seller_public_id,
+    sellerPublicId: row.seller_public_id ?? null,
     startedAt: row.started_at,
-    completedAt: row.completed_at,
+    completedAt: row.completed_at ?? null,
     quotedPriceUsdc:
-      typeof row.quoted_price_usdc === "number"
-        ? row.quoted_price_usdc
-        : parseFloat(String(row.quoted_price_usdc || "0")),
+      row.quoted_price_usdc !== null && row.quoted_price_usdc !== undefined
+        ? typeof row.quoted_price_usdc === "number"
+          ? row.quoted_price_usdc
+          : parseFloat(String(row.quoted_price_usdc))
+        : null,
     paidAmountUsdc:
-      typeof row.paid_amount_usdc === "number"
-        ? row.paid_amount_usdc
-        : parseFloat(String(row.paid_amount_usdc || "0")),
+      row.paid_amount_usdc !== null && row.paid_amount_usdc !== undefined
+        ? typeof row.paid_amount_usdc === "number"
+          ? row.paid_amount_usdc
+          : parseFloat(String(row.paid_amount_usdc))
+        : null,
     latencyMs:
-      typeof row.latency_ms === "number"
-        ? row.latency_ms
-        : parseInt(String(row.latency_ms || "0"), 10),
+      row.latency_ms !== null && row.latency_ms !== undefined
+        ? typeof row.latency_ms === "number"
+          ? row.latency_ms
+          : parseInt(String(row.latency_ms), 10)
+        : null,
     httpStatusClass: row.http_status_class,
     endpointReached: Boolean(row.endpoint_reached),
-    responseSchemaValid: Boolean(row.response_schema_valid),
-    responseWithinSizeLimit: Boolean(row.response_within_size_limit),
+    responseSchemaValid:
+      row.response_schema_valid !== null && row.response_schema_valid !== undefined
+        ? Boolean(row.response_schema_valid)
+        : null,
+    responseWithinSizeLimit:
+      row.response_within_size_limit !== null && row.response_within_size_limit !== undefined
+        ? Boolean(row.response_within_size_limit)
+        : null,
     paymentRequired: Boolean(row.payment_required),
-    paymentAuthorized: Boolean(row.payment_authorized),
-    paymentSettled: Boolean(row.payment_settled),
+    paymentAuthorized:
+      row.payment_authorized !== null && row.payment_authorized !== undefined
+        ? Boolean(row.payment_authorized)
+        : null,
+    paymentSettled:
+      row.payment_settled !== null && row.payment_settled !== undefined
+        ? Boolean(row.payment_settled)
+        : null,
     executionCompleted: Boolean(row.execution_completed),
     arcProofVerified: Boolean(row.arc_proof_verified),
     errorCategory: row.error_category,
@@ -83,17 +222,17 @@ export function observationToRowInput(
     service_id: obs.serviceId,
     seller_public_id: obs.sellerPublicId ?? null,
     started_at: obs.startedAt,
-    completed_at: obs.completedAt,
-    quoted_price_usdc: obs.quotedPriceUsdc,
-    paid_amount_usdc: obs.paidAmountUsdc,
-    latency_ms: obs.latencyMs,
+    completed_at: obs.completedAt ?? null,
+    quoted_price_usdc: obs.quotedPriceUsdc ?? null,
+    paid_amount_usdc: obs.paidAmountUsdc ?? null,
+    latency_ms: obs.latencyMs ?? null,
     http_status_class: obs.httpStatusClass,
     endpoint_reached: obs.endpointReached,
-    response_schema_valid: obs.responseSchemaValid,
-    response_within_size_limit: obs.responseWithinSizeLimit,
+    response_schema_valid: obs.responseSchemaValid ?? null,
+    response_within_size_limit: obs.responseWithinSizeLimit ?? null,
     payment_required: obs.paymentRequired,
-    payment_authorized: obs.paymentAuthorized,
-    payment_settled: obs.paymentSettled,
+    payment_authorized: obs.paymentAuthorized ?? null,
+    payment_settled: obs.paymentSettled ?? null,
     execution_completed: obs.executionCompleted,
     arc_proof_verified: obs.arcProofVerified,
     error_category: obs.errorCategory,
@@ -119,34 +258,63 @@ export async function recordApiQualityObservation(
   const observation: ApiQualityObservation = {
     ...input,
     observationId,
+    completedAt: input.completedAt ?? null,
+    quotedPriceUsdc: input.quotedPriceUsdc ?? null,
+    paidAmountUsdc: input.paidAmountUsdc ?? null,
+    latencyMs: input.latencyMs ?? null,
+    responseSchemaValid: input.responseSchemaValid ?? null,
+    responseWithinSizeLimit: input.responseWithinSizeLimit ?? null,
+    paymentAuthorized: input.paymentAuthorized ?? null,
+    paymentSettled: input.paymentSettled ?? null,
     sellerPublicId: input.sellerPublicId ?? null,
     createdAt,
   };
 
-  // Always append to in-memory store for fallback / rapid querying / tests
-  inMemoryObservations.push(observation);
-
-  // Attempt database persistence if configured
   const serverConfig = tryGetServerSupabaseConfig();
-  if (serverConfig) {
-    try {
-      const client = createClient(serverConfig.url, serverConfig.key);
-      const row = observationToRowInput(observation);
-      const { error } = await client
-        .from("api_quality_observations")
-        .insert(row);
-      if (error) {
-        console.warn(
-          `[recordApiQualityObservation] Supabase insert warning: ${error.message}`,
+  if (!serverConfig) {
+    if (!isMemoryFallbackAllowed()) {
+      throw new ApiQualityStoreUnavailableError(
+        "api_quality_observation_store_unavailable",
+      );
+    }
+    inMemoryObservations.push(observation);
+    return observation;
+  }
+
+  try {
+    const client = createClient(serverConfig.url, serverConfig.key);
+    const row = observationToRowInput(observation);
+    const { error } = await client
+      .from("api_quality_observations")
+      .insert(row);
+    if (error) {
+      if (!isMemoryFallbackAllowed()) {
+        throw new ApiQualityStoreUnavailableError(
+          `api_quality_observation_store_unavailable: ${error.message}`,
         );
       }
-    } catch (dbErr) {
       console.warn(
-        `[recordApiQualityObservation] Database write failed: ${
+        `[recordApiQualityObservation] Supabase insert warning: ${error.message}`,
+      );
+    }
+  } catch (dbErr) {
+    if (!isMemoryFallbackAllowed()) {
+      if (dbErr instanceof ApiQualityStoreUnavailableError) throw dbErr;
+      throw new ApiQualityStoreUnavailableError(
+        `api_quality_observation_store_unavailable: ${
           dbErr instanceof Error ? dbErr.message : String(dbErr)
         }`,
       );
     }
+    console.warn(
+      `[recordApiQualityObservation] Database write failed: ${
+        dbErr instanceof Error ? dbErr.message : String(dbErr)
+      }`,
+    );
+  }
+
+  if (isMemoryFallbackAllowed()) {
+    inMemoryObservations.push(observation);
   }
 
   return observation;
@@ -163,29 +331,65 @@ export async function fetchApiQualityObservations(
   const cutoffIso = new Date(Date.now() - windowMs).toISOString();
 
   const serverConfig = tryGetServerSupabaseConfig();
-  if (serverConfig) {
-    try {
-      const client = createClient(serverConfig.url, serverConfig.key);
-      const { data, error } = await client
-        .from("api_quality_observations")
-        .select("*")
-        .eq("service_id", serviceId)
-        .gte("started_at", cutoffIso)
-        .order("started_at", { ascending: false });
+  if (!serverConfig) {
+    if (!isMemoryFallbackAllowed()) {
+      throw new ApiQualityStoreUnavailableError(
+        "api_quality_observation_store_unavailable",
+      );
+    }
+    return inMemoryObservations
+      .filter(
+        (obs) => obs.serviceId === serviceId && obs.startedAt >= cutoffIso,
+      )
+      .sort(
+        (a, b) =>
+          new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+      );
+  }
 
-      if (!error && Array.isArray(data) && data.length > 0) {
-        return (data as ApiQualityObservationRow[]).map(rowToObservation);
+  try {
+    const client = createClient(serverConfig.url, serverConfig.key);
+    const { data, error } = await client
+      .from("api_quality_observations")
+      .select("*")
+      .eq("service_id", serviceId)
+      .gte("started_at", cutoffIso)
+      .order("started_at", { ascending: false });
+
+    if (error) {
+      if (!isMemoryFallbackAllowed()) {
+        throw new ApiQualityStoreUnavailableError(
+          `api_quality_observation_store_unavailable: ${error.message}`,
+        );
       }
-    } catch (dbErr) {
       console.warn(
-        `[fetchApiQualityObservations] Supabase query warning: ${
+        `[fetchApiQualityObservations] Supabase query warning: ${error.message}`,
+      );
+    } else if (Array.isArray(data)) {
+      return (data as ApiQualityObservationRow[]).map(rowToObservation);
+    }
+  } catch (dbErr) {
+    if (!isMemoryFallbackAllowed()) {
+      if (dbErr instanceof ApiQualityStoreUnavailableError) throw dbErr;
+      throw new ApiQualityStoreUnavailableError(
+        `api_quality_observation_store_unavailable: ${
           dbErr instanceof Error ? dbErr.message : String(dbErr)
         }`,
       );
     }
+    console.warn(
+      `[fetchApiQualityObservations] Supabase query warning: ${
+        dbErr instanceof Error ? dbErr.message : String(dbErr)
+      }`,
+    );
   }
 
-  // Fallback to in-memory observations matching criteria
+  if (!isMemoryFallbackAllowed()) {
+    throw new ApiQualityStoreUnavailableError(
+      "api_quality_observation_store_unavailable",
+    );
+  }
+
   return inMemoryObservations
     .filter(
       (obs) => obs.serviceId === serviceId && obs.startedAt >= cutoffIso,
@@ -210,7 +414,24 @@ export async function fetchApiQualityObservationsForServices(
   const cutoffIso = new Date(Date.now() - windowMs).toISOString();
 
   const serverConfig = tryGetServerSupabaseConfig();
-  if (serverConfig && uniqueServiceIds.length > 0) {
+  if (!serverConfig) {
+    if (!isMemoryFallbackAllowed()) {
+      throw new ApiQualityStoreUnavailableError(
+        "api_quality_observation_store_unavailable",
+      );
+    }
+    for (const id of uniqueServiceIds) {
+      results[id] = inMemoryObservations
+        .filter((obs) => obs.serviceId === id && obs.startedAt >= cutoffIso)
+        .sort(
+          (a, b) =>
+            new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
+        );
+    }
+    return results;
+  }
+
+  if (uniqueServiceIds.length > 0) {
     try {
       const client = createClient(serverConfig.url, serverConfig.key);
       const { data, error } = await client
@@ -220,7 +441,16 @@ export async function fetchApiQualityObservationsForServices(
         .gte("started_at", cutoffIso)
         .order("started_at", { ascending: false });
 
-      if (!error && Array.isArray(data)) {
+      if (error) {
+        if (!isMemoryFallbackAllowed()) {
+          throw new ApiQualityStoreUnavailableError(
+            `api_quality_observation_store_unavailable: ${error.message}`,
+          );
+        }
+        console.warn(
+          `[fetchApiQualityObservationsForServices] Supabase query warning: ${error.message}`,
+        );
+      } else if (Array.isArray(data)) {
         for (const id of uniqueServiceIds) {
           results[id] = [];
         }
@@ -234,6 +464,14 @@ export async function fetchApiQualityObservationsForServices(
         return results;
       }
     } catch (dbErr) {
+      if (!isMemoryFallbackAllowed()) {
+        if (dbErr instanceof ApiQualityStoreUnavailableError) throw dbErr;
+        throw new ApiQualityStoreUnavailableError(
+          `api_quality_observation_store_unavailable: ${
+            dbErr instanceof Error ? dbErr.message : String(dbErr)
+          }`,
+        );
+      }
       console.warn(
         `[fetchApiQualityObservationsForServices] Supabase query warning: ${
           dbErr instanceof Error ? dbErr.message : String(dbErr)
@@ -242,7 +480,12 @@ export async function fetchApiQualityObservationsForServices(
     }
   }
 
-  // In-memory fallback
+  if (!isMemoryFallbackAllowed()) {
+    throw new ApiQualityStoreUnavailableError(
+      "api_quality_observation_store_unavailable",
+    );
+  }
+
   for (const id of uniqueServiceIds) {
     results[id] = inMemoryObservations
       .filter((obs) => obs.serviceId === id && obs.startedAt >= cutoffIso)
@@ -293,18 +536,18 @@ export function computeApiQualityMetrics(
   if (totalObservations === 0) {
     return {
       totalObservations: 0,
-      uptimePercent: 0,
-      executionSuccessPercent: 0,
-      paymentSuccessPercent: 0,
-      settlementSuccessPercent: 0,
-      validResponsePercent: 0,
+      uptimePercent: null,
+      executionSuccessPercent: null,
+      paymentSuccessPercent: null,
+      settlementSuccessPercent: null,
+      validResponsePercent: null,
       latencyP50Ms: 0,
       latencyP95Ms: 0,
       latencyMaxMs: 0,
       quotedPriceMinUsdc: 0,
       quotedPriceMedianUsdc: 0,
       quotedPriceMaxUsdc: 0,
-      costPerSuccessfulResultUsdc: 0,
+      costPerSuccessfulResultUsdc: null,
       firstObservedAt: null,
       lastObservedAt: null,
     };
@@ -325,7 +568,7 @@ export function computeApiQualityMetrics(
   const executionSuccessPercent =
     Math.round((execSuccessCount / totalObservations) * 10000) / 100;
 
-  // Payment Success
+  // Payment Success (null if 0 payment attempts)
   const paymentRequiredObs = observations.filter((o) => o.paymentRequired);
   const paymentSuccessPercent =
     paymentRequiredObs.length > 0
@@ -334,9 +577,9 @@ export function computeApiQualityMetrics(
             paymentRequiredObs.length) *
             10000,
         ) / 100
-      : 100;
+      : null;
 
-  // Settlement Success
+  // Settlement Success (null if 0 authorized payments)
   const paymentAuthorizedObs = observations.filter((o) => o.paymentAuthorized);
   const settlementSuccessPercent =
     paymentAuthorizedObs.length > 0
@@ -345,9 +588,7 @@ export function computeApiQualityMetrics(
             paymentAuthorizedObs.length) *
             10000,
         ) / 100
-      : paymentRequiredObs.length > 0
-      ? 0
-      : 100;
+      : null;
 
   // Valid Response %
   const validResponseCount = observations.filter(
@@ -357,25 +598,34 @@ export function computeApiQualityMetrics(
     Math.round((validResponseCount / totalObservations) * 10000) / 100;
 
   // Latency percentiles
-  const latencies = observations.map((o) => o.latencyMs);
-  const latencyP50Ms = Math.round(getPercentile(latencies, 50));
-  const latencyP95Ms = Math.round(getPercentile(latencies, 95));
-  const latencyMaxMs = Math.round(Math.max(...latencies));
+  const latencies = observations
+    .map((o) => o.latencyMs)
+    .filter((v): v is number => typeof v === "number" && !isNaN(v));
+  const latencyP50Ms = latencies.length > 0 ? Math.round(getPercentile(latencies, 50)) : 0;
+  const latencyP95Ms = latencies.length > 0 ? Math.round(getPercentile(latencies, 95)) : 0;
+  const latencyMaxMs = latencies.length > 0 ? Math.round(Math.max(...latencies)) : 0;
 
   // Quoted Prices
-  const prices = observations.map((o) => o.quotedPriceUsdc);
+  const prices = observations
+    .map((o) => o.quotedPriceUsdc)
+    .filter((v): v is number => typeof v === "number" && !isNaN(v));
   const sortedPrices = [...prices].sort((a, b) => a - b);
-  const quotedPriceMinUsdc = Math.round(sortedPrices[0] * 1e6) / 1e6;
+  const quotedPriceMinUsdc =
+    sortedPrices.length > 0 ? Math.round(sortedPrices[0] * 1e6) / 1e6 : 0;
   const quotedPriceMedianUsdc =
-    Math.round(getPercentile(sortedPrices, 50) * 1e6) / 1e6;
+    sortedPrices.length > 0
+      ? Math.round(getPercentile(sortedPrices, 50) * 1e6) / 1e6
+      : 0;
   const quotedPriceMaxUsdc =
-    Math.round(sortedPrices[sortedPrices.length - 1] * 1e6) / 1e6;
+    sortedPrices.length > 0
+      ? Math.round(sortedPrices[sortedPrices.length - 1] * 1e6) / 1e6
+      : 0;
 
   // Cost per successful result
   const successfulExecutions = observations.filter(
     (o) => o.executionCompleted && o.responseSchemaValid,
   );
-  let costPerSuccessfulResultUsdc = 0;
+  let costPerSuccessfulResultUsdc: number | null = null;
   if (successfulExecutions.length > 0) {
     const totalPaidUsdc = observations.reduce(
       (sum, o) => sum + (o.paidAmountUsdc || 0),
@@ -471,25 +721,52 @@ export function calculateQualityScore(
 ): ApiQualityScore {
   const hasSufficientData = metrics.totalObservations >= 10;
 
+  if (!hasSufficientData) {
+    return {
+      overallScore: null,
+      qualityScore: null,
+      availabilityScore: null,
+      executionReliabilityScore: null,
+      responseValidityScore: null,
+      paymentSuccessScore: null,
+      settlementSuccessScore: null,
+      latencyConsistencyScore: null,
+      status: "Insufficient data",
+      qualityStatus: "Insufficient data",
+      confidenceLevel: observations ? getConfidenceLevel(observations) : "low",
+      hasSufficientData: false,
+    };
+  }
+
   // 1. Availability Score (0 - 25)
   const availabilityScore =
-    Math.round(((metrics.uptimePercent / 100) * 25) * 10) / 10;
+    metrics.uptimePercent !== null
+      ? Math.round(((metrics.uptimePercent / 100) * 25) * 10) / 10
+      : 0;
 
   // 2. Execution Reliability Score (0 - 20)
   const executionReliabilityScore =
-    Math.round(((metrics.executionSuccessPercent / 100) * 20) * 10) / 10;
+    metrics.executionSuccessPercent !== null
+      ? Math.round(((metrics.executionSuccessPercent / 100) * 20) * 10) / 10
+      : 0;
 
   // 3. Response Validity Score (0 - 15)
   const responseValidityScore =
-    Math.round(((metrics.validResponsePercent / 100) * 15) * 10) / 10;
+    metrics.validResponsePercent !== null
+      ? Math.round(((metrics.validResponsePercent / 100) * 15) * 10) / 10
+      : 0;
 
   // 4. Payment Success Score (0 - 15)
   const paymentSuccessScore =
-    Math.round(((metrics.paymentSuccessPercent / 100) * 15) * 10) / 10;
+    metrics.paymentSuccessPercent !== null
+      ? Math.round(((metrics.paymentSuccessPercent / 100) * 15) * 10) / 10
+      : 15;
 
   // 5. Settlement Success Score (0 - 15)
   const settlementSuccessScore =
-    Math.round(((metrics.settlementSuccessPercent / 100) * 15) * 10) / 10;
+    metrics.settlementSuccessPercent !== null
+      ? Math.round(((metrics.settlementSuccessPercent / 100) * 15) * 10) / 10
+      : 15;
 
   // 6. Latency Consistency Score (0 - 10)
   let latencyConsistencyScore = 0;
@@ -527,9 +804,7 @@ export function calculateQualityScore(
 
   // Quality Status
   let status: QualityStatus;
-  if (!hasSufficientData) {
-    status = "Insufficient data";
-  } else if (overallScore >= 90) {
+  if (overallScore >= 90) {
     status = "Excellent";
   } else if (overallScore >= 75) {
     status = "Reliable";
@@ -550,6 +825,7 @@ export function calculateQualityScore(
 
   return {
     overallScore,
+    qualityScore: overallScore,
     availabilityScore,
     executionReliabilityScore,
     responseValidityScore,
@@ -557,8 +833,9 @@ export function calculateQualityScore(
     settlementSuccessScore,
     latencyConsistencyScore,
     status,
+    qualityStatus: status,
     confidenceLevel,
-    hasSufficientData,
+    hasSufficientData: true,
   };
 }
 
@@ -610,13 +887,19 @@ export function compareApiQuality(
     if (a.score.hasSufficientData !== b.score.hasSufficientData) {
       return a.score.hasSufficientData ? -1 : 1;
     }
-    if (b.score.overallScore !== a.score.overallScore) {
-      return b.score.overallScore - a.score.overallScore;
+    const aScore = a.score.overallScore ?? -1;
+    const bScore = b.score.overallScore ?? -1;
+    if (bScore !== aScore) {
+      return bScore - aScore;
     }
-    if (b.metrics.uptimePercent !== a.metrics.uptimePercent) {
-      return b.metrics.uptimePercent - a.metrics.uptimePercent;
+    const aUptime = a.metrics.uptimePercent ?? -1;
+    const bUptime = b.metrics.uptimePercent ?? -1;
+    if (bUptime !== aUptime) {
+      return bUptime - aUptime;
     }
-    return b.metrics.executionSuccessPercent - a.metrics.executionSuccessPercent;
+    const aExec = a.metrics.executionSuccessPercent ?? -1;
+    const bExec = b.metrics.executionSuccessPercent ?? -1;
+    return bExec - aExec;
   });
 
   // Assign ranks
@@ -632,21 +915,24 @@ export function compareApiQuality(
   // Overall winner highlight
   if (items.length > 0 && items[0]) {
     const winner = items[0];
+    const scoreVal = winner.score.overallScore !== null ? `${winner.score.overallScore}/100` : "N/A";
     highlights.push({
       category: "overall",
       title: "Top Overall Performer",
       winnerServiceId: winner.serviceId,
       winnerServiceName: winner.serviceName,
-      value: `${winner.score.overallScore}/100`,
-      description: `Highest quality score with ${winner.score.status.toLowerCase()} status across ${winner.metrics.totalObservations} observations.`,
+      value: scoreVal,
+      description: winner.score.overallScore !== null
+        ? `Highest quality score with ${winner.score.status.toLowerCase()} status across ${winner.metrics.totalObservations} observations.`
+        : `Primary service registered ${winner.metrics.totalObservations} observation(s) (insufficient data to score).`,
     });
   }
 
   // Uptime highlight
   const uptimeWinner = [...items].sort(
-    (a, b) => b.metrics.uptimePercent - a.metrics.uptimePercent,
+    (a, b) => (b.metrics.uptimePercent ?? -1) - (a.metrics.uptimePercent ?? -1),
   )[0];
-  if (uptimeWinner && uptimeWinner.metrics.totalObservations > 0) {
+  if (uptimeWinner && uptimeWinner.metrics.totalObservations > 0 && uptimeWinner.metrics.uptimePercent !== null) {
     highlights.push({
       category: "uptime",
       title: "Best Uptime",
@@ -674,9 +960,9 @@ export function compareApiQuality(
 
   // Execution reliability highlight
   const executionWinner = [...items].sort(
-    (a, b) => b.metrics.executionSuccessPercent - a.metrics.executionSuccessPercent,
+    (a, b) => (b.metrics.executionSuccessPercent ?? -1) - (a.metrics.executionSuccessPercent ?? -1),
   )[0];
-  if (executionWinner && executionWinner.metrics.totalObservations > 0) {
+  if (executionWinner && executionWinner.metrics.totalObservations > 0 && executionWinner.metrics.executionSuccessPercent !== null) {
     highlights.push({
       category: "execution",
       title: "Most Reliable Execution",
@@ -692,12 +978,13 @@ export function compareApiQuality(
     .filter(
       (item) =>
         item.metrics.totalObservations > 0 &&
+        item.metrics.costPerSuccessfulResultUsdc !== null &&
         item.metrics.costPerSuccessfulResultUsdc > 0,
     )
     .sort(
       (a, b) =>
-        a.metrics.costPerSuccessfulResultUsdc -
-        b.metrics.costPerSuccessfulResultUsdc,
+        (a.metrics.costPerSuccessfulResultUsdc ?? 0) -
+        (b.metrics.costPerSuccessfulResultUsdc ?? 0),
     )[0];
   if (costWinner) {
     highlights.push({
@@ -749,7 +1036,13 @@ export function detectQualityDegradationAlerts(
   const nowIso = new Date().toISOString();
 
   // 1. Overall Score Degradation
-  if (prevScore.hasSufficientData && prevScore.overallScore - newScore.overallScore >= 15) {
+  if (
+    prevScore.hasSufficientData &&
+    newScore.hasSufficientData &&
+    prevScore.overallScore !== null &&
+    newScore.overallScore !== null &&
+    prevScore.overallScore - newScore.overallScore >= 15
+  ) {
     const delta = newScore.overallScore - prevScore.overallScore;
     alerts.push({
       alertId: `alert_score_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -770,6 +1063,8 @@ export function detectQualityDegradationAlerts(
   // 2. Uptime / Availability Drop
   if (
     prevMetrics.totalObservations > 0 &&
+    prevMetrics.uptimePercent !== null &&
+    newMetrics.uptimePercent !== null &&
     (prevMetrics.uptimePercent - newMetrics.uptimePercent >= 10 || newMetrics.uptimePercent < 90)
   ) {
     const delta = Math.round((newMetrics.uptimePercent - prevMetrics.uptimePercent) * 100) / 100;
@@ -816,6 +1111,8 @@ export function detectQualityDegradationAlerts(
   // 4. Execution Failure Spike
   if (
     prevMetrics.totalObservations > 0 &&
+    newMetrics.executionSuccessPercent !== null &&
+    prevMetrics.executionSuccessPercent !== null &&
     newMetrics.executionSuccessPercent < 80 &&
     prevMetrics.executionSuccessPercent >= 80
   ) {
@@ -1056,14 +1353,23 @@ export async function executeScheduledProbe(
   const newScore = calculateQualityScore(newMetrics, newObs);
 
   // Calculate delta
+  const scoreDelta =
+    newScore.overallScore !== null && prevScore.overallScore !== null
+      ? newScore.overallScore - prevScore.overallScore
+      : null;
+  const uptimeDelta =
+    newMetrics.uptimePercent !== null && prevMetrics.uptimePercent !== null
+      ? Math.round((newMetrics.uptimePercent - prevMetrics.uptimePercent) * 100) / 100
+      : null;
+
   const metricsDelta: ApiQualityDelta = {
     serviceId: config.serviceId,
     previousScore: prevScore.overallScore,
     newScore: newScore.overallScore,
-    scoreDelta: newScore.overallScore - prevScore.overallScore,
+    scoreDelta,
     previousUptimePercent: prevMetrics.uptimePercent,
     newUptimePercent: newMetrics.uptimePercent,
-    uptimeDelta: Math.round((newMetrics.uptimePercent - prevMetrics.uptimePercent) * 100) / 100,
+    uptimeDelta,
     previousLatencyP95Ms: prevMetrics.latencyP95Ms,
     newLatencyP95Ms: newMetrics.latencyP95Ms,
     latencyDeltaMs: newMetrics.latencyP95Ms - prevMetrics.latencyP95Ms,

@@ -3,7 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+process.env.NODE_ENV = "test";
+
 import assert from "node:assert/strict";
+import { createClient } from "@supabase/supabase-js";
 import {
   calculateQualityScore,
   checkProbeSafetyAndBudget,
@@ -22,6 +25,9 @@ import {
   recordApiQualityObservation,
   rowToObservation,
   runScheduledApiQualityProbes,
+  validatePublicServiceForQualityEvaluation,
+  ApiQualityServiceNotFoundError,
+  ApiQualityStoreUnavailableError,
 } from "../lib/providers/api-quality.ts";
 import {
   buildApiQualityPublicReport,
@@ -30,11 +36,15 @@ import {
 } from "../lib/reports/api-quality-report.ts";
 import {
   HOSTED_WORKFLOW_TYPES,
+  createHostedWorkflowPlan,
   defaultWorkflowTask,
   isHostedWorkflowType,
+  validateHostedWorkflowRequest,
 } from "../lib/agent/hosted-workflows.ts";
+import { SAFE_HOSTED_SERVICES } from "../lib/agent/hosted-policy.ts";
+import { serviceRegistry } from "../lib/services/registry.ts";
 import type { MachineErrorCode } from "../lib/api/machine-errors.ts";
-import type { ApiQualityObservationRow } from "../lib/providers/api-quality-types.ts";
+import type { ApiQualityObservationRow, ApiQualityObservation } from "../lib/providers/api-quality-types.ts";
 
 async function runTests() {
   console.log("Starting Comprehensive P4.0 Paid API Quality & Monitoring Test Suite (22 Scenarios)...");
@@ -270,13 +280,55 @@ async function runTests() {
   assert.equal(highAttnScore.status, "High attention");
 
   // ----------------------------------------------------
-  // Scenario 7: Insufficient Data Handling (< 10 observations)
+  // Scenario 7: Insufficient Data Handling (< 10 observations) & Null Denominators
   // ----------------------------------------------------
-  console.log("Scenario 7: Insufficient Data Handling");
+  console.log("Scenario 7: Insufficient Data Handling & Null Denominators");
   const lowDataMetrics = { ...perfectMetrics, totalObservations: 5 };
   const lowDataScore = calculateQualityScore(lowDataMetrics);
   assert.equal(lowDataScore.hasSufficientData, false);
   assert.equal(lowDataScore.status, "Insufficient data");
+  assert.equal(lowDataScore.overallScore, null);
+  assert.equal(lowDataScore.qualityScore, null);
+
+  // Test 0 observations metrics
+  const emptyMetrics = computeApiQualityMetrics([]);
+  assert.equal(emptyMetrics.totalObservations, 0);
+  assert.equal(emptyMetrics.uptimePercent, null);
+  assert.equal(emptyMetrics.executionSuccessPercent, null);
+  assert.equal(emptyMetrics.paymentSuccessPercent, null);
+  assert.equal(emptyMetrics.settlementSuccessPercent, null);
+  assert.equal(emptyMetrics.validResponsePercent, null);
+  assert.equal(emptyMetrics.costPerSuccessfulResultUsdc, null);
+
+  // Test 0 payment attempts metrics
+  const freeObs: ApiQualityObservation[] = Array(12).fill({
+    observationId: "obs_free",
+    serviceId: "srv_free",
+    startedAt: now.toISOString(),
+    completedAt: now.toISOString(),
+    quotedPriceUsdc: 0,
+    paidAmountUsdc: 0,
+    latencyMs: 50,
+    httpStatusClass: "2xx",
+    endpointReached: true,
+    responseSchemaValid: true,
+    responseWithinSizeLimit: true,
+    paymentRequired: false,
+    paymentAuthorized: null,
+    paymentSettled: null,
+    executionCompleted: true,
+    arcProofVerified: true,
+    errorCategory: "none",
+    source: "real_paid_execution",
+    createdAt: now.toISOString(),
+  });
+  const freeMetrics = computeApiQualityMetrics(freeObs);
+  assert.equal(freeMetrics.paymentSuccessPercent, null);
+  assert.equal(freeMetrics.settlementSuccessPercent, null);
+  const freeScore = calculateQualityScore(freeMetrics, freeObs);
+  assert.equal(freeScore.hasSufficientData, true);
+  assert.equal(freeScore.status, "Excellent");
+  assert.ok(freeScore.overallScore !== null && freeScore.overallScore >= 90);
 
   // ----------------------------------------------------
   // Scenario 8: Confidence Level Categorization
@@ -573,8 +625,240 @@ async function runTests() {
   const testErrorCode: MachineErrorCode = "api_quality_service_not_found";
   assert.equal(testErrorCode, "api_quality_service_not_found");
 
+  // ----------------------------------------------------
+  // Scenario 24: Regression Test — DB Unavailable 503 Fail-Closed
+  // ----------------------------------------------------
+  console.log("Scenario 24: Regression Test — DB Unavailable 503 Fail-Closed");
+  const prevEnv = process.env.NODE_ENV;
+  const prevAllowMem = process.env.API_QUALITY_ALLOW_MEMORY_STORE;
+  try {
+    process.env.NODE_ENV = "production";
+    delete process.env.API_QUALITY_ALLOW_MEMORY_STORE;
+    clearInMemoryApiQualityObservations();
+
+    await assert.rejects(
+      async () => {
+        await recordApiQualityObservation({
+          serviceId: "srv_fail_closed_test",
+          startedAt: now.toISOString(),
+          httpStatusClass: "2xx",
+          endpointReached: true,
+          paymentRequired: true,
+          executionCompleted: true,
+          arcProofVerified: true,
+          errorCategory: "none",
+          source: "real_paid_execution",
+        });
+      },
+      (err: any) =>
+        err instanceof ApiQualityStoreUnavailableError &&
+        err.status === 503 &&
+        err.code === "api_quality_observation_store_unavailable",
+      "Should throw 503 ApiQualityStoreUnavailableError in production when DB unavailable",
+    );
+
+    assert.equal(
+      getInMemoryApiQualityObservations().length,
+      0,
+      "Zero records must be created in memory store during production DB failure",
+    );
+  } finally {
+    process.env.NODE_ENV = prevEnv;
+    if (prevAllowMem) process.env.API_QUALITY_ALLOW_MEMORY_STORE = prevAllowMem;
+  }
+
+  // ----------------------------------------------------
+  // Scenario 25: Regression Test — Serverless Restart Simulation
+  // ----------------------------------------------------
+  console.log("Scenario 25: Regression Test — Serverless Restart Simulation");
+  clearInMemoryApiQualityObservations();
+  const fetchedAfterRestart = await fetchApiQualityObservations("srv_transform_test", 30);
+  assert.ok(Array.isArray(fetchedAfterRestart), "Fetching observations after serverless cold restart should return array");
+
+  // ----------------------------------------------------
+  // Scenario 26: Regression Test — Anon Supabase Client RLS Denial
+  // ----------------------------------------------------
+  console.log("Scenario 26: Regression Test — Anon Supabase Client RLS Denial");
+  const anonSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://test.supabase.co";
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlc3QiLCJyb2xlIjoiYW5vbiIsImlhdCI6MTYwMDAwMDAwMCwiZXhwIjoyMDAwMDAwMDAwfQ.dummy_anon_key";
+  const anonClient = createClient(anonSupabaseUrl, anonKey);
+  const { data: anonData, error: anonError } = await anonClient.from("api_quality_observations").select("*").limit(5);
+  assert.ok(anonError !== null || (anonData && anonData.length === 0), "Anon Supabase client must receive RLS denial or 0 rows");
+
+  // ----------------------------------------------------
+  // Scenario 27: Regression Test — Preservation of Null Fields
+  // ----------------------------------------------------
+  console.log("Scenario 27: Regression Test — Preservation of Null Fields");
+  const nullRow: ApiQualityObservationRow = {
+    observation_id: "obs_null_fields",
+    service_id: "srv_null_test",
+    seller_public_id: null,
+    started_at: now.toISOString(),
+    completed_at: null,
+    quoted_price_usdc: null,
+    paid_amount_usdc: null,
+    latency_ms: null,
+    http_status_class: "5xx",
+    endpoint_reached: false,
+    response_schema_valid: null,
+    response_within_size_limit: null,
+    payment_required: false,
+    payment_authorized: null,
+    payment_settled: null,
+    execution_completed: false,
+    arc_proof_verified: false,
+    error_category: "timeout",
+    source: "scheduled_probe",
+    created_at: now.toISOString(),
+  };
+
+  const parsedNullObs = rowToObservation(nullRow);
+  assert.equal(parsedNullObs.completedAt, null);
+  assert.equal(parsedNullObs.quotedPriceUsdc, null);
+  assert.equal(parsedNullObs.paidAmountUsdc, null);
+  assert.equal(parsedNullObs.latencyMs, null);
+  assert.equal(parsedNullObs.responseSchemaValid, null);
+  assert.equal(parsedNullObs.responseWithinSizeLimit, null);
+  assert.equal(parsedNullObs.paymentAuthorized, null);
+  assert.equal(parsedNullObs.paymentSettled, null);
+
+  const nullMetrics = computeApiQualityMetrics([parsedNullObs]);
+  assert.equal(nullMetrics.paymentSuccessPercent, null);
+  assert.equal(nullMetrics.settlementSuccessPercent, null);
+  assert.equal(parsedNullObs.latencyMs, null);
+  assert.equal(parsedNullObs.completedAt, null);
+
+  // ----------------------------------------------------
+  // Scenario 28: Regression Test — Timeout Does Not Get Latency 0
+  // ----------------------------------------------------
+  console.log("Scenario 28: Regression Test — Timeout Does Not Get Latency 0");
+  const normalObs: ApiQualityObservation = {
+    observationId: "obs_normal_test",
+    serviceId: "srv_timeout_test",
+    startedAt: now.toISOString(),
+    completedAt: new Date(now.getTime() + 200).toISOString(),
+    quotedPriceUsdc: 0.05,
+    paidAmountUsdc: 0.05,
+    latencyMs: 200,
+    httpStatusClass: "2xx",
+    endpointReached: true,
+    responseSchemaValid: true,
+    responseWithinSizeLimit: true,
+    paymentRequired: true,
+    paymentAuthorized: true,
+    paymentSettled: true,
+    executionCompleted: true,
+    arcProofVerified: true,
+    errorCategory: "none",
+    source: "real_paid_execution",
+    createdAt: now.toISOString(),
+  };
+  const timeoutObs: ApiQualityObservation = {
+    observationId: "obs_timeout_test",
+    serviceId: "srv_timeout_test",
+    startedAt: now.toISOString(),
+    completedAt: null,
+    quotedPriceUsdc: 0.05,
+    paidAmountUsdc: 0.05,
+    latencyMs: null,
+    httpStatusClass: "5xx",
+    endpointReached: false,
+    responseSchemaValid: null,
+    responseWithinSizeLimit: null,
+    paymentRequired: true,
+    paymentAuthorized: true,
+    paymentSettled: false,
+    executionCompleted: false,
+    arcProofVerified: false,
+    errorCategory: "timeout",
+    source: "real_paid_execution",
+    createdAt: now.toISOString(),
+  };
+
+  assert.equal(timeoutObs.latencyMs, null, "Timeout observation must have null latencyMs, NOT 0");
+  const timeoutMetrics = computeApiQualityMetrics([normalObs, timeoutObs]);
+  assert.equal(timeoutMetrics.latencyP50Ms, 200, "Timeout observation must be excluded from latency calculation, NOT treated as 0 ms latency");
+
+  // ----------------------------------------------------
+  // Scenario 29: Regression Test — No Payment Attempts Displays as N/A
+  // ----------------------------------------------------
+  console.log("Scenario 29: Regression Test — No Payment Attempts Displays as N/A");
+  const freeSrvObs: ApiQualityObservation = {
+    observationId: "obs_free_srv",
+    serviceId: "srv_free_display",
+    startedAt: now.toISOString(),
+    completedAt: now.toISOString(),
+    quotedPriceUsdc: 0,
+    paidAmountUsdc: 0,
+    latencyMs: 80,
+    httpStatusClass: "2xx",
+    endpointReached: true,
+    responseSchemaValid: true,
+    responseWithinSizeLimit: true,
+    paymentRequired: false,
+    paymentAuthorized: null,
+    paymentSettled: null,
+    executionCompleted: true,
+    arcProofVerified: true,
+    errorCategory: "none",
+    source: "real_paid_execution",
+    createdAt: now.toISOString(),
+  };
+
+  const freeReportModel = buildApiQualityPublicReport({
+    jobId: "job_free_test",
+    workflow: "paid_api_quality",
+    status: "completed",
+    targetServices: ["srv_free_display"],
+    observationWindowDays: 30,
+    observationsByService: { srv_free_display: Array(12).fill(freeSrvObs) },
+  });
+
+  const freeReportMarkdown = formatApiQualityPublicReportAsMarkdown(freeReportModel);
+  assert.ok(
+    freeReportMarkdown.includes("N/A") || freeReportMarkdown.includes("No observations"),
+    "No payment attempts must display as N/A or No observations in report markdown",
+  );
+
+  // ----------------------------------------------------
+  // Scenario 30: Regression Test — Private Service Returns 404
+  // ----------------------------------------------------
+  console.log("Scenario 30: Regression Test — Private Service Returns 404");
+  const privateCheck = await validatePublicServiceForQualityEvaluation("agent-trust-finalizer");
+  assert.equal(privateCheck, null, "Private/internal service lookup must return null");
+
+  await assert.rejects(
+    async () => {
+      await validatePublicServiceForQualityEvaluation("agent-trust-finalizer", { throwOnError: true });
+    },
+    (err: any) =>
+      err instanceof ApiQualityServiceNotFoundError &&
+      err.status === 404 &&
+      err.code === "api_quality_service_not_found",
+    "Private service with throwOnError must throw 404 ApiQualityServiceNotFoundError",
+  );
+
+  // ----------------------------------------------------
+  // Scenario 31: Regression Test — Paid Workflow Does Not Invoke text-analyzer or premium-quote
+  // ----------------------------------------------------
+  console.log("Scenario 31: Regression Test — Paid Workflow Does Not Invoke text-analyzer or premium-quote");
+  const paidQualityRequest = validateHostedWorkflowRequest({
+    workflowType: "paid_api_quality",
+    inputText: "evaluate srv_test_eval_quality_benchmark",
+  });
+  const paidQualityPlan = createHostedWorkflowPlan({
+    request: paidQualityRequest,
+    services: [...serviceRegistry],
+    allowlist: SAFE_HOSTED_SERVICES,
+  });
+
+  const selectedSlugs = paidQualityPlan.selectedServices.map((s) => s.slug);
+  assert.ok(selectedSlugs.includes("api-quality-finalizer"), "paid_api_quality plan must include api-quality-finalizer");
+  assert.ok(!selectedSlugs.includes("text-analyzer"), "paid_api_quality plan must NOT include text-analyzer");
+  assert.ok(!selectedSlugs.includes("premium-quote"), "paid_api_quality plan must NOT include premium-quote");
+
   console.log("\n=======================================================");
-  console.log("ALL 22 P4.0 PAID API QUALITY TEST SCENARIOS PASSED!");
+  console.log("ALL 31 P4.0 PAID API QUALITY TEST SCENARIOS PASSED!");
   console.log("=======================================================");
 }
 

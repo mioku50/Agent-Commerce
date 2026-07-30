@@ -4,14 +4,18 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { fetchApiQualityObservationsForServices } from "@/lib/providers/api-quality";
+import {
+  fetchApiQualityObservationsForServices,
+  validatePublicServiceForQualityEvaluation,
+  API_QUALITY_SERVICE_NOT_FOUND_RESPONSE,
+} from "@/lib/providers/api-quality";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const servicesParam = searchParams.get("services") || "";
+    const servicesParam = searchParams.get("services") || searchParams.get("service") || "";
     const windowDaysParam = parseInt(searchParams.get("windowDays") || "30", 10);
     const windowDays = [7, 30, 90].includes(windowDaysParam) ? windowDaysParam : 30;
 
@@ -26,6 +30,13 @@ export async function GET(request: NextRequest) {
         observationsByService: {},
         hasSufficientData: false,
       });
+    }
+
+    for (const serviceId of serviceIds) {
+      const validService = await validatePublicServiceForQualityEvaluation(serviceId);
+      if (!validService) {
+        return NextResponse.json(API_QUALITY_SERVICE_NOT_FOUND_RESPONSE, { status: 404 });
+      }
     }
 
     const obsMap = await fetchApiQualityObservationsForServices(serviceIds, windowDays);

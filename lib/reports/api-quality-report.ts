@@ -20,7 +20,7 @@ import {
 import { BRAND } from "../brand.ts";
 
 export interface NumericMetric {
-  value: number;
+  value: number | null;
   isLowerBound?: boolean;
   confidence: ConfidenceLevel;
 }
@@ -48,7 +48,7 @@ export interface ApiQualityReportServiceSummary {
   sellerPublicId: string | null;
   observationCount: NumericMetric;
   rank?: number;
-  qualityScore?: number;
+  qualityScore?: number | null;
   status?: QualityStatus;
 }
 
@@ -74,7 +74,7 @@ export interface ApiQualityPublicReport {
   mode: "single" | "comparison";
   targetServices: string[];
   overallStatus: QualityStatus;
-  overallScore: number;
+  overallScore: number | null;
   confidence: ConfidenceLevel;
   executiveSummary: string;
   generatedAt: string;
@@ -129,17 +129,17 @@ export interface ApiQualityPublicReport {
 
   // Section 9: Quality Score and Confidence
   qualityScoreAndConfidence: {
-    overallScore: number;
+    overallScore: number | null;
     status: QualityStatus;
     confidenceLevel: ConfidenceLevel;
     hasSufficientData: boolean;
     breakdown: {
-      availabilityScore: number;
-      executionReliabilityScore: number;
-      responseValidityScore: number;
-      paymentSuccessScore: number;
-      settlementSuccessScore: number;
-      latencyConsistencyScore: number;
+      availabilityScore: number | null;
+      executionReliabilityScore: number | null;
+      responseValidityScore: number | null;
+      paymentSuccessScore: number | null;
+      settlementSuccessScore: number | null;
+      latencyConsistencyScore: number | null;
     };
     summary: string;
   };
@@ -322,7 +322,7 @@ export function parseApiQualityJobInput(
   // 4. Fallback to selectedServices in plannerSnapshot
   if (targetServices.length === 0 && plannerSnapshot?.selectedServices) {
     for (const s of plannerSnapshot.selectedServices) {
-      if (s.slug && s.slug !== "paid-api-quality-finalizer") {
+      if (s.slug && s.slug !== "paid-api-quality-finalizer" && s.slug !== "api-quality-finalizer") {
         targetServices.push(s.slug);
       }
     }
@@ -407,9 +407,14 @@ export function buildApiQualityPublicReport(
       0,
     );
     const topPerformer = comparisonResult.services[0];
-    executiveSummary = `Comparative evaluation of ${uniqueServices.length} paid API service(s) (${uniqueServices.map((id) => input.serviceNames?.[id] || id).join(", ")}) over a ${windowDays}-day observation window. Top overall performer is '${topPerformer?.serviceName || primaryServiceName}' with a Quality Score of ${topPerformer?.score.overallScore ?? 0}/100 (${topPerformer?.score.status ?? "Insufficient data"}). Total observations analyzed across all services: ${totalObsAll}.`;
+    const topScoreStr = topPerformer?.score.overallScore !== null && topPerformer?.score.overallScore !== undefined ? `${topPerformer.score.overallScore}/100` : "N/A";
+    executiveSummary = `Comparative evaluation of ${uniqueServices.length} paid API service(s) (${uniqueServices.map((id) => input.serviceNames?.[id] || id).join(", ")}) over a ${windowDays}-day observation window. Top overall performer is '${topPerformer?.serviceName || primaryServiceName}' with a Quality Score of ${topScoreStr} (${topPerformer?.score.status ?? "Insufficient data"}). Total observations analyzed across all services: ${totalObsAll}.`;
   } else {
-    executiveSummary = `Paid API Quality evaluation for '${primaryServiceName}' across ${primaryMetrics.totalObservations} observation(s) over a ${windowDays}-day window. Quality Score: ${primaryScore.overallScore}/100 (${primaryScore.status}). Overall uptime: ${primaryMetrics.uptimePercent}%, P50 latency: ${primaryMetrics.latencyP50Ms}ms, end-to-end execution success: ${primaryMetrics.executionSuccessPercent}%, and cost per successful result: ${primaryMetrics.costPerSuccessfulResultUsdc} USDC.`;
+    const primaryScoreStr = primaryScore.overallScore !== null ? `${primaryScore.overallScore}/100` : "N/A";
+    const primaryUptimeStr = primaryMetrics.uptimePercent !== null ? `${primaryMetrics.uptimePercent}%` : "N/A";
+    const primaryExecStr = primaryMetrics.executionSuccessPercent !== null ? `${primaryMetrics.executionSuccessPercent}%` : "N/A";
+    const primaryCostStr = primaryMetrics.costPerSuccessfulResultUsdc !== null ? `${primaryMetrics.costPerSuccessfulResultUsdc} USDC` : "N/A";
+    executiveSummary = `Paid API Quality evaluation for '${primaryServiceName}' across ${primaryMetrics.totalObservations} observation(s) over a ${windowDays}-day window. Quality Score: ${primaryScoreStr} (${primaryScore.status}). Overall uptime: ${primaryUptimeStr}, P50 latency: ${primaryMetrics.latencyP50Ms}ms, end-to-end execution success: ${primaryExecStr}, and cost per successful result: ${primaryCostStr}.`;
   }
 
   // Section 2: Services Overview & Comparison
@@ -448,7 +453,7 @@ export function buildApiQualityPublicReport(
     },
     summary:
       primaryMetrics.totalObservations > 0
-        ? `Quoted pricing ranges from ${primaryMetrics.quotedPriceMinUsdc} to ${primaryMetrics.quotedPriceMaxUsdc} USDC (median: ${primaryMetrics.quotedPriceMedianUsdc} USDC). Effective cost per verified successful execution: ${primaryMetrics.costPerSuccessfulResultUsdc} USDC.`
+        ? `Quoted pricing ranges from ${primaryMetrics.quotedPriceMinUsdc} to ${primaryMetrics.quotedPriceMaxUsdc} USDC (median: ${primaryMetrics.quotedPriceMedianUsdc} USDC). Effective cost per verified successful execution: ${primaryMetrics.costPerSuccessfulResultUsdc !== null ? `${primaryMetrics.costPerSuccessfulResultUsdc} USDC` : "N/A"}.`
         : "No pricing observations recorded within the selected window.",
   };
 
@@ -463,7 +468,7 @@ export function buildApiQualityPublicReport(
       confidence: globalConfidence,
     },
     summary:
-      primaryMetrics.totalObservations > 0
+      primaryMetrics.totalObservations > 0 && primaryMetrics.uptimePercent !== null
         ? `Endpoint reached ${primaryMetrics.uptimePercent}% uptime across ${primaryMetrics.totalObservations} total observation(s).`
         : "Insufficient data to compute uptime percentage.",
   };
@@ -515,7 +520,7 @@ export function buildApiQualityPublicReport(
       confidence: globalConfidence,
     },
     summary:
-      primaryMetrics.totalObservations > 0
+      primaryMetrics.totalObservations > 0 && primaryMetrics.validResponsePercent !== null
         ? `${primaryMetrics.validResponsePercent}% of returned payloads met schema structural and size constraints.`
         : "No response validation records available.",
   };
@@ -532,7 +537,7 @@ export function buildApiQualityPublicReport(
     },
     summary:
       primaryMetrics.totalObservations > 0
-        ? `Payment authorization success rate: ${primaryMetrics.paymentSuccessPercent}%. On-chain settlement success rate: ${primaryMetrics.settlementSuccessPercent}%.`
+        ? `Payment authorization success rate: ${primaryMetrics.paymentSuccessPercent !== null ? `${primaryMetrics.paymentSuccessPercent}%` : "N/A (no payment required)"}. On-chain settlement success rate: ${primaryMetrics.settlementSuccessPercent !== null ? `${primaryMetrics.settlementSuccessPercent}%` : "N/A"}.`
         : "No payment or settlement events recorded.",
   };
 
@@ -581,19 +586,20 @@ export function buildApiQualityPublicReport(
       settlementSuccessScore: primaryScore.settlementSuccessScore,
       latencyConsistencyScore: primaryScore.latencyConsistencyScore,
     },
-    summary: primaryScore.hasSufficientData
+    summary: primaryScore.hasSufficientData && primaryScore.overallScore !== null
       ? `Overall Quality Score: ${primaryScore.overallScore}/100 (${primaryScore.status}). Scored across 6 weighted categories with ${primaryScore.confidenceLevel} confidence.`
-      : `Overall Quality Score: ${primaryScore.overallScore}/100 (${primaryScore.status}). Sample size is under the 10-observation threshold required for high confidence.`,
+      : `Overall Quality Score: Insufficient data (${primaryScore.status}). Sample size is under the 10-observation threshold required for high confidence.`,
   };
 
   // Section 10: Evidence-Backed Strengths
   const strengths: string[] = [];
-  if (primaryMetrics.uptimePercent >= 99 && primaryMetrics.totalObservations > 0) {
+  if (primaryMetrics.uptimePercent !== null && primaryMetrics.uptimePercent >= 99 && primaryMetrics.totalObservations > 0) {
     strengths.push(
       `High availability: Endpoint maintained ${primaryMetrics.uptimePercent}% uptime across ${primaryMetrics.totalObservations} observation(s).`,
     );
   }
   if (
+    primaryMetrics.executionSuccessPercent !== null &&
     primaryMetrics.executionSuccessPercent >= 95 &&
     primaryMetrics.totalObservations > 0
   ) {
@@ -650,6 +656,7 @@ export function buildApiQualityPublicReport(
     });
   }
   if (
+    primaryMetrics.uptimePercent !== null &&
     primaryMetrics.uptimePercent < 95 &&
     primaryMetrics.totalObservations > 0
   ) {
@@ -674,6 +681,7 @@ export function buildApiQualityPublicReport(
     });
   }
   if (
+    primaryMetrics.validResponsePercent !== null &&
     primaryMetrics.validResponsePercent < 95 &&
     primaryMetrics.totalObservations > 0
   ) {
@@ -686,6 +694,7 @@ export function buildApiQualityPublicReport(
     });
   }
   if (
+    primaryMetrics.paymentSuccessPercent !== null &&
     primaryMetrics.paymentSuccessPercent < 95 &&
     primaryMetrics.totalObservations > 0
   ) {
@@ -698,6 +707,7 @@ export function buildApiQualityPublicReport(
     });
   }
   if (
+    primaryMetrics.settlementSuccessPercent !== null &&
     primaryMetrics.settlementSuccessPercent < 95 &&
     primaryMetrics.totalObservations > 0
   ) {
@@ -721,7 +731,7 @@ export function buildApiQualityPublicReport(
       `Can payload compression or response filtering be requested to reduce tail latency of ${primaryMetrics.latencyP95Ms}ms?`,
     );
   }
-  if (primaryMetrics.validResponsePercent < 100) {
+  if (primaryMetrics.validResponsePercent !== null && primaryMetrics.validResponsePercent < 100) {
     questionsBeforeIntegration.push(
       "What breaking API schema changes occurred during the observation window?",
     );
@@ -845,9 +855,10 @@ export function formatApiQualityPublicReportAsMarkdown(
         (item) => item.serviceId === s.serviceId,
       );
       const p50 = match ? `${match.metrics.latencyP50Ms}ms` : "N/A";
-      const uptime = match ? `${match.metrics.uptimePercent}%` : "N/A";
-      const cost = match ? `${match.metrics.costPerSuccessfulResultUsdc} USDC` : "N/A";
-      return `| ${s.rank ?? 1} | \`${s.serviceId}\` | **${s.qualityScore ?? 0}/100** | \`${s.status ?? "N/A"}\` | ${s.observationCount.value} | ${p50} | ${uptime} | ${cost} |`;
+      const uptime = match && match.metrics.uptimePercent !== null ? `${match.metrics.uptimePercent}%` : "N/A";
+      const cost = match && match.metrics.costPerSuccessfulResultUsdc !== null ? `${match.metrics.costPerSuccessfulResultUsdc} USDC` : "N/A";
+      const scoreStr = s.qualityScore !== null && s.qualityScore !== undefined ? `${s.qualityScore}/100` : "N/A";
+      return `| ${s.rank ?? 1} | \`${s.serviceId}\` | **${scoreStr}** | \`${s.status ?? "N/A"}\` | ${s.observationCount.value} | ${p50} | ${uptime} | ${cost} |`;
     })
     .join("\n");
 
@@ -894,7 +905,7 @@ export function formatApiQualityPublicReportAsMarkdown(
 **Workflow:** \`${report.workflow}\`  
 **Mode:** \`${report.mode}\`  
 **Status:** \`${report.status}\`  
-**Quality Status:** **${report.overallStatus}** (Score: \`${report.overallScore}/100\`, \`${report.confidence}\` confidence)  
+**Quality Status:** **${report.overallStatus}** (Score: \`${report.overallScore !== null ? `${report.overallScore}/100` : "N/A"}\`, \`${report.confidence}\` confidence)  
 **Observation Window:** \`${report.observationWindowDays} days\`  
 **Generated At:** ${report.generatedAt}  
 **Generated by:** ${BRAND.name}  
@@ -905,14 +916,14 @@ export function formatApiQualityPublicReportAsMarkdown(
 ${report.executiveSummary}
 
 ## Quality Score & Breakdown
-- **Overall Score:** \`${report.qualityScoreAndConfidence.overallScore}/100\` (${report.qualityScoreAndConfidence.status})
+- **Overall Score:** \`${report.qualityScoreAndConfidence.overallScore !== null ? `${report.qualityScoreAndConfidence.overallScore}/100` : "N/A"}\` (${report.qualityScoreAndConfidence.status})
 - **Confidence Level:** \`${report.qualityScoreAndConfidence.confidenceLevel}\`
-- **Availability Score:** \`${report.qualityScoreAndConfidence.breakdown.availabilityScore}/25\`
-- **Execution Reliability Score:** \`${report.qualityScoreAndConfidence.breakdown.executionReliabilityScore}/20\`
-- **Response Validity Score:** \`${report.qualityScoreAndConfidence.breakdown.responseValidityScore}/15\`
-- **Payment Success Score:** \`${report.qualityScoreAndConfidence.breakdown.paymentSuccessScore}/15\`
-- **Settlement Success Score:** \`${report.qualityScoreAndConfidence.breakdown.settlementSuccessScore}/15\`
-- **Latency Consistency Score:** \`${report.qualityScoreAndConfidence.breakdown.latencyConsistencyScore}/10\`
+- **Availability Score:** \`${report.qualityScoreAndConfidence.breakdown.availabilityScore !== null ? `${report.qualityScoreAndConfidence.breakdown.availabilityScore}/25` : "N/A"}\`
+- **Execution Reliability Score:** \`${report.qualityScoreAndConfidence.breakdown.executionReliabilityScore !== null ? `${report.qualityScoreAndConfidence.breakdown.executionReliabilityScore}/20` : "N/A"}\`
+- **Response Validity Score:** \`${report.qualityScoreAndConfidence.breakdown.responseValidityScore !== null ? `${report.qualityScoreAndConfidence.breakdown.responseValidityScore}/15` : "N/A"}\`
+- **Payment Success Score:** \`${report.qualityScoreAndConfidence.breakdown.paymentSuccessScore !== null ? `${report.qualityScoreAndConfidence.breakdown.paymentSuccessScore}/15` : "N/A"}\`
+- **Settlement Success Score:** \`${report.qualityScoreAndConfidence.breakdown.settlementSuccessScore !== null ? `${report.qualityScoreAndConfidence.breakdown.settlementSuccessScore}/15` : "N/A"}\`
+- **Latency Consistency Score:** \`${report.qualityScoreAndConfidence.breakdown.latencyConsistencyScore !== null ? `${report.qualityScoreAndConfidence.breakdown.latencyConsistencyScore}/10` : "N/A"}\`
 
 ## Services Overview & Comparison
 ${servicesTableHead}
@@ -922,12 +933,12 @@ ${servicesTableRows}
 - **Min Quoted Price:** \`${report.priceAndCostEfficiency.quotedPriceMinUsdc.value} USDC\`
 - **Median Quoted Price:** \`${report.priceAndCostEfficiency.quotedPriceMedianUsdc.value} USDC\`
 - **Max Quoted Price:** \`${report.priceAndCostEfficiency.quotedPriceMaxUsdc.value} USDC\`
-- **Cost per Successful Result:** \`${report.priceAndCostEfficiency.costPerSuccessfulResultUsdc.value} USDC\`
+- **Cost per Successful Result:** \`${report.priceAndCostEfficiency.costPerSuccessfulResultUsdc.value !== null ? `${report.priceAndCostEfficiency.costPerSuccessfulResultUsdc.value} USDC` : "N/A"}\`
 
 ${report.priceAndCostEfficiency.summary}
 
 ## Availability & Uptime
-- **Observed Uptime:** \`${report.availability.uptimePercent.value}%\`
+- **Observed Uptime:** \`${report.availability.uptimePercent.value !== null ? `${report.availability.uptimePercent.value}%` : "N/A"}\`
 - **Total Observations:** \`${report.availability.totalObservations.value}\`
 
 ${report.availability.summary}
@@ -940,15 +951,15 @@ ${report.availability.summary}
 ${report.latencyDistribution.summary}
 
 ## Response Quality & Schema Validation
-- **Valid Response Rate:** \`${report.responseQuality.validResponsePercent.value}%\`
+- **Valid Response Rate:** \`${report.responseQuality.validResponsePercent.value !== null ? `${report.responseQuality.validResponsePercent.value}%` : "N/A"}\`
 - **Schema Compliance:** \`${report.responseQuality.schemaValidationPercent.value}%\`
 - **Within Size Limit:** \`${report.responseQuality.withinSizeLimitPercent.value}%\`
 
 ${report.responseQuality.summary}
 
 ## Payment & Settlement Reliability
-- **Payment Authorization Success:** \`${report.paymentAndSettlementReliability.paymentSuccessPercent.value}%\`
-- **Arc Settlement Success:** \`${report.paymentAndSettlementReliability.settlementSuccessPercent.value}%\`
+- **Payment Authorization Success:** \`${report.paymentAndSettlementReliability.paymentSuccessPercent.value !== null ? `${report.paymentAndSettlementReliability.paymentSuccessPercent.value}%` : "N/A"}\`
+- **Arc Settlement Success:** \`${report.paymentAndSettlementReliability.settlementSuccessPercent.value !== null ? `${report.paymentAndSettlementReliability.settlementSuccessPercent.value}%` : "N/A"}\`
 
 ${report.paymentAndSettlementReliability.summary}
 
