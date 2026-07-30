@@ -7,7 +7,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Bot, Calculator, Check, CreditCard, LoaderCircle, Wallet } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -77,6 +77,18 @@ export function HostedAgentRunner({
   const paymentTransactionHash = useRef<string | null>(null);
   const sponsoredSignature = useRef<string | null>(null);
 
+  const [selectedQualityServices, setSelectedQualityServices] = useState<string[]>([
+    "pyth-market-price",
+    "github-repository-intelligence",
+  ]);
+  const [observationWindowDays, setObservationWindowDays] = useState<7 | 30 | 90>(30);
+  const [serviceSearchQuery, setServiceSearchQuery] = useState("");
+  const [observationCountPreview, setObservationCountPreview] = useState<{
+    totalObservations: number;
+    observationsByService: Record<string, number>;
+  } | null>(null);
+  const [loadingObservations, setLoadingObservations] = useState(false);
+
   let repositoryRef: ReturnType<typeof parseGitHubRepositoryInput> | null = null;
   if (workflowType === "github_due_diligence" && inputText.trim()) {
     try {
@@ -122,7 +134,9 @@ export function HostedAgentRunner({
           contractAddressValid &&
           serviceEndpointValid &&
           (!agentRepositoryUrl.trim() || Boolean(agentRepositoryRef))
-        : inputText.trim().length >= 20;
+        : workflowType === "paid_api_quality"
+          ? selectedQualityServices.length >= 1 && selectedQualityServices.length <= 5
+          : inputText.trim().length >= 20;
 
   const inputHelper = workflowType === "agent_trust_report"
     ? !hasAgentTrustPrimaryInput
@@ -143,6 +157,14 @@ export function HostedAgentRunner({
       ? "Enter a public GitHub repository URL (e.g. github.com/owner/repository)."
       : !repositoryRef
       ? "Enter a valid public GitHub repository in owner/repository format."
+      : null
+    : workflowType === "paid_api_quality"
+    ? selectedQualityServices.length === 0
+      ? "Select 1 to 5 public services to analyze or compare."
+      : selectedQualityServices.length > 5
+      ? "Select a maximum of 5 services for comparative analysis."
+      : observationCountPreview && observationCountPreview.totalObservations < 10
+      ? `Sample size warning: ${observationCountPreview.totalObservations} observation(s) recorded in window (< 10). High-confidence scoring requires at least 10 observations.`
       : null
     : hostedInputPreviewHelper(inputText);
 
@@ -166,11 +188,72 @@ export function HostedAgentRunner({
     invalidatePlan();
   }
 
+  function toggleQualityService(serviceId: string) {
+    let updated: string[];
+    if (selectedQualityServices.includes(serviceId)) {
+      updated = selectedQualityServices.filter((id) => id !== serviceId);
+    } else {
+      if (selectedQualityServices.length >= 5) return;
+      updated = [...selectedQualityServices, serviceId];
+    }
+    setSelectedQualityServices(updated);
+    setInputText(
+      JSON.stringify({ serviceIds: updated, observationWindowDays }, null, 2),
+    );
+    invalidatePlan();
+  }
+
+  function changeObservationWindow(windowDays: 7 | 30 | 90) {
+    setObservationWindowDays(windowDays);
+    setInputText(
+      JSON.stringify(
+        { serviceIds: selectedQualityServices, observationWindowDays: windowDays },
+        null,
+        2,
+      ),
+    );
+    invalidatePlan();
+  }
+
+  useEffect(() => {
+    if (workflowType !== "paid_api_quality") return;
+    let active = true;
+    if (selectedQualityServices.length === 0) {
+      setObservationCountPreview({ totalObservations: 0, observationsByService: {} });
+      return;
+    }
+    setLoadingObservations(true);
+    fetch(
+      `/api/store/observations?services=${encodeURIComponent(selectedQualityServices.join(","))}&windowDays=${observationWindowDays}`,
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (active && typeof data.totalObservations === "number") {
+          setObservationCountPreview({
+            totalObservations: data.totalObservations,
+            observationsByService: data.observationsByService || {},
+          });
+        }
+      })
+      .catch(() => {
+        if (active) setObservationCountPreview({ totalObservations: 0, observationsByService: {} });
+      })
+      .finally(() => {
+        if (active) setLoadingObservations(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [workflowType, selectedQualityServices, observationWindowDays]);
+
   function requestBody() {
     return {
       workflowType,
       task,
-      inputText,
+      inputText:
+        workflowType === "paid_api_quality"
+          ? JSON.stringify({ serviceIds: selectedQualityServices, observationWindowDays }, null, 2)
+          : inputText,
       agentTrustInput:
         workflowType === "agent_trust_report"
           ? {
@@ -389,6 +472,145 @@ export function HostedAgentRunner({
                 <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
                   <p className="font-semibold">Public evidence only</p>
                   <p className="mt-1">Do not submit secrets or credentials. Private and local endpoints are blocked, and tenant-private history is never exposed.</p>
+                </div>
+              </div>
+            ) : workflowType === "paid_api_quality" ? (
+              <div className="grid gap-4">
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+                  <p className="font-semibold">Evaluate and compare paid API quality and reliability telemetry.</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Select 1 to 5 public services and choose an observation window. We analyze uptime, latency P50/P95, validity, payment execution, and settlement reliability.
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <Label htmlFor="observation-window-picker">Observation window</Label>
+                  <div className="flex items-center gap-2" id="observation-window-picker">
+                    {[7, 30, 90].map((days) => (
+                      <Button
+                        key={days}
+                        type="button"
+                        variant={observationWindowDays === days ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => changeObservationWindow(days as 7 | 30 | 90)}
+                      >
+                        {days} Days
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Telemetry observations will be aggregated over the last {observationWindowDays} days.
+                  </p>
+                </div>
+
+                <div className="grid gap-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <Label htmlFor="service-search">
+                      Target Services ({selectedQualityServices.length}/5 selected)
+                    </Label>
+                    <Badge
+                      variant={selectedQualityServices.length > 0 ? "secondary" : "outline"}
+                      className="font-mono text-xs"
+                    >
+                      {selectedQualityServices.length <= 1
+                        ? "Single Service Review"
+                        : `${selectedQualityServices.length} Services Comparison`}
+                    </Badge>
+                  </div>
+
+                  <input
+                    type="text"
+                    id="service-search"
+                    value={serviceSearchQuery}
+                    onChange={(e) => setServiceSearchQuery(e.target.value)}
+                    placeholder="Filter services by name, category, or ID..."
+                    className="h-9 w-full rounded-md border bg-background px-3 text-xs placeholder:text-muted-foreground"
+                  />
+
+                  <div className="grid gap-2 max-h-64 overflow-y-auto pt-1">
+                    {[
+                      { id: "pyth-market-price", name: "Live Market Price", category: "Market Data", priceUsdc: "0.0010 USDC", description: "Pyth Network real-time prices" },
+                      { id: "github-repository-intelligence", name: "GitHub Repository Intelligence", category: "Developer Intelligence", priceUsdc: "0.0015 USDC", description: "GitHub metadata & activity" },
+                      { id: "text-analyzer", name: "Text Analyzer", category: "Compute", priceUsdc: "0.0003 USDC", description: "Paid compute text analysis" },
+                      { id: "premium-quote", name: "Premium Quote", category: "Research", priceUsdc: "0.0010 USDC", description: "Traceable research quote" },
+                      { id: "agent-task", name: "Agent Task", category: "Agent Work", priceUsdc: "0.0300 USDC", description: "Multi-step task execution" },
+                      { id: "github-due-diligence-analysis", name: "GitHub Due Diligence Analysis", category: "Risk Analysis", priceUsdc: "0.0005 USDC", description: "Deterministic due diligence" },
+                    ]
+                      .filter(
+                        (s) =>
+                          !serviceSearchQuery.trim() ||
+                          s.name.toLowerCase().includes(serviceSearchQuery.toLowerCase()) ||
+                          s.category.toLowerCase().includes(serviceSearchQuery.toLowerCase()) ||
+                          s.id.toLowerCase().includes(serviceSearchQuery.toLowerCase()),
+                      )
+                      .map((s) => {
+                        const isSelected = selectedQualityServices.includes(s.id);
+                        const obsCountForService =
+                          observationCountPreview?.observationsByService?.[s.id];
+                        return (
+                          <div
+                            key={s.id}
+                            onClick={() => toggleQualityService(s.id)}
+                            className={`flex items-start justify-between gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
+                              isSelected ? "border-primary bg-primary/5" : "hover:border-primary/50"
+                            }`}
+                          >
+                            <div className="flex items-start gap-2.5">
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="mt-1 size-4 rounded border-primary text-primary focus:ring-primary cursor-pointer"
+                              />
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <p className="font-semibold text-sm">{s.name}</p>
+                                  <Badge variant="outline" className="text-[10px] py-0">
+                                    {s.category}
+                                  </Badge>
+                                </div>
+                                <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
+                                <code className="mt-1 text-[11px] text-muted-foreground block font-mono">
+                                  id: {s.id}
+                                </code>
+                              </div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className="text-xs font-mono font-medium">{s.priceUsdc}</span>
+                              {typeof obsCountForService === "number" ? (
+                                <p className="mt-1 text-[10px] text-muted-foreground">
+                                  {obsCountForService} obs
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+
+                <div className="rounded-md border bg-secondary/20 p-3 text-xs grid gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-foreground">Telemetry Observation Preview</span>
+                    {loadingObservations ? (
+                      <span className="text-muted-foreground animate-pulse">Loading count...</span>
+                    ) : (
+                      <Badge variant="secondary" className="font-mono">
+                        {observationCountPreview?.totalObservations ?? 0} total observations
+                      </Badge>
+                    )}
+                  </div>
+                  <p className="text-muted-foreground">
+                    Telemetry aggregated across {selectedQualityServices.length} selected service(s) over {observationWindowDays} days.
+                  </p>
+                  {observationCountPreview && observationCountPreview.totalObservations < 10 ? (
+                    <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-amber-200 mt-1 flex items-start gap-2">
+                      <span className="font-semibold shrink-0 text-amber-400">⚠️ Sample Size Warning:</span>
+                      <div>
+                        Only {observationCountPreview.totalObservations} observation(s) recorded in the selected {observationWindowDays}-day window. A minimum of 10 observations is required for high-confidence scoring.
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
               </div>
             ) : workflowType === "github_due_diligence" ? (
