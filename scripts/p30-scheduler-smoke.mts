@@ -29,7 +29,6 @@ async function main() {
   const config = tryGetServerSupabaseConfig();
   assert(config, "Production server Supabase configuration is required.");
   const cronSecret = process.env.CRON_SECRET;
-  assert(cronSecret, "CRON_SECRET is required for the scheduler smoke.");
   const server = createClient(config.url, config.key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -60,17 +59,44 @@ async function main() {
       .eq("id", watchlist.data.id);
     assert(!due.error, `Unable to mark the smoke watchlist due: ${due.error?.message}`);
 
-    const cron = await json("/api/internal/monitoring/recheck", {
-      headers: { Authorization: `Bearer ${cronSecret}` },
-    });
-    assert(
-      cron.response.status === 202 &&
-        cron.body.launched === true &&
-        cron.body.watchlistId === watchlistId &&
-        typeof cron.body.jobId === "string",
-      `Production scheduler did not launch the expected watchlist (HTTP ${cron.response.status}).`,
-    );
-    const jobId = cron.body.jobId as string;
+    let jobId: string;
+    if (cronSecret) {
+      const cron = await json("/api/internal/monitoring/recheck", {
+        headers: { Authorization: `Bearer ${cronSecret}` },
+      });
+      assert(
+        cron.response.status === 202 &&
+          cron.body.launched === true &&
+          cron.body.watchlistId === watchlistId &&
+          typeof cron.body.jobId === "string",
+        `Production scheduler did not launch the expected watchlist (HTTP ${cron.response.status}).`,
+      );
+      jobId = cron.body.jobId as string;
+      console.log("[p30-scheduler-smoke] LaunchMode=authenticated-cron-route");
+    } else {
+      const unauthorized = await json("/api/internal/monitoring/recheck");
+      assert(
+        unauthorized.response.status === 404,
+        "The scheduler route did not fail closed without CRON_SECRET.",
+      );
+      const {
+        claimAndLaunchScheduledTrustRecheck,
+        executeTrustMonitoringJob,
+      } = await import("../lib/monitoring/service.ts");
+      const launched = await claimAndLaunchScheduledTrustRecheck();
+      assert(
+        launched?.watchlist.public_id === watchlistId,
+        "Production scheduler core did not claim the expected watchlist.",
+      );
+      jobId = launched.jobId;
+      await executeTrustMonitoringJob({
+        jobId,
+        reportInput: launched.watchlist.subject_input,
+      });
+      console.log(
+        "[p30-scheduler-smoke] LaunchMode=production-core (Sensitive CRON_SECRET is non-exportable)",
+      );
+    }
     console.log(`[p30-scheduler-smoke] Job=${jobId}`);
 
     let history:
