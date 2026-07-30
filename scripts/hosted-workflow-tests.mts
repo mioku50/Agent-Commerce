@@ -7,6 +7,7 @@ import {
   buildHostedFinalReport,
   createHostedWorkflowPlan,
   hashHostedWorkflowInput,
+  hostedExecutionAllowlist,
   hostedWorkflowInputMetadata,
   validateHostedWorkflowRequest,
 } from "../lib/agent/hosted-workflows.ts";
@@ -146,6 +147,19 @@ assert(marketPlan.marketSymbol === "ETH/USD", "Planner snapshot did not persist 
 assert(plan.selectedServices.length === 2, "Multi-service workflow did not select two paid APIs.");
 assert(plan.selectedServices.length <= 3, "Hosted plan exceeded the three-call cap.");
 assert(plan.estimatedSpendUsdc === 0.0013, "Multi-service estimated cost is incorrect.");
+const executionAllowlist = hostedExecutionAllowlist(plan, allowlist);
+assert(
+  executionAllowlist.length === plan.selectedServices.length &&
+    executionAllowlist.every((service) =>
+      plan.selectedServices.some(
+        (planned) =>
+          planned.slug === service.slug &&
+          planned.endpoint === service.endpoint &&
+          planned.method === service.method,
+      ),
+    ),
+  "Runtime execution allowlist expanded beyond the immutable quote plan.",
+);
 assert(
   plan.selectedServices.every((service) =>
     allowlist.some((allowed) =>

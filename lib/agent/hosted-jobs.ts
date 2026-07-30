@@ -14,6 +14,7 @@ import {
   buildHostedFinalReport,
   createHostedWorkflowPlan,
   hashHostedWorkflowInput,
+  hostedExecutionAllowlist,
   hostedWorkflowInputMetadata,
   isHostedWorkflowType,
   safeHostedServiceResult,
@@ -259,7 +260,10 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       continueOnServiceFailure: true,
       fetchRetries: 2,
       fetchTimeoutMs: 30_000,
-      serviceAllowlist: config.serviceAllowlist,
+      serviceAllowlist: hostedExecutionAllowlist(
+        plannerSnapshot,
+        config.serviceAllowlist,
+      ),
       onProgress: async (progress) => {
         if (progress.stage === "completed" || progress.stage === "failed") return;
         await updateHostedAgentJob(jobId, {

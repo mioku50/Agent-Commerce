@@ -94,6 +94,22 @@ export type HostedPlannerSnapshot = {
   metadata?: Record<string, unknown>;
 };
 
+export function hostedExecutionAllowlist<
+  T extends { slug: string; endpoint: string; method: ServiceMethod },
+>(
+  plan: HostedPlannerSnapshot,
+  configuredAllowlist: readonly T[],
+): T[] {
+  const plannedServices = new Set(
+    plan.selectedServices.map(
+      (service) => `${service.slug}\n${service.method}\n${service.endpoint}`,
+    ),
+  );
+  return configuredAllowlist.filter((service) =>
+    plannedServices.has(`${service.slug}\n${service.method}\n${service.endpoint}`),
+  );
+}
+
 export type HostedFinalReport = {
   version: 4;
   workflowType: HostedWorkflowType;
