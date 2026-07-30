@@ -51,6 +51,7 @@ GitHub Due Diligence agent example.
 | Workflow | Result | Starting provider cost |
 | --- | --- | ---: |
 | GitHub Project Due Diligence | Repository-health verdict and evidence report | 0.002 USDC |
+| Veyra Agent Trust Report | Identity, code, execution, payment, service, and Arc trust signals | 0.0004 USDC |
 | Market Context Brief | Live provider-backed market snapshot | 0.0013 USDC |
 | Sentiment & Tone Report | Structured sentiment and tone signals | 0.0013 USDC |
 | Builder Update Summary | Delivery summary, signals, and next steps | 0.0013 USDC |

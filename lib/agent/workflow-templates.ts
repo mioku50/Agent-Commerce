@@ -49,7 +49,8 @@ export type HostedWorkflowTemplate = {
       | "premium-quote"
       | "pyth-market-price"
       | "github-repository-intelligence"
-      | "github-due-diligence-analysis";
+      | "github-due-diligence-analysis"
+      | "agent-trust-finalizer";
     name: string;
     priceUsdc: number;
     purpose: string;
@@ -124,6 +125,23 @@ const commonServices: HostedWorkflowTemplate["services"] = [
   },
 ];
 
+const agentTrustFinalizerService: HostedWorkflowTemplate["services"][number] = {
+  slug: "agent-trust-finalizer",
+  name: "Agent Trust Report Finalizer",
+  priceUsdc: 0.0001,
+  purpose:
+    "Publishes the canonical final report hash through the existing Arc proof pipeline.",
+  presentation: {
+    providerType: "internal_deterministic",
+    providerName: null,
+    providerStatus: "deterministic",
+    assetSymbol: null,
+    dataFreshness: null,
+    billingLabel:
+      `0.0001 USDC pays ${BRAND.name} for canonical report finalization and Arc proof publication.`,
+  },
+};
+
 const marketServices: HostedWorkflowTemplate["services"] = [
   {
     slug: "text-analyzer",
@@ -182,10 +200,10 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
     task:
       "Build an evidence-backed Agent Trust Report from the supplied public identifiers and available Veyra signals.",
     placeholder: "Provide an Agent ID, wallet, or public GitHub repository",
-    estimatedSpendUsdc: 0.0003,
+    estimatedSpendUsdc: 0.0004,
     benefitLabel:
       "Identity · Code health · Execution history · Arc verification",
-    services: [...githubServices, commonServices[0]],
+    services: [...githubServices, commonServices[0], agentTrustFinalizerService],
     expectedResult: [
       "Deterministic Trust Score with evidence for every category",
       "Identity, execution, payment, service, contract, and endpoint snapshots when available",

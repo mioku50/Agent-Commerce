@@ -88,7 +88,7 @@ for (const template of curatedHostedWorkflowTemplates) {
   if (template.value === "github_due_diligence") {
     assert.equal(formattedPrice, "From 0.0020 USDC");
   } else if (template.value === "agent_trust_report") {
-    assert.equal(formattedPrice, "From 0.0003 USDC");
+    assert.equal(formattedPrice, "From 0.0004 USDC");
   } else {
     assert.equal(formattedPrice, "From 0.0013 USDC");
   }

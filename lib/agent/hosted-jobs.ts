@@ -51,6 +51,8 @@ import {
   buildAgentTrustReport,
 } from "../agent-trust/build-report.ts";
 import type { AgentTrustReport } from "../agent-trust/types.ts";
+import type { GitHubRepositorySnapshot } from "../providers/github-types.ts";
+import type { GitHubDueDiligenceAssessment } from "./github-due-diligence.ts";
 
 export type HostedJobStatus = "queued" | "running" | "completed" | "failed";
 export type HostedJobProgressStage =
@@ -234,6 +236,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
   try {
     const config = getHostedRunnerConfig();
     const plannerSnapshot = job.planner_snapshot;
+    let agentTrustReport: AgentTrustReport | null = null;
     const result = await executeBuyerAgent({
       task: plannerSnapshot.effectiveTask ?? job.task,
       requestInputText: request.inputText,
@@ -264,6 +267,42 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
         plannerSnapshot,
         config.serviceAllowlist,
       ),
+      serviceSnapshot: serviceRegistry,
+      resolveServiceRequestBody: async ({
+        service,
+        runtimeServiceOutputs,
+      }) => {
+        if (
+          service.slug !== "agent-trust-finalizer" ||
+          request.workflowType !== "agent_trust_report" ||
+          !request.agentTrustInput
+        ) {
+          return undefined;
+        }
+        const githubSnapshot =
+          runtimeServiceOutputs.get("github-repository-intelligence") as
+            | GitHubRepositorySnapshot
+            | undefined;
+        const githubAnalysis =
+          runtimeServiceOutputs.get("github-due-diligence-analysis") as
+            | { assessment?: GitHubDueDiligenceAssessment }
+            | undefined;
+        agentTrustReport = buildAgentTrustReport({
+          reportId: jobId,
+          reportInput: request.agentTrustInput,
+          sources: await collectAgentTrustSources({
+            client: getHostedClient(),
+            reportInput: request.agentTrustInput,
+            reportId: jobId,
+            requesterWallet: job.requester_wallet,
+            requesterAgentId: job.byoa_agent_id,
+            repository: request.repository,
+            githubSnapshot: githubSnapshot ?? null,
+            githubAssessment: githubAnalysis?.assessment ?? null,
+          }),
+        });
+        return { report: agentTrustReport };
+      },
       onProgress: async (progress) => {
         if (progress.stage === "completed" || progress.stage === "failed") return;
         await updateHostedAgentJob(jobId, {
@@ -295,26 +334,28 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
           .filter((value): value is string => Boolean(value));
       }
     }
-    const agentTrustReport =
+    if (
       request.workflowType === "agent_trust_report" &&
-      request.agentTrustInput
-        ? buildAgentTrustReport({
-            reportId: jobId,
-            reportInput: request.agentTrustInput,
-            sources: await collectAgentTrustSources({
-              client: getHostedClient(),
-              reportInput: request.agentTrustInput,
-              reportId: jobId,
-              requesterWallet: job.requester_wallet,
-              requesterAgentId: job.byoa_agent_id,
-              repository: request.repository,
-              githubSnapshot:
-                result.workflowArtifacts.githubRepositorySnapshot ?? null,
-              githubAssessment:
-                result.workflowArtifacts.githubDueDiligenceAssessment ?? null,
-            }),
-          })
-        : null;
+      request.agentTrustInput &&
+      !agentTrustReport
+    ) {
+      agentTrustReport = buildAgentTrustReport({
+        reportId: jobId,
+        reportInput: request.agentTrustInput,
+        sources: await collectAgentTrustSources({
+          client: getHostedClient(),
+          reportInput: request.agentTrustInput,
+          reportId: jobId,
+          requesterWallet: job.requester_wallet,
+          requesterAgentId: job.byoa_agent_id,
+          repository: request.repository,
+          githubSnapshot:
+            result.workflowArtifacts.githubRepositorySnapshot ?? null,
+          githubAssessment:
+            result.workflowArtifacts.githubDueDiligenceAssessment ?? null,
+        }),
+      });
+    }
     const deterministicReport = buildHostedFinalReport({
       jobId,
       request,
@@ -599,6 +640,7 @@ export async function getHostedAgentJobView(jobId: string) {
         status: proof.status,
         transactionHash: proof.transactionHash,
         transactionUrl: proof.transactionUrl,
+        responseHash: proof.responseHash,
       })),
     );
     if (

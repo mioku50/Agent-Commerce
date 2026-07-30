@@ -24,6 +24,11 @@ const SAFE_HOSTED_SERVICES = [
     method: "POST" as const,
   },
   {
+    slug: "agent-trust-finalizer",
+    endpoint: "/api/premium/agent-trust/finalize",
+    method: "POST" as const,
+  },
+  {
     slug: "pyth-market-price",
     endpoint: "/api/provider/pyth/price",
     method: "POST" as const,
@@ -93,7 +98,7 @@ export function hostedServiceAllowlist() {
   const requested = new Set(
     (
       process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS ??
-      "premium-quote,text-analyzer,pyth-market-price,github-repository-intelligence,github-due-diligence-analysis"
+      "premium-quote,text-analyzer,agent-trust-finalizer,pyth-market-price,github-repository-intelligence,github-due-diligence-analysis"
     )
       .split(",")
       .map((value) => value.trim())

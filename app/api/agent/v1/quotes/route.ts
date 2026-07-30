@@ -404,14 +404,26 @@ export async function POST(request: NextRequest) {
         503,
       );
     }
+    const selected = new Set(
+      plan.selectedServices.map((service) => service.slug),
+    );
+
+    if (
+      workflow === "agent_trust_report" &&
+      !selected.has("agent-trust-finalizer")
+    ) {
+      return createMachineErrorResponse(
+        "agent_trust_service_unavailable",
+        "Agent Trust Report is temporarily unavailable because canonical Arc report verification is disabled.",
+        503,
+        true,
+      );
+    }
 
     if (
       workflow === "github_due_diligence" ||
       (workflow === "agent_trust_report" && workflowRequest.repository)
     ) {
-      const selected = new Set(
-        plan.selectedServices.map((service) => service.slug),
-      );
       const missingRequiredService = [
         "github-repository-intelligence",
         "github-due-diligence-analysis",

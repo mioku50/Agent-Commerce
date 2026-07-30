@@ -812,10 +812,17 @@
             "required": ["status", "verifiedOnArc", "network", "chainId", "reportHash", "proofs"],
             "properties": {
               "status": { "type": "string", "enum": ["verified", "verification_pending", "verification_failed"] },
-              "verifiedOnArc": { "type": "boolean" },
+              "verifiedOnArc": {
+                "type": "boolean",
+                "description": "True only when a verified Arc proof response hash exactly matches reportHash"
+              },
               "network": { "type": "string", "enum": ["arc-testnet"] },
               "chainId": { "type": "integer", "enum": [5042002] },
-              "reportHash": { "type": "string" },
+              "reportHash": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$",
+                "description": "Deterministic SHA-256 hash of the canonical report evidence and score snapshot"
+              },
               "proofs": {
                 "type": "array",
                 "items": {

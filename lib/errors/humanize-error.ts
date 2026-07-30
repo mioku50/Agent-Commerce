@@ -125,6 +125,20 @@ export function humanizeError(raw: unknown): HumanizedError {
   }
 
   if (
+    reasonCode === "agent_trust_service_unavailable" ||
+    messageStr.includes("canonical Arc report verification is disabled")
+  ) {
+    return {
+      title: "Agent Trust Report temporarily unavailable",
+      message:
+        "Try again after the canonical report verification service becomes available.",
+      action: "retry",
+      actionLabel: "Try again",
+      technicalCode: "agent_trust_service_unavailable",
+    };
+  }
+
+  if (
     reasonCode === "invalid_github_repository" ||
     messageStr.includes("invalid_github_repository") ||
     messageStr.includes("Invalid GitHub repository")

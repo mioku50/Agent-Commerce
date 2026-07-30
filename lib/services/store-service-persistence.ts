@@ -507,7 +507,13 @@ export async function listPublicStoreServices() {
   const result = await listAllStoreServices();
   return {
     services: result.services
-      .filter((service) => service.status !== "draft" && service.status !== "disabled" && service.status !== "verifying")
+      .filter(
+        (service) =>
+          !service.internalOnly &&
+          service.status !== "draft" &&
+          service.status !== "disabled" &&
+          service.status !== "verifying",
+      )
       .map(toPublicApiService),
     warning: result.warning,
   };

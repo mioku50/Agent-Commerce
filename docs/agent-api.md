@@ -116,6 +116,11 @@ LLM synthesis cannot change them. Missing evidence is excluded rather than
 treated as a negative signal, and fewer than two scorable categories produces
 `overall: null` with `limited_data`.
 
+The final internal x402 step costs `0.0001 USDC` and binds the deterministic
+`reportHash` to the proof registry response hash. `verifiedOnArc` becomes true
+only when that exact report-hash proof is verified; unrelated service receipt
+proofs cannot upgrade the report badge.
+
 ## HTTP quickstart
 
 Every request uses:
@@ -253,10 +258,17 @@ The SDK exposes these fields through `AgentCommerceApiError`.
 | `invalid_repository` | 400 | Correct the public GitHub reference |
 | `agent_trust_input_required` | 400 | Add Agent ID, agent wallet, or repository |
 | `agent_not_found` | 400 | Correct the public Veyra Agent ID |
+| `agent_access_denied` | 403 | Use the credential that owns the private agent |
+| `agent_registry_unavailable` | 503 | Retry without changing the identifier |
+| `agent_trust_service_unavailable` | 503 | Retry after canonical report verification recovers |
 | `invalid_wallet` | 400 | Correct the public EVM address |
 | `contract_not_found` | 400 | Correct or remove the Arc Testnet contract |
+| `contract_provider_unavailable` | 503 | Retry or remove the optional contract |
 | `endpoint_invalid` | 400 | Use a public HTTPS URL |
 | `endpoint_private_network_blocked` | 400 | Remove localhost/private/internal endpoint |
+| `endpoint_unreachable` | 422 | Retry or remove the optional endpoint |
+| `endpoint_response_too_large` | 422 | Use a bounded health endpoint |
+| `insufficient_trust_evidence` | 422 | Add another public evidence source |
 | `idempotency_key_missing` | 400 | Add and persist a key |
 | `idempotency_conflict` | 409 | Use the original body or a new operation key |
 | `idempotency_in_progress` | 409 | Retry the same body and key |

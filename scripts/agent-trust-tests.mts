@@ -80,9 +80,13 @@ const repositoryPlan = createHostedWorkflowPlan({
 });
 assert.deepEqual(
   repositoryPlan.selectedServices.map((service) => service.slug),
-  ["github-repository-intelligence", "github-due-diligence-analysis"],
+  [
+    "github-repository-intelligence",
+    "github-due-diligence-analysis",
+    "agent-trust-finalizer",
+  ],
 );
-assert.equal(repositoryPlan.estimatedSpendUsdc, 0.002);
+assert.equal(repositoryPlan.estimatedSpendUsdc, 0.0021);
 const identityRequest = validateHostedWorkflowRequest({
   workflowType: "agent_trust_report",
   agentTrustInput: { agentId: "agt_0123456789abcdefghij" },
@@ -94,9 +98,9 @@ const identityPlan = createHostedWorkflowPlan({
 });
 assert.deepEqual(
   identityPlan.selectedServices.map((service) => service.slug),
-  ["text-analyzer"],
+  ["text-analyzer", "agent-trust-finalizer"],
 );
-assert.equal(identityPlan.estimatedSpendUsdc, 0.0003);
+assert.equal(identityPlan.estimatedSpendUsdc, 0.0004);
 
 const noContract = await snapshotArcContract(undefined, undefined, fixedDate);
 assert.equal(noContract.status, "not_provided");
@@ -281,6 +285,7 @@ const verified = applyAgentTrustVerification(reportA, [
     status: "verified",
     transactionHash: `0x${"1".repeat(64)}`,
     transactionUrl: `https://testnet.arcscan.app/tx/0x${"1".repeat(64)}`,
+    responseHash: `0x${reportA.verification.reportHash}`,
   },
 ]);
 assert.equal(verified.verification.verifiedOnArc, true);
@@ -291,10 +296,25 @@ const pending = applyAgentTrustVerification(reportA, [
     status: "pending",
     transactionHash: null,
     transactionUrl: null,
+    responseHash: `0x${reportA.verification.reportHash}`,
   },
 ]);
 assert.equal(pending.verification.verifiedOnArc, false);
 assert.equal(pending.verification.status, "verification_pending");
+const unrelatedReceiptProof = applyAgentTrustVerification(reportA, [
+  {
+    receiptId: "receipt-2",
+    status: "verified",
+    transactionHash: `0x${"2".repeat(64)}`,
+    transactionUrl: `https://testnet.arcscan.app/tx/0x${"2".repeat(64)}`,
+    responseHash: `0x${"3".repeat(64)}`,
+  },
+]);
+assert.equal(unrelatedReceiptProof.verification.verifiedOnArc, false);
+assert.equal(
+  unrelatedReceiptProof.verification.status,
+  "verification_pending",
+);
 const markdown = formatAgentTrustReportAsMarkdown(verified);
 assert(markdown.includes("# Veyra Agent Trust Report"));
 assert(markdown.includes("Trust Score Breakdown"));
@@ -306,6 +326,15 @@ const sourceFiles = {
   reportRoute: readFileSync("app/api/agent/v1/reports/[reportId]/route.ts", "utf8"),
   input: readFileSync("lib/agent-trust/input.ts", "utf8"),
   ui: readFileSync("app/agent-runner/agent-trust-report-view.tsx", "utf8"),
+  finalizer: readFileSync(
+    "app/api/premium/agent-trust/finalize/route.ts",
+    "utf8",
+  ),
+  x402: readFileSync("lib/x402.ts", "utf8"),
+  storeServices: readFileSync(
+    "lib/services/store-service-persistence.ts",
+    "utf8",
+  ),
   migration: readFileSync(
     "supabase/migrations/20260730160000_add_agent_trust_report_workflow.sql",
     "utf8",
@@ -316,6 +345,10 @@ assert(sourceFiles.dataSources.includes("requester.agentId === agent.id"));
 assert(sourceFiles.reportRoute.includes("machine_credential_id === context.credential.id"));
 assert(sourceFiles.input.includes("endpoint_private_network_blocked"));
 assert(sourceFiles.ui.includes("Verified on Arc"));
+assert(sourceFiles.finalizer.includes("X-Veyra-Canonical-Response-Hash"));
+assert(sourceFiles.finalizer.includes("requiredPayer"));
+assert(sourceFiles.x402.includes("responseHashOverride"));
+assert(sourceFiles.storeServices.includes("!service.internalOnly"));
 assert(sourceFiles.migration.includes("'agent_trust_report'"));
 
 console.log(

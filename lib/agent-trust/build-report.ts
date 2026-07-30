@@ -647,11 +647,17 @@ export function applyAgentTrustVerification(
     transactionHash: string | null;
     transactionUrl?: string | null;
     explorerUrl?: string | null;
+    responseHash?: string | null;
   }>,
 ): AgentTrustReport {
-  const hasFailed = proofs.some((proof) => proof.status === "failed");
+  const expectedReportHash = `0x${report.verification.reportHash}`.toLowerCase();
+  const reportProofs = proofs.filter(
+    (proof) => proof.responseHash?.toLowerCase() === expectedReportHash,
+  );
+  const hasFailed = reportProofs.some((proof) => proof.status === "failed");
   const verified =
-    proofs.length > 0 && proofs.every((proof) => proof.status === "verified");
+    reportProofs.length > 0 &&
+    reportProofs.every((proof) => proof.status === "verified");
   return {
     ...report,
     verification: {
@@ -662,7 +668,7 @@ export function applyAgentTrustVerification(
           ? "verified"
           : "verification_pending",
       verifiedOnArc: verified,
-      proofs: proofs.map((proof) => ({
+      proofs: reportProofs.map((proof) => ({
         receiptId: proof.receiptId,
         status: proof.status,
         transactionHash: proof.transactionHash,

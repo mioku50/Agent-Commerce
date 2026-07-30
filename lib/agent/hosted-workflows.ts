@@ -484,9 +484,13 @@ export function createHostedWorkflowPlan(input: {
         return [
           "github-repository-intelligence",
           "github-due-diligence-analysis",
+          "agent-trust-finalizer",
         ].includes(service.slug);
       }
-      return service.slug === "text-analyzer";
+      return [
+        "text-analyzer",
+        "agent-trust-finalizer",
+      ].includes(service.slug);
     },
   );
   const effectiveTask = effectiveWorkflowTask(input.request);
