@@ -118,8 +118,16 @@ export type TrustMonitoringCadence = "manual" | "daily" | "weekly";
 
 export type TrustWatchlist = {
   id: string;
+  profileId: string;
   label: string;
   input: AgentTrustReportInput;
+  objectType:
+    | "github_repository"
+    | "ai_agent"
+    | "wallet"
+    | "arc_contract"
+    | "service_endpoint";
+  visibility: "private" | "public";
   cadence: TrustMonitoringCadence;
   status: "active" | "paused";
   nextRecheckAt: string | null;
@@ -169,8 +177,11 @@ export type TrustDeltaReport = {
 export type TrustHistory = {
   watchlist: {
     id: string;
+    profileId: string;
     label: string;
     input: AgentTrustReportInput;
+    objectType: TrustWatchlist["objectType"];
+    visibility: "private" | "public";
     cadence: TrustMonitoringCadence;
     status: "active" | "paused";
     lastCheckedAt: string | null;
@@ -191,6 +202,45 @@ export type TrustHistory = {
     observedAt: string;
     delta: TrustDeltaReport;
     reportUrl: string;
+  }>;
+};
+
+export type PublicTrustProfile = {
+  profile: {
+    id: string;
+    name: string;
+    objectType: TrustWatchlist["objectType"];
+    identity: {
+      agentId: string | null;
+      repositoryUrl: string | null;
+      wallet: string | null;
+      contractAddress: string | null;
+      serviceEndpoint: string | null;
+    };
+    currentScore: number | null;
+    trustStatus: string | null;
+    scoreChange: number | null;
+    lastCheckedAt: string | null;
+    lastVerifiedOnArcAt: string | null;
+    snapshotCount: number;
+  };
+  currentReport: AgentTrustReport | null;
+  currentDelta: TrustDeltaReport | null;
+  snapshots: Array<{
+    snapshotId: string;
+    sequence: number;
+    score: number | null;
+    trustStatus: string;
+    reportHash: string;
+    verificationStatus: string;
+    verifiedOnArc: boolean;
+    proofTransactionHash: string | null;
+    proofUrl: string | null;
+    observedAt: string;
+    newRiskCount: number;
+    resolvedRiskCount: number;
+    delta: TrustDeltaReport;
+    fullReportUrl: string;
   }>;
 };
 
@@ -558,6 +608,7 @@ export class AgentCommerceClient {
       label?: string;
       input: AgentTrustReportInput;
       cadence?: TrustMonitoringCadence;
+      visibility?: "private" | "public";
     },
     options: { idempotencyKey?: string; signal?: AbortSignal } = {},
   ) {
@@ -578,6 +629,17 @@ export class AgentCommerceClient {
   ) {
     return this.request<TrustHistory>(
       `/api/agent/v1/watchlists/${encodeURIComponent(watchlistId)}`,
+      { method: "GET" },
+      options,
+    );
+  }
+
+  async getPublicTrustProfile(
+    profileId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<PublicTrustProfile>(
+      `/api/monitoring/public/${encodeURIComponent(profileId)}`,
       { method: "GET" },
       options,
     );

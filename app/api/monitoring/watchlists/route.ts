@@ -28,6 +28,7 @@ export async function POST(request: NextRequest) {
       label: body.label,
       subjectInput: body.input,
       cadence: body.cadence,
+      visibility: body.visibility ?? "public",
     });
     return NextResponse.json(result, {
       status: result.created ? 201 : 200,

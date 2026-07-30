@@ -33,11 +33,14 @@ import {
 } from "../commerce/workflow-checkout.ts";
 import { getByoaClient } from "../byoa/service.ts";
 import { buildTrustDeltaReport } from "./delta.ts";
+import { canonicalTrustSubject } from "./identity.ts";
 import type {
   TrustMonitoringCadence,
   TrustMonitoringRecheckRow,
   TrustMonitoringSnapshotRow,
   TrustMonitoringStatus,
+  TrustProfileRow,
+  TrustProfileVisibility,
   TrustMonitoringTrigger,
   TrustWatchlistRow,
 } from "./types.ts";
@@ -94,13 +97,17 @@ export function validateTrustWatchlistDraft(input: {
   label?: unknown;
   subjectInput: unknown;
   cadence?: unknown;
+  visibility?: unknown;
 }) {
   try {
-    const subjectInput = normalizeAgentTrustInput(input.subjectInput);
+    const normalizedInput = normalizeAgentTrustInput(input.subjectInput);
+    const identity = canonicalTrustSubject(normalizedInput);
     return {
-      subjectInput,
+      subjectInput: identity.input,
+      identity,
       cadence: normalizeMonitoringCadence(input.cadence ?? "manual"),
-      label: safeLabel(input.label, subjectInput),
+      visibility: normalizeProfileVisibility(input.visibility ?? "private"),
+      label: safeLabel(input.label, identity.input),
     };
   } catch (error) {
     if (error instanceof AgentTrustInputError) {
@@ -108,6 +115,14 @@ export function validateTrustWatchlistDraft(input: {
     }
     throw error;
   }
+}
+
+function normalizeProfileVisibility(value: unknown): TrustProfileVisibility {
+  if (value === "private" || value === "public") return value;
+  throw new TrustMonitoringError(
+    "Profile visibility must be private or public.",
+    "watchlist_invalid",
+  );
 }
 
 function normalizeMonitoringStatus(value: unknown): TrustMonitoringStatus {
@@ -132,11 +147,18 @@ function monitoringClient() {
   return getByoaClient();
 }
 
-function watchlistSummary(row: TrustWatchlistRow, latest?: TrustMonitoringSnapshotRow | null) {
+function watchlistSummary(
+  row: TrustWatchlistRow,
+  latest: TrustMonitoringSnapshotRow | null | undefined,
+  profile: TrustProfileRow,
+) {
   return {
     id: row.public_id,
+    profileId: profile.public_id,
     label: row.label,
     input: row.subject_input,
+    objectType: profile.subject_type,
+    visibility: row.visibility,
     cadence: row.cadence,
     status: row.status,
     nextRecheckAt: row.next_recheck_at,
@@ -147,10 +169,113 @@ function watchlistSummary(row: TrustWatchlistRow, latest?: TrustMonitoringSnapsh
     trustStatus: latest?.trust_status ?? null,
     verificationStatus: latest?.verification_status ?? null,
     latestSnapshotId: latest?.public_id ?? null,
-    publicHistoryUrl: `/trust/${row.public_id}`,
+    publicHistoryUrl: `/trust/${profile.public_id}`,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
+}
+
+async function trustProfileById(profileId: string) {
+  const result = await monitoringClient()
+    .from("trust_profiles")
+    .select("*")
+    .eq("id", profileId)
+    .single();
+  if (result.error || !result.data) {
+    throw new TrustMonitoringError(
+      "Unable to load the canonical trust profile.",
+      "monitoring_unavailable",
+      503,
+      true,
+    );
+  }
+  return result.data as TrustProfileRow;
+}
+
+async function profileMap(rows: TrustWatchlistRow[]) {
+  const ids = [...new Set(rows.map((row) => row.profile_id))];
+  if (ids.length === 0) return new Map<string, TrustProfileRow>();
+  const result = await monitoringClient()
+    .from("trust_profiles")
+    .select("*")
+    .in("id", ids);
+  if (result.error) {
+    throw new TrustMonitoringError(
+      "Unable to load canonical trust profiles.",
+      "monitoring_unavailable",
+      503,
+      true,
+    );
+  }
+  return new Map(
+    ((result.data ?? []) as TrustProfileRow[]).map((profile) => [
+      profile.id,
+      profile,
+    ]),
+  );
+}
+
+function requiredProfile(
+  profiles: Map<string, TrustProfileRow>,
+  row: TrustWatchlistRow,
+) {
+  const profile = profiles.get(row.profile_id);
+  if (!profile) {
+    throw new TrustMonitoringError(
+      "Unable to load the canonical trust profile.",
+      "monitoring_unavailable",
+      503,
+      true,
+    );
+  }
+  return profile;
+}
+
+async function getOrCreateTrustProfile(
+  subjectInput: AgentTrustReportInput,
+  label: string,
+) {
+  const identity = canonicalTrustSubject(subjectInput);
+  const client = monitoringClient();
+  const existing = await client
+    .from("trust_profiles")
+    .select("*")
+    .eq("canonical_subject_key", identity.key)
+    .maybeSingle();
+  if (existing.error) {
+    throw new TrustMonitoringError(
+      "Unable to inspect the canonical trust profile.",
+      "monitoring_unavailable",
+      503,
+      true,
+    );
+  }
+  if (existing.data) return existing.data as TrustProfileRow;
+
+  const inserted = await client
+    .from("trust_profiles")
+    .insert({
+      canonical_subject_key: identity.key,
+      subject_type: identity.type,
+      canonical_subject_input: identity.input,
+      display_name: label,
+    })
+    .select("*")
+    .single();
+  if (inserted.data) return inserted.data as TrustProfileRow;
+
+  const replay = await client
+    .from("trust_profiles")
+    .select("*")
+    .eq("canonical_subject_key", identity.key)
+    .maybeSingle();
+  if (replay.data) return replay.data as TrustProfileRow;
+  throw new TrustMonitoringError(
+    "Unable to create the canonical trust profile.",
+    "monitoring_unavailable",
+    503,
+    true,
+  );
 }
 
 async function latestSnapshots(rows: TrustWatchlistRow[]) {
@@ -176,12 +301,13 @@ export async function createTrustWatchlist(input: {
   label?: unknown;
   subjectInput: unknown;
   cadence?: unknown;
+  visibility?: unknown;
   byoaAgentId?: string | null;
   machineCredentialId?: string | null;
 }) {
   const ownerWallet = getAddress(input.ownerWallet as Address);
   const validated = validateTrustWatchlistDraft(input);
-  const { subjectInput, cadence, label } = validated;
+  const { subjectInput, cadence, label, visibility } = validated;
   const client = monitoringClient();
   const machineCredentialId = input.machineCredentialId ?? null;
   const byoaAgentId = input.byoaAgentId ?? null;
@@ -191,12 +317,13 @@ export async function createTrustWatchlist(input: {
       "watchlist_invalid",
     );
   }
+  const profile = await getOrCreateTrustProfile(subjectInput, label);
 
   let existingQuery = client
     .from("trust_watchlists")
     .select("*")
     .ilike("owner_wallet", ownerWallet)
-    .eq("subject_hash", subjectHash(subjectInput));
+    .eq("profile_id", profile.id);
   existingQuery = machineCredentialId
     ? existingQuery.eq("machine_credential_id", machineCredentialId)
     : existingQuery.is("machine_credential_id", null);
@@ -208,7 +335,14 @@ export async function createTrustWatchlist(input: {
     true,
   );
   if (existing.data) {
-    return { watchlist: watchlistSummary(existing.data as TrustWatchlistRow), created: false };
+    return {
+      watchlist: watchlistSummary(
+        existing.data as TrustWatchlistRow,
+        null,
+        profile,
+      ),
+      created: false,
+    };
   }
 
   const count = await client
@@ -236,6 +370,8 @@ export async function createTrustWatchlist(input: {
       label,
       subject_hash: subjectHash(subjectInput),
       subject_input: subjectInput,
+      profile_id: profile.id,
+      visibility,
       cadence,
       status: "active",
       next_recheck_at: nextRecheckAt(cadence),
@@ -251,7 +387,11 @@ export async function createTrustWatchlist(input: {
     true,
   );
   return {
-    watchlist: watchlistSummary(inserted.data as TrustWatchlistRow),
+    watchlist: watchlistSummary(
+      inserted.data as TrustWatchlistRow,
+      null,
+      profile,
+    ),
     created: true,
   };
 }
@@ -271,9 +411,16 @@ export async function listOwnerTrustWatchlists(ownerWallet: string) {
     true,
   );
   const rows = (result.data ?? []) as TrustWatchlistRow[];
-  const snapshots = await latestSnapshots(rows);
+  const [snapshots, profiles] = await Promise.all([
+    latestSnapshots(rows),
+    profileMap(rows),
+  ]);
   return rows.map((row) =>
-    watchlistSummary(row, row.last_snapshot_id ? snapshots.get(row.last_snapshot_id) : null),
+    watchlistSummary(
+      row,
+      row.last_snapshot_id ? snapshots.get(row.last_snapshot_id) : null,
+      requiredProfile(profiles, row),
+    ),
   );
 }
 
@@ -297,9 +444,16 @@ export async function listMachineTrustWatchlists(input: {
     true,
   );
   const rows = (result.data ?? []) as TrustWatchlistRow[];
-  const snapshots = await latestSnapshots(rows);
+  const [snapshots, profiles] = await Promise.all([
+    latestSnapshots(rows),
+    profileMap(rows),
+  ]);
   return rows.map((row) =>
-    watchlistSummary(row, row.last_snapshot_id ? snapshots.get(row.last_snapshot_id) : null),
+    watchlistSummary(
+      row,
+      row.last_snapshot_id ? snapshots.get(row.last_snapshot_id) : null,
+      requiredProfile(profiles, row),
+    ),
   );
 }
 
@@ -351,6 +505,7 @@ export async function updateOwnerTrustWatchlist(input: {
   label?: unknown;
   cadence?: unknown;
   status?: unknown;
+  visibility?: unknown;
 }) {
   const row = await requireOwnerWatchlist(input.publicId, input.ownerWallet);
   const cadence =
@@ -359,12 +514,17 @@ export async function updateOwnerTrustWatchlist(input: {
     input.status === undefined ? row.status : normalizeMonitoringStatus(input.status);
   const label =
     input.label === undefined ? row.label : safeLabel(input.label, row.subject_input);
+  const visibility =
+    input.visibility === undefined
+      ? row.visibility
+      : normalizeProfileVisibility(input.visibility);
   const updated = await monitoringClient()
     .from("trust_watchlists")
     .update({
       cadence,
       status,
       label,
+      visibility,
       next_recheck_at:
         status === "paused" || cadence === "manual"
           ? null
@@ -391,7 +551,49 @@ export async function updateOwnerTrustWatchlist(input: {
   return watchlistSummary(
     updated.data as TrustWatchlistRow,
     (latest?.data as TrustMonitoringSnapshotRow | null) ?? null,
+    await trustProfileById(row.profile_id),
   );
+}
+
+export async function deleteOwnerTrustWatchlist(input: {
+  publicId: string;
+  ownerWallet: string;
+}) {
+  const row = await requireOwnerWatchlist(input.publicId, input.ownerWallet);
+  const active = await monitoringClient()
+    .from("trust_monitoring_rechecks")
+    .select("id", { count: "exact", head: true })
+    .eq("watchlist_id", row.id)
+    .in("status", ["quoted", "queued", "running"]);
+  if (active.error) {
+    throw new TrustMonitoringError(
+      "Unable to evaluate active rechecks.",
+      "monitoring_unavailable",
+      503,
+      true,
+    );
+  }
+  if ((active.count ?? 0) > 0) {
+    throw new TrustMonitoringError(
+      "Wait for the active recheck to finish before deleting this watchlist.",
+      "recheck_in_progress",
+      409,
+      true,
+    );
+  }
+  const deleted = await monitoringClient()
+    .from("trust_watchlists")
+    .delete()
+    .eq("id", row.id);
+  if (deleted.error) {
+    throw new TrustMonitoringError(
+      "Unable to delete the watchlist.",
+      "monitoring_unavailable",
+      503,
+      true,
+    );
+  }
+  return { deleted: true, watchlistId: row.public_id };
 }
 
 function monitoringRequest(watchlist: TrustWatchlistRow) {
@@ -960,13 +1162,7 @@ export async function captureTrustMonitoringSnapshot(jobId: string) {
   return snapshot;
 }
 
-export async function getPublicTrustHistory(publicId: string) {
-  const watchlist = await findWatchlistByPublicId(publicId);
-  if (!watchlist) throw new TrustMonitoringError(
-    "Trust history not found.",
-    "watchlist_not_found",
-    404,
-  );
+async function monitoringSnapshots(watchlist: TrustWatchlistRow) {
   if (watchlist.last_job_id) {
     await captureTrustMonitoringSnapshot(watchlist.last_job_id).catch(() => null);
   }
@@ -982,13 +1178,70 @@ export async function getPublicTrustHistory(publicId: string) {
     503,
     true,
   );
-  const snapshots = (snapshotsResult.data ?? []) as TrustMonitoringSnapshotRow[];
+  return (snapshotsResult.data ?? []) as TrustMonitoringSnapshotRow[];
+}
+
+function privateSnapshotView(snapshot: TrustMonitoringSnapshotRow) {
+  return {
+    snapshotId: snapshot.public_id,
+    jobId: snapshot.job_id,
+    sequence: snapshot.sequence_number,
+    score: snapshot.trust_score,
+    trustStatus: snapshot.trust_status,
+    reportHash: snapshot.report_hash,
+    verificationStatus: snapshot.verification_status,
+    proofTransactionHash: snapshot.proof_transaction_hash,
+    proofUrl: snapshot.proof_transaction_hash
+      ? `https://testnet.arcscan.app/tx/${snapshot.proof_transaction_hash}`
+      : null,
+    observedAt: snapshot.observed_at,
+    delta: snapshot.delta_snapshot,
+    reportUrl: `/agent-runner/${snapshot.job_id}`,
+  };
+}
+
+function publicSnapshotView(snapshot: TrustMonitoringSnapshotRow) {
+  return {
+    snapshotId: snapshot.public_id,
+    sequence: snapshot.sequence_number,
+    score: snapshot.trust_score,
+    trustStatus: snapshot.trust_status,
+    reportHash: snapshot.report_hash,
+    verificationStatus: snapshot.verification_status,
+    verifiedOnArc:
+      snapshot.verification_status === "verified" &&
+      Boolean(snapshot.proof_transaction_hash),
+    proofTransactionHash: snapshot.proof_transaction_hash,
+    proofUrl: snapshot.proof_transaction_hash
+      ? `https://testnet.arcscan.app/tx/${snapshot.proof_transaction_hash}`
+      : null,
+    observedAt: snapshot.observed_at,
+    newRiskCount: snapshot.delta_snapshot.changes.filter(
+      (change) => change.kind === "new_risk",
+    ).length,
+    resolvedRiskCount: snapshot.delta_snapshot.changes.filter(
+      (change) =>
+        change.kind === "improved" && change.code.startsWith("resolved_risk_"),
+    ).length,
+    delta: snapshot.delta_snapshot,
+    fullReportUrl: `/agent-runner/${snapshot.job_id}`,
+  };
+}
+
+export async function getTrustHistoryForWatchlist(watchlist: TrustWatchlistRow) {
+  const [profile, snapshots] = await Promise.all([
+    trustProfileById(watchlist.profile_id),
+    monitoringSnapshots(watchlist),
+  ]);
   const current = snapshots[0] ?? null;
   return {
     watchlist: {
       id: watchlist.public_id,
+      profileId: profile.public_id,
       label: watchlist.label,
       input: watchlist.subject_input,
+      objectType: profile.subject_type,
+      visibility: watchlist.visibility,
       cadence: watchlist.cadence,
       status: watchlist.status,
       lastCheckedAt: current?.observed_at ?? watchlist.last_recheck_at,
@@ -997,22 +1250,102 @@ export async function getPublicTrustHistory(publicId: string) {
     },
     currentReport: current?.report_snapshot ?? null,
     currentDelta: current?.delta_snapshot ?? null,
-    history: snapshots.map((snapshot) => ({
-      snapshotId: snapshot.public_id,
-      jobId: snapshot.job_id,
-      sequence: snapshot.sequence_number,
-      score: snapshot.trust_score,
-      trustStatus: snapshot.trust_status,
-      reportHash: snapshot.report_hash,
-      verificationStatus: snapshot.verification_status,
-      proofTransactionHash: snapshot.proof_transaction_hash,
-      proofUrl: snapshot.proof_transaction_hash
-        ? `https://testnet.arcscan.app/tx/${snapshot.proof_transaction_hash}`
-        : null,
-      observedAt: snapshot.observed_at,
-      delta: snapshot.delta_snapshot,
-      reportUrl: `/agent-runner/${snapshot.job_id}`,
-    })),
+    history: snapshots.map(privateSnapshotView),
+  };
+}
+
+export async function getPublicTrustProfile(publicId: string) {
+  if (!/^vtr_[0-9a-f]{20}$/.test(publicId)) {
+    throw new TrustMonitoringError(
+      "Trust profile not found.",
+      "watchlist_not_found",
+      404,
+    );
+  }
+  const profileResult = await monitoringClient()
+    .from("trust_profiles")
+    .select("*")
+    .eq("public_id", publicId)
+    .maybeSingle();
+  if (profileResult.error) {
+    throw new TrustMonitoringError(
+      "Trust profile is temporarily unavailable.",
+      "monitoring_unavailable",
+      503,
+      true,
+    );
+  }
+  const profile = (profileResult.data as TrustProfileRow | null) ?? null;
+  if (!profile) {
+    throw new TrustMonitoringError(
+      "Trust profile not found.",
+      "watchlist_not_found",
+      404,
+    );
+  }
+  const watchlistResult = await monitoringClient()
+    .from("trust_watchlists")
+    .select("*")
+    .eq("profile_id", profile.id)
+    .eq("visibility", "public")
+    .order("last_recheck_at", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (watchlistResult.error) {
+    throw new TrustMonitoringError(
+      "Trust profile is temporarily unavailable.",
+      "monitoring_unavailable",
+      503,
+      true,
+    );
+  }
+  const watchlist =
+    (watchlistResult.data as TrustWatchlistRow | null) ?? null;
+  if (!watchlist) {
+    throw new TrustMonitoringError(
+      "Trust profile not found.",
+      "watchlist_not_found",
+      404,
+    );
+  }
+
+  const snapshots = await monitoringSnapshots(watchlist);
+  const current = snapshots[0] ?? null;
+  const currentReport = current?.report_snapshot ?? null;
+  const verifiedSnapshot = snapshots.find(
+    (snapshot) =>
+      snapshot.verification_status === "verified" &&
+      Boolean(snapshot.proof_transaction_hash),
+  );
+  const name =
+    currentReport?.subject.name ||
+    profile.display_name ||
+    canonicalTrustSubject(profile.canonical_subject_input).displayName;
+  return {
+    profile: {
+      id: profile.public_id,
+      name,
+      objectType: profile.subject_type,
+      identity: {
+        agentId: profile.canonical_subject_input.agentId ?? null,
+        repositoryUrl: profile.canonical_subject_input.repositoryUrl ?? null,
+        wallet: profile.canonical_subject_input.agentWallet ?? null,
+        contractAddress:
+          profile.canonical_subject_input.contractAddress ?? null,
+        serviceEndpoint:
+          profile.canonical_subject_input.serviceEndpoint ?? null,
+      },
+      currentScore: current?.trust_score ?? null,
+      trustStatus: current?.trust_status ?? null,
+      scoreChange: current?.delta_snapshot.score.change ?? null,
+      lastCheckedAt: current?.observed_at ?? null,
+      lastVerifiedOnArcAt: verifiedSnapshot?.observed_at ?? null,
+      snapshotCount: snapshots.length,
+    },
+    currentReport,
+    currentDelta: current?.delta_snapshot ?? null,
+    snapshots: snapshots.map(publicSnapshotView),
   };
 }
 

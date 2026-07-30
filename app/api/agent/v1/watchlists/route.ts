@@ -64,6 +64,7 @@ export async function POST(request: NextRequest) {
       label: body.label,
       subjectInput: body.input,
       cadence: body.cadence,
+      visibility: body.visibility,
     });
     const reservation = await resolveMachineIdempotency(
       key,
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
       label: body.label,
       subjectInput: body.input,
       cadence: body.cadence,
+      visibility: body.visibility,
       byoaAgentId: auth.context.agentId,
       machineCredentialId: auth.context.credential.id,
     });

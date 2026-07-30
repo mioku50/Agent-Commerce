@@ -7,12 +7,15 @@ import {
   CalendarClock,
   CheckCircle2,
   ExternalLink,
+  Globe2,
   LoaderCircle,
+  Lock,
   Pause,
   Play,
   Plus,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   Wallet,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -24,8 +27,11 @@ import { useArcWallet } from "@/components/wallet/use-arc-wallet";
 
 type Watchlist = {
   id: string;
+  profileId: string;
   label: string;
   input: Record<string, string | undefined>;
+  objectType: string;
+  visibility: "private" | "public";
   cadence: "manual" | "daily" | "weekly";
   status: "active" | "paused";
   nextRecheckAt: string | null;
@@ -112,6 +118,8 @@ export function TrustMonitoringClient({
   const [contractAddress, setContractAddress] = useState(initialInput.contractAddress ?? "");
   const [serviceEndpoint, setServiceEndpoint] = useState(initialInput.serviceEndpoint ?? "");
   const [cadence, setCadence] = useState<Watchlist["cadence"]>("weekly");
+  const [visibility, setVisibility] =
+    useState<Watchlist["visibility"]>("public");
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -195,7 +203,7 @@ export function TrustMonitoringClient({
       }
       const result = await jsonFetch("/api/monitoring/watchlists", {
         method: "POST",
-        body: JSON.stringify({ label, input, cadence }),
+        body: JSON.stringify({ label, input, cadence, visibility }),
       });
       setNotice(
         (result.created as boolean)
@@ -207,9 +215,22 @@ export function TrustMonitoringClient({
     });
   }
 
+  async function deleteWatchlist(watchlist: Watchlist) {
+    if (!window.confirm(
+      `Delete "${watchlist.label}" and its monitoring snapshots? This cannot be undone.`,
+    )) return;
+    await act(`delete:${watchlist.id}`, async () => {
+      await jsonFetch(`/api/monitoring/watchlists/${watchlist.id}`, {
+        method: "DELETE",
+      });
+      setNotice("Watchlist deleted. Its public trust profile is no longer published by this watchlist.");
+      await loadWatchlists();
+    });
+  }
+
   async function updateWatchlist(
     watchlist: Watchlist,
-    patch: Partial<Pick<Watchlist, "status" | "cadence">>,
+    patch: Partial<Pick<Watchlist, "status" | "cadence" | "visibility">>,
   ) {
     await act(`update:${watchlist.id}`, async () => {
       await jsonFetch(`/api/monitoring/watchlists/${watchlist.id}`, {
@@ -273,7 +294,7 @@ export function TrustMonitoringClient({
         if (status === "failed") throw new Error("The recheck failed safely.");
         if (status === "completed") {
           await loadWatchlists();
-          window.location.assign(`/trust/${watchlist.id}`);
+          window.location.assign(`/trust/${watchlist.profileId}`);
           return;
         }
       }
@@ -338,7 +359,7 @@ export function TrustMonitoringClient({
           </div>
         </CardHeader>
         <CardContent className="grid gap-5">
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="grid gap-2">
               <Label htmlFor="monitor-label">Label</Label>
               <Input
@@ -362,6 +383,20 @@ export function TrustMonitoringClient({
                 <option value="manual">Manual only</option>
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
+              </select>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="monitor-visibility">Trust profile</Label>
+              <select
+                id="monitor-visibility"
+                value={visibility}
+                onChange={(event) =>
+                  setVisibility(event.target.value as Watchlist["visibility"])
+                }
+                className="h-10 rounded-md border bg-background px-3 text-sm"
+              >
+                <option value="public">Public profile</option>
+                <option value="private">Private watchlist</option>
               </select>
             </div>
           </div>
@@ -473,6 +508,14 @@ export function TrustMonitoringClient({
                       <Badge variant={watchlist.status === "active" ? "secondary" : "outline"}>
                         {watchlist.status}
                       </Badge>
+                      <Badge variant="outline">
+                        {watchlist.visibility === "public" ? (
+                          <Globe2 className="mr-1 size-3" />
+                        ) : (
+                          <Lock className="mr-1 size-3" />
+                        )}
+                        {watchlist.visibility}
+                      </Badge>
                       {watchlist.verificationStatus === "verified" ? (
                         <Badge className="border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
                           Arc verified
@@ -527,11 +570,24 @@ export function TrustMonitoringClient({
                     )}
                     {watchlist.currentScore === null ? "Run first check" : "Recheck now"}
                   </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={watchlist.publicHistoryUrl}>
-                      <ExternalLink /> Trust history
-                    </Link>
-                  </Button>
+                  {watchlist.visibility === "public" ? (
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={watchlist.publicHistoryUrl}>
+                        <ExternalLink /> Trust profile
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() =>
+                        updateWatchlist(watchlist, { visibility: "public" })
+                      }
+                      disabled={busy === `update:${watchlist.id}`}
+                    >
+                      <Globe2 /> Publish profile
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="ghost"
@@ -544,6 +600,26 @@ export function TrustMonitoringClient({
                   >
                     {watchlist.status === "active" ? <Pause /> : <CalendarClock />}
                     {watchlist.status === "active" ? "Pause" : "Resume"}
+                  </Button>
+                  {watchlist.visibility === "public" ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() =>
+                        updateWatchlist(watchlist, { visibility: "private" })
+                      }
+                      disabled={busy === `update:${watchlist.id}`}
+                    >
+                      <Lock /> Make private
+                    </Button>
+                  ) : null}
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => void deleteWatchlist(watchlist)}
+                    disabled={busy === `delete:${watchlist.id}`}
+                  >
+                    <Trash2 /> Delete
                   </Button>
                 </div>
               </CardContent>

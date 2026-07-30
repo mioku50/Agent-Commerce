@@ -2,6 +2,13 @@ import type { AgentTrustReport, AgentTrustReportInput } from "../agent-trust/typ
 
 export type TrustMonitoringCadence = "manual" | "daily" | "weekly";
 export type TrustMonitoringStatus = "active" | "paused";
+export type TrustProfileVisibility = "private" | "public";
+export type TrustSubjectType =
+  | "github_repository"
+  | "ai_agent"
+  | "wallet"
+  | "arc_contract"
+  | "service_endpoint";
 export type TrustMonitoringTrigger = "manual" | "scheduled" | "machine";
 export type TrustMonitoringRecheckStatus =
   | "quoted"
@@ -68,6 +75,8 @@ export type TrustWatchlistRow = {
   label: string;
   subject_hash: string;
   subject_input: AgentTrustReportInput;
+  profile_id: string;
+  visibility: TrustProfileVisibility;
   cadence: TrustMonitoringCadence;
   status: TrustMonitoringStatus;
   next_recheck_at: string | null;
@@ -78,6 +87,17 @@ export type TrustWatchlistRow = {
   last_error_at: string | null;
   byoa_agent_id: string | null;
   machine_credential_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TrustProfileRow = {
+  id: string;
+  public_id: string;
+  canonical_subject_key: string;
+  subject_type: TrustSubjectType;
+  canonical_subject_input: AgentTrustReportInput;
+  display_name: string;
   created_at: string;
   updated_at: string;
 };

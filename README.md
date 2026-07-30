@@ -38,6 +38,13 @@ activity, agent status, endpoint availability, service reliability, contract
 changes, and verification coverage without repeating an unchanged full report.
 The Public App and Veyra Agent API use the same deterministic delta model.
 
+Each explicitly published subject gets one canonical, wallet-free Trust Profile
+at `/trust/vtr_...`. The page renders real snapshot scores, meaningful changes,
+the exact Arc proof for every snapshot, a full-report link, and a share preview.
+Equivalent GitHub URLs and normalized endpoint, wallet, contract, or agent
+identifiers converge on the same stable profile. Private watchlists and unknown
+profiles both return the same 404 response.
+
 ## Two product paths
 
 People use the Public App:
@@ -93,6 +100,7 @@ npm run lint
 npm run machine:sdk-build
 npm run github:analysis-test
 npm run monitoring:test
+npm run trust-profile:test
 npm run machine:api-test
 npm run operations:test
 npm run build

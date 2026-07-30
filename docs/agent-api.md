@@ -135,6 +135,7 @@ const watch = await client.createWatchlist({
     repositoryUrl: "owner/repository",
   },
   cadence: "weekly",
+  visibility: "public",
 });
 
 const { report, history } = await client.recheckWatchlist(watch.id, {
@@ -144,6 +145,8 @@ const { report, history } = await client.recheckWatchlist(watch.id, {
 
 console.log(history.currentDelta?.changes);
 console.log(history.history[0]?.proofUrl);
+console.log(watch.profileId);
+const publicProfile = await client.getPublicTrustProfile(watch.profileId);
 ```
 
 `manual`, `daily`, and `weekly` are valid cadences. A Machine API recheck first
@@ -151,6 +154,14 @@ creates an immutable quote at
 `POST /api/agent/v1/watchlists/{watchlistId}/rechecks`, then launches that quote
 through the existing run endpoint. Sponsored and paid checkout remain separate;
 Machine API never receives an implicit payment authorization.
+
+Machine-created watchlists are private unless `visibility: "public"` is
+explicitly supplied. Published subjects resolve through the unauthenticated
+`GET /api/monitoring/public/{profileId}` endpoint and the shareable
+`/trust/{profileId}` page. Private and unknown profiles intentionally return
+the same `404 Trust profile not found` response. Public payloads contain safe
+trust signals and Arc proofs, never the owner wallet, machine credential,
+schedule, cron, quote, or internal payment records.
 
 Each snapshot stores the canonical Agent Trust Report hash and the exact Arc
 proof transaction. Deltas are deterministic comparisons between two snapshots:

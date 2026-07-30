@@ -36,8 +36,11 @@ const mockFetch: typeof fetch = async (input, init = {}) => {
   if (url.endsWith("/api/agent/v1/watchlists") && method === "POST") {
     return Response.json({
       id: "wtl_0123456789abcdef0123",
+      profileId: "vtr_0123456789abcdef0123",
       label: "Example Agent",
       input: { agentId: "agt_0123456789abcdefghij" },
+      objectType: "ai_agent",
+      visibility: "private",
       cadence: "weekly",
       status: "active",
       nextRecheckAt: "2026-08-06T00:00:00.000Z",
@@ -46,7 +49,7 @@ const mockFetch: typeof fetch = async (input, init = {}) => {
       trustStatus: null,
       verificationStatus: null,
       latestSnapshotId: null,
-      publicHistoryUrl: "/trust/wtl_0123456789abcdef0123",
+      publicHistoryUrl: "/trust/vtr_0123456789abcdef0123",
       createdAt: "2026-07-30T00:00:00.000Z",
       updatedAt: "2026-07-30T00:00:00.000Z",
     }, { status: 201 });
@@ -82,8 +85,11 @@ const mockFetch: typeof fetch = async (input, init = {}) => {
     return Response.json({
       watchlist: {
         id: "wtl_0123456789abcdef0123",
+        profileId: "vtr_0123456789abcdef0123",
         label: "Example Agent",
         input: { agentId: "agt_0123456789abcdefghij" },
+        objectType: "ai_agent",
+        visibility: "private",
         cadence: "weekly",
         status: "active",
         lastCheckedAt: "2026-07-30T00:00:00.000Z",
@@ -92,6 +98,31 @@ const mockFetch: typeof fetch = async (input, init = {}) => {
       currentReport: null,
       currentDelta: null,
       history: [],
+    });
+  }
+  if (url.endsWith("/api/monitoring/public/vtr_0123456789abcdef0123")) {
+    return Response.json({
+      profile: {
+        id: "vtr_0123456789abcdef0123",
+        name: "Example Agent",
+        objectType: "ai_agent",
+        identity: {
+          agentId: "agt_0123456789abcdefghij",
+          repositoryUrl: null,
+          wallet: null,
+          contractAddress: null,
+          serviceEndpoint: null,
+        },
+        currentScore: null,
+        trustStatus: null,
+        scoreChange: null,
+        lastCheckedAt: null,
+        lastVerifiedOnArcAt: null,
+        snapshotCount: 0,
+      },
+      currentReport: null,
+      currentDelta: null,
+      snapshots: [],
     });
   }
   if (url.endsWith("/api/agent/v1/quotes")) {
@@ -187,6 +218,9 @@ const watchlist = await client.createWatchlist(
   { idempotencyKey: "watchlist-key" },
 );
 assert.equal(watchlist.id, "wtl_0123456789abcdef0123");
+assert.equal(watchlist.profileId, "vtr_0123456789abcdef0123");
+const publicProfile = await client.getPublicTrustProfile(watchlist.profileId);
+assert.equal(publicProfile.profile.id, watchlist.profileId);
 const monitoringExecution = await client.recheckWatchlist(watchlist.id, {
   recheckIdempotencyKey: "recheck-key",
   runIdempotencyKey: "recheck-run-key",

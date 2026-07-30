@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { jsonBody, requireOwnerSession } from "@/lib/byoa/http";
 import { trustMonitoringErrorResponse } from "@/lib/monitoring/http";
 import {
-  getPublicTrustHistory,
+  deleteOwnerTrustWatchlist,
+  getTrustHistoryForWatchlist,
   requireOwnerWatchlist,
   updateOwnerTrustWatchlist,
 } from "@/lib/monitoring/service";
@@ -15,8 +16,8 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
   try {
     const owner = requireOwnerSession(request);
     const { watchlistId } = await params;
-    await requireOwnerWatchlist(watchlistId, owner.wallet);
-    return NextResponse.json(await getPublicTrustHistory(watchlistId), {
+    const watchlist = await requireOwnerWatchlist(watchlistId, owner.wallet);
+    return NextResponse.json(await getTrustHistoryForWatchlist(watchlist), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
@@ -34,10 +35,27 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       label: body.label,
       cadence: body.cadence,
       status: body.status,
+      visibility: body.visibility,
     });
     return NextResponse.json({ watchlist }, {
       headers: { "Cache-Control": "no-store" },
     });
+  } catch (error) {
+    return trustMonitoringErrorResponse(error);
+  }
+}
+
+export async function DELETE(request: NextRequest, { params }: RouteContext) {
+  try {
+    const owner = requireOwnerSession(request);
+    const { watchlistId } = await params;
+    return NextResponse.json(
+      await deleteOwnerTrustWatchlist({
+        publicId: watchlistId,
+        ownerWallet: owner.wallet,
+      }),
+      { headers: { "Cache-Control": "no-store" } },
+    );
   } catch (error) {
     return trustMonitoringErrorResponse(error);
   }

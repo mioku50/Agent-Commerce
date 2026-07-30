@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Veyra Agent API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "description": "Machine API for verified Veyra workflows and continuous trust monitoring."
   },
   "servers": [
@@ -347,6 +347,12 @@
                     "type": "string",
                     "enum": ["manual", "daily", "weekly"],
                     "default": "manual"
+                  },
+                  "visibility": {
+                    "type": "string",
+                    "enum": ["private", "public"],
+                    "default": "private",
+                    "description": "Explicit publication control. Omitted Machine API watchlists remain private."
                   }
                 }
               }
@@ -443,6 +449,32 @@
           "404": { "$ref": "#/components/responses/NotFound" },
           "409": { "$ref": "#/components/responses/Conflict" },
           "429": { "$ref": "#/components/responses/RateLimited" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/monitoring/public/{publicId}": {
+      "get": {
+        "summary": "Retrieve a public Veyra Trust Profile",
+        "operationId": "getPublicTrustProfile",
+        "security": [],
+        "description": "Returns only canonical public trust information and Arc proofs. Private or unknown profiles both return 404.",
+        "parameters": [{
+          "name": "publicId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" }
+        }],
+        "responses": {
+          "200": {
+            "description": "Public trust profile",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PublicTrustProfile" }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" },
           "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
@@ -549,13 +581,19 @@
       "TrustWatchlist": {
         "type": "object",
         "required": [
-          "id", "label", "input", "cadence", "status", "currentScore",
+          "id", "profileId", "label", "input", "objectType", "visibility", "cadence", "status", "currentScore",
           "verificationStatus", "publicHistoryUrl", "createdAt", "updatedAt"
         ],
         "properties": {
           "id": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" },
+          "profileId": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" },
           "label": { "type": "string" },
           "input": { "$ref": "#/components/schemas/AgentTrustReportInput" },
+          "objectType": {
+            "type": "string",
+            "enum": ["github_repository", "ai_agent", "wallet", "arc_contract", "service_endpoint"]
+          },
+          "visibility": { "type": "string", "enum": ["private", "public"] },
           "cadence": { "type": "string", "enum": ["manual", "daily", "weekly"] },
           "status": { "type": "string", "enum": ["active", "paused"] },
           "nextRecheckAt": { "type": "string", "format": "date-time", "nullable": true },
@@ -613,11 +651,17 @@
         "properties": {
           "watchlist": {
             "type": "object",
-            "required": ["id", "label", "input", "cadence", "status", "lastCheckedAt", "nextRecheckAt"],
+            "required": ["id", "profileId", "label", "input", "objectType", "visibility", "cadence", "status", "lastCheckedAt", "nextRecheckAt"],
             "properties": {
               "id": { "type": "string", "pattern": "^wtl_[0-9a-f]{20}$" },
+              "profileId": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" },
               "label": { "type": "string" },
               "input": { "$ref": "#/components/schemas/AgentTrustReportInput" },
+              "objectType": {
+                "type": "string",
+                "enum": ["github_repository", "ai_agent", "wallet", "arc_contract", "service_endpoint"]
+              },
+              "visibility": { "type": "string", "enum": ["private", "public"] },
               "cadence": { "type": "string", "enum": ["manual", "daily", "weekly"] },
               "status": { "type": "string", "enum": ["active", "paused"] },
               "lastCheckedAt": { "type": "string", "format": "date-time", "nullable": true },
@@ -654,6 +698,75 @@
                 "observedAt": { "type": "string", "format": "date-time" },
                 "delta": { "$ref": "#/components/schemas/TrustDeltaReport" },
                 "reportUrl": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "PublicTrustProfile": {
+        "type": "object",
+        "required": ["profile", "currentReport", "currentDelta", "snapshots"],
+        "properties": {
+          "profile": {
+            "type": "object",
+            "required": ["id", "name", "objectType", "identity", "currentScore", "trustStatus", "scoreChange", "lastCheckedAt", "lastVerifiedOnArcAt", "snapshotCount"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^vtr_[0-9a-f]{20}$" },
+              "name": { "type": "string" },
+              "objectType": {
+                "type": "string",
+                "enum": ["github_repository", "ai_agent", "wallet", "arc_contract", "service_endpoint"]
+              },
+              "identity": {
+                "type": "object",
+                "properties": {
+                  "agentId": { "type": "string", "nullable": true },
+                  "repositoryUrl": { "type": "string", "nullable": true },
+                  "wallet": { "type": "string", "nullable": true },
+                  "contractAddress": { "type": "string", "nullable": true },
+                  "serviceEndpoint": { "type": "string", "nullable": true }
+                }
+              },
+              "currentScore": { "type": "integer", "nullable": true },
+              "trustStatus": { "type": "string", "nullable": true },
+              "scoreChange": { "type": "integer", "nullable": true },
+              "lastCheckedAt": { "type": "string", "format": "date-time", "nullable": true },
+              "lastVerifiedOnArcAt": { "type": "string", "format": "date-time", "nullable": true },
+              "snapshotCount": { "type": "integer" }
+            }
+          },
+          "currentReport": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/AgentTrustReportResponse" },
+              { "type": "null" }
+            ]
+          },
+          "currentDelta": {
+            "oneOf": [
+              { "$ref": "#/components/schemas/TrustDeltaReport" },
+              { "type": "null" }
+            ]
+          },
+          "snapshots": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["snapshotId", "sequence", "score", "trustStatus", "reportHash", "verificationStatus", "verifiedOnArc", "proofTransactionHash", "proofUrl", "observedAt", "newRiskCount", "resolvedRiskCount", "delta", "fullReportUrl"],
+              "properties": {
+                "snapshotId": { "type": "string" },
+                "sequence": { "type": "integer" },
+                "score": { "type": "integer", "nullable": true },
+                "trustStatus": { "type": "string" },
+                "reportHash": { "type": "string" },
+                "verificationStatus": { "type": "string" },
+                "verifiedOnArc": { "type": "boolean" },
+                "proofTransactionHash": { "type": "string", "nullable": true },
+                "proofUrl": { "type": "string", "nullable": true },
+                "observedAt": { "type": "string", "format": "date-time" },
+                "newRiskCount": { "type": "integer" },
+                "resolvedRiskCount": { "type": "integer" },
+                "delta": { "$ref": "#/components/schemas/TrustDeltaReport" },
+                "fullReportUrl": { "type": "string" }
               }
             }
           }
