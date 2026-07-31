@@ -1,0 +1,9 @@
+/**
+ * Copyright 2026 Circle Internet Group, Inc. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
+ * Standard fixed pricing constant for Veyra API Quality Report Finalizer in USDC string format.
+ */
+export const API_QUALITY_FINALIZER_PRICE_USDC = "0.0020";

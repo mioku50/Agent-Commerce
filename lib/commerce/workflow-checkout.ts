@@ -30,6 +30,9 @@ import {
   arcTestnetChain,
 } from "../wallet/arc.ts";
 import { BRAND } from "../brand.ts";
+import { API_QUALITY_FINALIZER_PRICE_USDC } from "../services/constants.ts";
+
+export const WORKFLOW_CHECKOUT_API_QUALITY_PRICE_USDC = API_QUALITY_FINALIZER_PRICE_USDC;
 
 type CheckoutLaunchReason =
   | "created"

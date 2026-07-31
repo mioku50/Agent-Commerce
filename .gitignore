@@ -53,3 +53,12 @@ load-test-env.sh
 /contracts/broadcast/
 .env*
 !.env.example
+
+# Agent, superpowers, and cache artifacts
+.agents/
+.claude/
+.superpowers/
+cache/
+*.local
+docs/superpowers/plans/
+

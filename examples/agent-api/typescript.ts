@@ -13,6 +13,9 @@
 
 import { randomUUID } from "node:crypto";
 
+/** Standard Veyra workflow / finalizer pricing constant: 0.0020 USDC */
+export const DEFAULT_FINALIZER_PRICE_USDC = "0.0020";
+
 export interface MachineErrorResponse {
   error: {
     code: string;

@@ -4,53 +4,49 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
-import { createHash } from "node:crypto";
 import { BRAND } from "@/lib/brand";
 import { sellerAddress, withGateway } from "@/lib/x402";
+import {
+  computeCanonicalReportHash,
+  stripInternalKeys,
+  validateApiQualityReportPayload,
+} from "@/lib/reports/canonical-report-hash";
+import { API_QUALITY_FINALIZER_PRICE_USDC } from "@/lib/services/constants";
 
-const PRICE_USDC = "0.0020";
+const PRICE_USDC = API_QUALITY_FINALIZER_PRICE_USDC;
 const ENDPOINT = "/api/provider/api-quality-finalizer";
-
-function validPendingReport(value: unknown): boolean {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
-  const report = value as Record<string, unknown>;
-  if (
-    report.kind === "api_quality_report" ||
-    report.kind === "paid_api_quality" ||
-    report.workflow === "paid_api_quality"
-  ) {
-    return true;
-  }
-  if (Array.isArray(report.targetServices) || typeof report.reportId === "string") {
-    return true;
-  }
-  return false;
-}
 
 const handler = async (request: NextRequest) => {
   const body = (await request.json().catch(() => ({}))) as {
     report?: unknown;
-    targetServices?: string[];
+    [key: string]: unknown;
   };
 
-  const report = body.report ?? body;
+  const rawReport = body.report ?? body;
 
-  if (!validPendingReport(report)) {
+  if (!validateApiQualityReportPayload(rawReport)) {
     return NextResponse.json(
       {
-        error: "A valid API Quality Report payload or target services list is required.",
-        code: "invalid_api_quality_report",
+        error:
+          "Invalid API Quality report payload structure. Report must include valid workflowType, reportId, servicesCompared, availability, and qualityScoreAndConfidence.",
+        code: "invalid_report_payload",
       },
       { status: 400 },
     );
   }
 
-  const canonicalString = JSON.stringify(report);
-  const reportHash = "0x" + createHash("sha256").update(canonicalString).digest("hex");
+  const reportObj = {
+    ...rawReport,
+    workflowType: rawReport.workflowType ?? rawReport.workflow ?? "paid_api_quality",
+    workflow: rawReport.workflow ?? rawReport.workflowType ?? "paid_api_quality",
+  };
+
+  const cleanReport = stripInternalKeys(reportObj) as Record<string, unknown>;
+  const { canonicalHash, canonicalizationVersion } = computeCanonicalReportHash(cleanReport);
 
   return NextResponse.json(
     {
-      report,
+      report: cleanReport,
       paidAmountUsdc: PRICE_USDC,
       billing: {
         chargedBy: BRAND.name,
@@ -58,10 +54,12 @@ const handler = async (request: NextRequest) => {
         network: "Arc Testnet",
         purpose: "api_quality_canonical_hash_attestation",
       },
+      canonicalHash,
+      canonicalizationVersion,
     },
     {
       headers: {
-        "X-Veyra-Canonical-Response-Hash": reportHash,
+        "X-Veyra-Canonical-Response-Hash": canonicalHash,
       },
     },
   );

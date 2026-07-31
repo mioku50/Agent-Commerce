@@ -29,6 +29,7 @@ import {
 import { hostedWorkflowHref } from "@/lib/agent/workflow-links";
 import { sanitizePublicReportText } from "@/lib/agent/public-report-copy";
 import { BRAND, BRAND_TITLE } from "@/lib/brand";
+import { API_QUALITY_FINALIZER_PRICE_USDC } from "@/lib/services/constants";
 
 export const metadata: Metadata = {
   title: { absolute: BRAND_TITLE },
@@ -186,7 +187,7 @@ export default async function Home() {
                 Analyze a public GitHub repository and receive an evidence-backed report covering project purpose, development activity, maintainability, documentation, releases, contributor structure, and adoption risks.
               </p>
               <p className="text-sm font-semibold text-primary">
-                From {formatStartingPrice(featured?.estimatedSpendUsdc ?? 0.002)} USDC
+                From {formatStartingPrice(featured?.estimatedSpendUsdc ?? Number(API_QUALITY_FINALIZER_PRICE_USDC))} USDC
               </p>
               <div className="grid gap-2 sm:grid-cols-2">
                 {featuredBenefits.map((benefit) => (

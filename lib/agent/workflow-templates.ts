@@ -5,6 +5,7 @@
 
 import type { ServicePresentationMetadata } from "../services/presentation.ts";
 import { BRAND } from "../brand.ts";
+import { API_QUALITY_FINALIZER_PRICE_USDC } from "../services/constants.ts";
 
 export const HOSTED_WORKFLOW_TYPES = [
   "github_due_diligence",
@@ -52,7 +53,8 @@ export type HostedWorkflowTemplate = {
       | "pyth-market-price"
       | "github-repository-intelligence"
       | "github-due-diligence-analysis"
-      | "agent-trust-finalizer";
+      | "agent-trust-finalizer"
+      | "api-quality-finalizer";
     name: string;
     priceUsdc: number;
     purpose: string;
@@ -144,6 +146,23 @@ const agentTrustFinalizerService: HostedWorkflowTemplate["services"][number] = {
   },
 };
 
+const apiQualityFinalizerService: HostedWorkflowTemplate["services"][number] = {
+  slug: "api-quality-finalizer",
+  name: "API Quality Report Finalizer",
+  priceUsdc: Number(API_QUALITY_FINALIZER_PRICE_USDC),
+  purpose:
+    "Computes canonical API quality report hash and prepares Arc proof attestation.",
+  presentation: {
+    providerType: "internal_deterministic",
+    providerName: null,
+    providerStatus: "deterministic",
+    assetSymbol: null,
+    dataFreshness: null,
+    billingLabel:
+      `${API_QUALITY_FINALIZER_PRICE_USDC} USDC pays ${BRAND.name} for canonical report finalization and Arc proof publication.`,
+  },
+};
+
 const marketServices: HostedWorkflowTemplate["services"] = [
   {
     slug: "text-analyzer",
@@ -222,10 +241,10 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
       "Evaluate and compare paid APIs using observed pricing, latency, availability, response validity, payment execution, and settlement history.",
     placeholder:
       "Enter service ID(s) to evaluate, e.g. pyth-market-price, github-repository-intelligence…",
-    estimatedSpendUsdc: 0.0013,
+    estimatedSpendUsdc: Number(API_QUALITY_FINALIZER_PRICE_USDC),
     benefitLabel:
       "Telemetry & benchmarking · Uptime & latency P95 · Arc verification",
-    services: commonServices,
+    services: [apiQualityFinalizerService],
     expectedResult: [
       "Observed uptime, P50/P95 latency, and response validity metrics",
       "Payment execution success, settlement reliability, and cost efficiency",

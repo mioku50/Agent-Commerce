@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server.js";
 import { authenticateMachineRequest } from "../../../../../lib/api/machine-auth.ts";
 import { curatedHostedWorkflowTemplates } from "../../../../../lib/agent/workflow-templates.ts";
 import { ARC_TESTNET_CHAIN_ID, ARC_TESTNET_USDC_ADDRESS } from "../../../../../lib/wallet/arc.ts";
+import { API_QUALITY_FINALIZER_PRICE_USDC } from "../../../../../lib/services/constants.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;

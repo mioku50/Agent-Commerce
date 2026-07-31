@@ -18,6 +18,7 @@
 
 import type { ServicePresentationMetadata } from "./presentation.ts";
 import { BRAND } from "../brand.ts";
+import { API_QUALITY_FINALIZER_PRICE_USDC } from "./constants.ts";
 
 export type ServiceMethod = "GET" | "POST";
 export type ServiceStatus =
@@ -382,8 +383,8 @@ export const serviceRegistry = [
     category: "Verification",
     method: "POST",
     endpoint: "/api/provider/api-quality-finalizer",
-    priceLabel: "0.002 USDC",
-    priceUsd: 0.002,
+    priceLabel: `${API_QUALITY_FINALIZER_PRICE_USDC} USDC`,
+    priceUsd: Number(API_QUALITY_FINALIZER_PRICE_USDC),
     status: "live",
     sourceType: "static",
     isPaid: true,
@@ -413,7 +414,7 @@ export const serviceRegistry = [
         kind: "api_quality_report",
         verification: { status: "verification_pending" },
       },
-      paidAmountUsdc: "0.0020",
+      paidAmountUsdc: API_QUALITY_FINALIZER_PRICE_USDC,
     },
     exampleUseCase:
       "The hosted Veyra workflow purchases final response hash attestation for an API Quality Report on Arc Testnet.",

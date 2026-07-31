@@ -43,6 +43,15 @@ import {
 } from "../lib/agent/hosted-workflows.ts";
 import { SAFE_HOSTED_SERVICES } from "../lib/agent/hosted-policy.ts";
 import { serviceRegistry } from "../lib/services/registry.ts";
+import {
+  canonicalizeJson,
+  computeCanonicalReportHash,
+  stripInternalKeys,
+  validateApiQualityReportPayload,
+  CANONICALIZATION_VERSION,
+} from "../lib/reports/canonical-report-hash.ts";
+import { API_QUALITY_FINALIZER_PRICE_USDC } from "../lib/services/constants.ts";
+import { hostedWorkflowTemplates } from "../lib/agent/workflow-templates.ts";
 import type { MachineErrorCode } from "../lib/api/machine-errors.ts";
 import type { ApiQualityObservationRow, ApiQualityObservation } from "../lib/providers/api-quality-types.ts";
 
@@ -857,8 +866,150 @@ async function runTests() {
   assert.ok(!selectedSlugs.includes("text-analyzer"), "paid_api_quality plan must NOT include text-analyzer");
   assert.ok(!selectedSlugs.includes("premium-quote"), "paid_api_quality plan must NOT include premium-quote");
 
+  // ----------------------------------------------------
+  // Scenario 32: Canonical JSON Report Hashing — Key Order Determinism
+  // ----------------------------------------------------
+  console.log("Scenario 32: Canonical JSON Report Hashing — Key Order Determinism");
+  const reportKeyOrderA = {
+    reportId: "job_canonical_001",
+    workflowType: "paid_api_quality",
+    workflow: "paid_api_quality",
+    overallScore: 95,
+    mode: "single" as const,
+    targetServices: ["srv_weather"],
+    servicesCompared: [{ serviceId: "srv_weather", serviceName: "Weather API", observationCount: { value: 10, confidence: "high" as const } }],
+    availability: { uptimePercent: { value: 100, confidence: "high" as const }, totalObservations: { value: 10, confidence: "high" as const }, summary: "100% Uptime" },
+    qualityScoreAndConfidence: { overallScore: 95, status: "Excellent" as const, confidenceLevel: "high" as const, hasSufficientData: true, breakdown: { availabilityScore: 25, executionReliabilityScore: 20, responseValidityScore: 15, paymentSuccessScore: 15, settlementSuccessScore: 15, latencyConsistencyScore: 10 }, summary: "Top tier performance" },
+  };
+
+  const reportKeyOrderB = {
+    qualityScoreAndConfidence: { summary: "Top tier performance", breakdown: { latencyConsistencyScore: 10, settlementSuccessScore: 15, paymentSuccessScore: 15, responseValidityScore: 15, executionReliabilityScore: 20, availabilityScore: 25 }, hasSufficientData: true, confidenceLevel: "high" as const, status: "Excellent" as const, overallScore: 95 },
+    availability: { summary: "100% Uptime", totalObservations: { confidence: "high" as const, value: 10 }, uptimePercent: { confidence: "high" as const, value: 100 } },
+    servicesCompared: [{ observationCount: { confidence: "high" as const, value: 10 }, serviceName: "Weather API", serviceId: "srv_weather" }],
+    targetServices: ["srv_weather"],
+    mode: "single" as const,
+    overallScore: 95,
+    workflow: "paid_api_quality",
+    workflowType: "paid_api_quality",
+    reportId: "job_canonical_001",
+  };
+
+  const hashA = computeCanonicalReportHash(reportKeyOrderA);
+  const hashB = computeCanonicalReportHash(reportKeyOrderB);
+
+  assert.equal(hashA.canonicalHash, hashB.canonicalHash, "Different key ordering must produce identical canonical hash");
+  assert.equal(hashA.canonicalString, hashB.canonicalString, "Different key ordering must produce identical canonical JSON string");
+  assert.equal(hashA.canonicalizationVersion, CANONICALIZATION_VERSION);
+  assert.ok(hashA.canonicalHash.startsWith("0x"));
+
+  // ----------------------------------------------------
+  // Scenario 33: Canonical JSON Report Hashing — Property Value Mutation Sensitivity
+  // ----------------------------------------------------
+  console.log("Scenario 33: Canonical JSON Report Hashing — Property Value Mutation Sensitivity");
+  const reportMutated = {
+    ...reportKeyOrderA,
+    overallScore: 85, // modified property value
+  };
+
+  const hashMutated = computeCanonicalReportHash(reportMutated);
+  assert.notEqual(hashMutated.canonicalHash, hashA.canonicalHash, "Modifying property value must change canonical hash");
+  assert.notEqual(hashMutated.canonicalString, hashA.canonicalString, "Modifying property value must change canonical string");
+
+  // ----------------------------------------------------
+  // Scenario 34: Malformed Report Payload Validation Rejection
+  // ----------------------------------------------------
+  console.log("Scenario 34: Malformed Report Payload Validation Rejection");
+  assert.equal(validateApiQualityReportPayload(null), false);
+  assert.equal(validateApiQualityReportPayload({}), false);
+  assert.equal(validateApiQualityReportPayload({ workflowType: "invalid_type" }), false);
+  assert.equal(validateApiQualityReportPayload({ workflowType: "paid_api_quality" }), false, "Missing required sections must fail validation");
+  assert.equal(validateApiQualityReportPayload({ workflowType: "paid_api_quality", reportId: "r1", servicesCompared: [] }), false, "Missing availability must fail validation");
+  assert.equal(validateApiQualityReportPayload(reportKeyOrderA), true, "Valid report payload must pass validation");
+
+  // Verify non-finite / undefined handling in canonicalizeJson
+  assert.throws(() => canonicalizeJson({ a: undefined }), /undefined value is not supported|undefined property value/);
+  assert.throws(() => canonicalizeJson({ a: NaN }), /non-finite number/);
+  assert.throws(() => canonicalizeJson({ a: Infinity }), /non-finite number/);
+  assert.throws(() => canonicalizeJson({ a: () => {} }), /unsupported type/);
+
+  // ----------------------------------------------------
+  // Scenario 35: Canonical Hashing — Secret & Internal Keys Stripping
+  // ----------------------------------------------------
+  console.log("Scenario 35: Canonical Hashing — Secret & Internal Keys Stripping");
+  const reportWithSecrets = {
+    ...reportKeyOrderA,
+    credentials: { api_key: "secret_12345" },
+    _private: { token: "private_token" },
+    webhookSecret: "whsec_abcdef",
+    bearerToken: "bearer_xyz987",
+    internalConfig: { env: "test" },
+  };
+
+  const hashWithSecrets = computeCanonicalReportHash(reportWithSecrets);
+  assert.equal(hashWithSecrets.canonicalHash, hashA.canonicalHash, "Extra internal/secret fields must be stripped before hashing");
+  assert.ok(!hashWithSecrets.canonicalString.includes("credentials"), "Canonical string must not contain credentials");
+  assert.ok(!hashWithSecrets.canonicalString.includes("_private"), "Canonical string must not contain _private");
+  assert.ok(!hashWithSecrets.canonicalString.includes("webhookSecret"), "Canonical string must not contain webhookSecret");
+  assert.ok(!hashWithSecrets.canonicalString.includes("bearerToken"), "Canonical string must not contain bearerToken");
+  assert.ok(!hashWithSecrets.canonicalString.includes("internalConfig"), "Canonical string must not contain internalConfig");
+
+  const strippedPayload = stripInternalKeys(reportWithSecrets) as Record<string, unknown>;
+  assert.equal(strippedPayload.credentials, undefined);
+  assert.equal(strippedPayload._private, undefined);
+  assert.equal(strippedPayload.webhookSecret, undefined);
+  assert.equal(strippedPayload.bearerToken, undefined);
+  assert.equal(strippedPayload.internalConfig, undefined);
+
+  // ----------------------------------------------------
+  // Scenario 36: Hash in Final Report Matches Arc Proof Hash
+  // ----------------------------------------------------
+  console.log("Scenario 36: Hash in Final Report Matches Arc Proof Hash");
+  const finalReportClean = stripInternalKeys(reportKeyOrderA);
+  const expectedHashResult = computeCanonicalReportHash(finalReportClean);
+
+  // Simulated finalizer output
+  const finalizerResponse = {
+    report: finalReportClean,
+    paidAmountUsdc: "0.0020",
+    billing: {
+      chargedBy: "Veyra",
+      protocol: "x402",
+      network: "Arc Testnet",
+      purpose: "api_quality_canonical_hash_attestation",
+    },
+    canonicalHash: expectedHashResult.canonicalHash,
+    canonicalizationVersion: expectedHashResult.canonicalizationVersion,
+  };
+
+  const headerHash = expectedHashResult.canonicalHash;
+  assert.equal(finalizerResponse.canonicalHash, headerHash, "Canonical hash in response must match header hash");
+  assert.equal(finalizerResponse.canonicalHash, expectedHashResult.canonicalHash, "Final report hash must match computed canonical hash");
+
+  // ----------------------------------------------------
+  // Scenario 37: Price Synchronization Assertion
+  // ----------------------------------------------------
+  console.log("Scenario 37: Price Synchronization Assertion");
+  const template = hostedWorkflowTemplates.find((t) => t.value === "paid_api_quality");
+  const displayedPrice = template?.estimatedSpendUsdc;
+  const finalizerService = serviceRegistry.find((s) => s.slug === "api-quality-finalizer");
+  const providerPrice = finalizerService?.priceUsd;
+  const quotedPrice = Number(API_QUALITY_FINALIZER_PRICE_USDC);
+  const paidAmount = Number(API_QUALITY_FINALIZER_PRICE_USDC);
+
+  assert.equal(displayedPrice, 0.002, "Displayed price must equal 0.002");
+  assert.equal(quotedPrice, 0.002, "Quoted price must equal 0.002");
+  assert.equal(providerPrice, 0.002, "Provider price must equal 0.002");
+  assert.equal(paidAmount, 0.002, "Paid amount must equal 0.002");
+  assert.ok(
+    displayedPrice === quotedPrice &&
+      quotedPrice === providerPrice &&
+      providerPrice === paidAmount,
+    "Price synchronization failure: displayedPrice === quotedPrice === providerPrice === paidAmount must hold",
+  );
+  assert.equal(API_QUALITY_FINALIZER_PRICE_USDC, "0.0020", "API_QUALITY_FINALIZER_PRICE_USDC constant must be '0.0020'");
+
   console.log("\n=======================================================");
-  console.log("ALL 31 P4.0 PAID API QUALITY TEST SCENARIOS PASSED!");
+  console.log("ALL 37 P4.0 PAID API QUALITY TEST SCENARIOS PASSED!");
   console.log("=======================================================");
 }
 

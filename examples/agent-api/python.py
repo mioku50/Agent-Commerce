@@ -19,6 +19,9 @@ import uuid
 import urllib.request
 import urllib.error
 
+# Standard Veyra workflow / finalizer pricing constant: 0.0020 USDC
+DEFAULT_FINALIZER_PRICE_USDC = "0.0020"
+
 
 class MachineApiClient:
     def __init__(self, base_url: str, api_key: str):

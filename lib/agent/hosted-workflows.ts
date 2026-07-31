@@ -36,6 +36,7 @@ import {
 } from "../services/presentation.ts";
 import type { HostedReportSynthesis } from "../llm/types.ts";
 import { BRAND } from "../brand.ts";
+import { API_QUALITY_FINALIZER_PRICE_USDC } from "../services/constants.ts";
 import {
   canonicalAgentTrustInput,
   normalizeAgentTrustInput,
@@ -45,7 +46,7 @@ import type {
   AgentTrustReportInput,
 } from "../agent-trust/types.ts";
 
-export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType };
+export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType, API_QUALITY_FINALIZER_PRICE_USDC };
 
 export const HOSTED_WORKFLOW_MAX_INPUT_LENGTH = 5_000;
 export const HOSTED_WORKFLOW_MIN_INPUT_LENGTH = 20;

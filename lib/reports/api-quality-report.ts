@@ -70,6 +70,7 @@ export interface ApiQualityReportObservedFailureItem {
 export interface ApiQualityPublicReport {
   reportId: string;
   workflow: string;
+  workflowType?: string;
   status: string;
   mode: "single" | "comparison";
   targetServices: string[];
@@ -811,6 +812,7 @@ export function buildApiQualityPublicReport(
   return {
     reportId: input.jobId,
     workflow: input.workflow || "paid_api_quality",
+    workflowType: input.workflow || "paid_api_quality",
     status: input.status || "completed",
     mode,
     targetServices: uniqueServices,

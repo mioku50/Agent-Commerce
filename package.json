@@ -38,6 +38,7 @@
     "github:workflow-test": "node --experimental-transform-types --no-warnings scripts/github-workflow-tests.mts",
     "agent:trust-test": "node --experimental-transform-types --no-warnings scripts/agent-trust-tests.mts",
     "api-quality:test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/api-quality-tests.mts",
+    "api-quality:db-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-api-quality-db.mts",
     "monitoring:test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/monitoring-tests.mts",
     "trust-profile:test": "node --experimental-transform-types --no-warnings scripts/public-trust-profile-tests.mts",
     "webhooks:test": "node --experimental-transform-types --no-warnings scripts/webhook-tests.mts && node --experimental-transform-types --no-warnings scripts/trust-badge-tests.mts",

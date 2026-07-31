@@ -23,12 +23,11 @@ async function main() {
     throw new Error("Missing AGENT_DB_POSTGRES_URL_NON_POOLING");
   }
 
-  // Parse connection string and enforce port 6543 if pooler host
+  // Parse connection string and strip ssl query params
   const connUrl = new URL(poolerConnStr);
-  if (connUrl.hostname.includes("pooler.supabase.com")) {
-    connUrl.port = "6543";
-    poolerConnStr = connUrl.toString();
-  }
+  connUrl.searchParams.delete("sslmode");
+  connUrl.searchParams.delete("sslrootcert");
+  poolerConnStr = connUrl.toString();
 
   console.log(`[node-db-migrate] connecting to ${connUrl.hostname}:${connUrl.port}...`);
 
