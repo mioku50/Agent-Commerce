@@ -7,3 +7,4 @@
  * Standard fixed pricing constant for Veyra API Quality Report Finalizer in USDC string format.
  */
 export const API_QUALITY_FINALIZER_PRICE_USDC = "0.0020";
+export const TREASURY_HEALTH_FINALIZER_PRICE_USDC = "0.0025";

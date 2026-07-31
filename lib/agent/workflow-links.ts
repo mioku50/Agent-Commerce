@@ -27,6 +27,7 @@ const workflowAliases: Record<string, HostedWorkflowType> = {
 
 const workflowQueryValues: Record<HostedWorkflowType, string> = {
   github_due_diligence: "github",
+  treasury_health: "treasury",
   agent_trust_report: "agent_trust",
   paid_api_quality: "api_quality",
   sentiment_tone: "sentiment",

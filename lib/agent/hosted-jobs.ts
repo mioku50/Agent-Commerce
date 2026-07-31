@@ -58,6 +58,8 @@ import {
   buildApiQualityPublicReport,
   parseApiQualityJobInput,
 } from "../reports/api-quality-report.ts";
+import { analyzeTreasuryHealth } from "../providers/treasury-health.ts";
+import { buildTreasuryHealthPublicReport } from "../reports/treasury-health-report.ts";
 
 export type HostedJobStatus = "queued" | "running" | "completed" | "failed";
 export type HostedJobProgressStage =
@@ -328,6 +330,20 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
             observationsByService,
           });
           return { report: qualityReport };
+        }
+
+        if (
+          service.slug === "treasury-health-finalizer" &&
+          request.workflowType === "treasury_health"
+        ) {
+          const analytics = await analyzeTreasuryHealth(request.inputText);
+          const treasuryReport = buildTreasuryHealthPublicReport({
+            reportId: jobId,
+            targetWallet: request.inputText,
+            analytics,
+            status: "completed",
+          });
+          return { report: treasuryReport };
         }
 
         return undefined;

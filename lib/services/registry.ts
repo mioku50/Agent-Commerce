@@ -18,7 +18,10 @@
 
 import type { ServicePresentationMetadata } from "./presentation.ts";
 import { BRAND } from "../brand.ts";
-import { API_QUALITY_FINALIZER_PRICE_USDC } from "./constants.ts";
+import {
+  API_QUALITY_FINALIZER_PRICE_USDC,
+  TREASURY_HEALTH_FINALIZER_PRICE_USDC,
+} from "./constants.ts";
 
 export type ServiceMethod = "GET" | "POST";
 export type ServiceStatus =
@@ -420,6 +423,55 @@ export const serviceRegistry = [
       "The hosted Veyra workflow purchases final response hash attestation for an API Quality Report on Arc Testnet.",
     agentReasoningHint:
       "Use as the final step of Paid API Quality Report to finalize telemetry evaluation and bind canonical report hash to an Arc proof.",
+  },
+  {
+    id: "treasury-health-finalizer",
+    slug: "treasury-health-finalizer",
+    name: "Treasury Health Report Finalizer",
+    shortDescription:
+      "Internal x402 finalization step that computes canonical treasury health report hash and prepares Arc proof attestation.",
+    longDescription:
+      "Validates and finalizes a Treasury Health Report, computes its canonical response hash, verifies on-chain analysis, and prepares proof publishing on Arc Testnet. Only the configured hosted payer may settle this endpoint.",
+    category: "Verification",
+    method: "POST",
+    endpoint: "/api/provider/treasury-health-finalizer",
+    priceLabel: `${TREASURY_HEALTH_FINALIZER_PRICE_USDC} USDC`,
+    priceUsd: Number(TREASURY_HEALTH_FINALIZER_PRICE_USDC),
+    status: "live",
+    sourceType: "static",
+    isPaid: true,
+    internalOnly: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        report: { type: "object" },
+      },
+      required: ["report"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        report: { type: "object" },
+        paidAmountUsdc: { type: "string" },
+      },
+      required: ["report", "paidAmountUsdc"],
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/provider/treasury-health-finalizer",
+      body: { report: { workflowType: "treasury_health" } },
+    },
+    exampleResponse: {
+      report: {
+        workflowType: "treasury_health",
+        verification: { status: "verification_pending" },
+      },
+      paidAmountUsdc: TREASURY_HEALTH_FINALIZER_PRICE_USDC,
+    },
+    exampleUseCase:
+      "The hosted Veyra workflow purchases final response hash attestation for a Treasury Health Report on Arc Testnet.",
+    agentReasoningHint:
+      "Use as the final step of Treasury Health Report to finalize on-chain evaluation and bind canonical report hash to an Arc proof.",
   },
 
   {

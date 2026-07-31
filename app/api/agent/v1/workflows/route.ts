@@ -64,6 +64,20 @@ function buildInputSchema(workflowType: string) {
     };
   }
 
+  if (workflowType === "treasury_health") {
+    return {
+      type: "object",
+      properties: {
+        walletAddress: {
+          type: "string",
+          pattern: "^0x[0-9a-fA-F]{40}$",
+          description: "Public EVM wallet address to analyze",
+        },
+      },
+      required: ["walletAddress"],
+    };
+  }
+
   if (workflowType === "market_context") {
     return {
       type: "object",
