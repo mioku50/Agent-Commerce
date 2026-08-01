@@ -142,3 +142,50 @@ export function validateApiQualityReportPayload(
 
   return true;
 }
+
+/**
+ * Strict report schema structure validator for Treasury Health reports.
+ * Must contain workflowType === "treasury_health", reportId string,
+ * targetWallet string matching hex, usdcFlowOverview object,
+ * treasuryHealthScore object.
+ */
+export function validateTreasuryHealthReportPayload(
+  payload: unknown,
+): payload is Record<string, unknown> {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+    return false;
+  }
+
+  const report = payload as Record<string, unknown>;
+
+  const workflowType = report.workflowType ?? report.workflow;
+  if (workflowType !== "treasury_health") {
+    return false;
+  }
+
+  if (typeof report.reportId !== "string" || !report.reportId.trim()) {
+    return false;
+  }
+
+  if (typeof report.targetWallet !== "string" || !/^0x[a-fA-F0-9]{40}$/.test(report.targetWallet)) {
+    return false;
+  }
+
+  if (
+    !report.usdcFlowOverview ||
+    typeof report.usdcFlowOverview !== "object" ||
+    Array.isArray(report.usdcFlowOverview)
+  ) {
+    return false;
+  }
+
+  if (
+    !report.treasuryHealthScore ||
+    typeof report.treasuryHealthScore !== "object" ||
+    Array.isArray(report.treasuryHealthScore)
+  ) {
+    return false;
+  }
+
+  return true;
+}

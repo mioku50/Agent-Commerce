@@ -5,7 +5,7 @@
 
 import type { ServicePresentationMetadata } from "../services/presentation.ts";
 import { BRAND } from "../brand.ts";
-import { API_QUALITY_FINALIZER_PRICE_USDC } from "../services/constants.ts";
+import { API_QUALITY_FINALIZER_PRICE_USDC, TREASURY_HEALTH_FINALIZER_PRICE_USDC } from "../services/constants.ts";
 
 export const HOSTED_WORKFLOW_TYPES = [
   "github_due_diligence",
@@ -15,6 +15,7 @@ export const HOSTED_WORKFLOW_TYPES = [
   "builder_update",
   "market_context",
   "custom_task",
+  "treasury_health",
 ] as const;
 
 export type HostedWorkflowType = (typeof HOSTED_WORKFLOW_TYPES)[number];
@@ -26,6 +27,7 @@ export const CURATED_HOSTED_WORKFLOW_TYPES = [
   "market_context",
   "sentiment_tone",
   "builder_update",
+  "treasury_health",
 ] as const satisfies readonly HostedWorkflowType[];
 
 export type CuratedHostedWorkflowType =
@@ -54,7 +56,8 @@ export type HostedWorkflowTemplate = {
       | "github-repository-intelligence"
       | "github-due-diligence-analysis"
       | "agent-trust-finalizer"
-      | "api-quality-finalizer";
+      | "api-quality-finalizer"
+      | "treasury-health-finalizer";
     name: string;
     priceUsdc: number;
     purpose: string;
@@ -160,6 +163,23 @@ const apiQualityFinalizerService: HostedWorkflowTemplate["services"][number] = {
     dataFreshness: null,
     billingLabel:
       `${API_QUALITY_FINALIZER_PRICE_USDC} USDC pays ${BRAND.name} for canonical report finalization and Arc proof publication.`,
+  },
+};
+
+const treasuryHealthFinalizerService: HostedWorkflowTemplate["services"][number] = {
+  slug: "treasury-health-finalizer",
+  name: "Treasury Health Report Finalizer",
+  priceUsdc: Number(TREASURY_HEALTH_FINALIZER_PRICE_USDC),
+  purpose:
+    "Computes canonical treasury health report hash and prepares Arc proof attestation.",
+  presentation: {
+    providerType: "internal_deterministic",
+    providerName: null,
+    providerStatus: "deterministic",
+    assetSymbol: null,
+    dataFreshness: null,
+    billingLabel:
+      `${TREASURY_HEALTH_FINALIZER_PRICE_USDC} USDC pays ${BRAND.name} for canonical report finalization and Arc proof publication.`,
   },
 };
 
@@ -317,6 +337,24 @@ export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
       "A planner-selected structured report",
       "Selected and skipped service reasoning",
       "Receipts and a verified Arc proof for every paid call",
+    ],
+  },
+  {
+    value: "treasury_health",
+    label: "Treasury Health Report",
+    shortLabel: "Treasury Health",
+    description:
+      "Analyze USDC flow and evaluate treasury health over 7, 30, and 90 day windows.",
+    task: "Analyze USDC transfer history and produce a deterministic Treasury Health Report.",
+    placeholder: "Enter wallet address (0x...) to analyze",
+    estimatedSpendUsdc: Number(TREASURY_HEALTH_FINALIZER_PRICE_USDC),
+    benefitLabel:
+      "Flow analysis · Runway & Burn rate · Arc verification",
+    services: [treasuryHealthFinalizerService],
+    expectedResult: [
+      "Observed inbound/outbound flows, recurring payments, and anomalies",
+      "Calculated runway, concentration risk, and treasury health score",
+      "Receipts and verified Arc proof trail for on-chain analysis",
     ],
   },
 ];

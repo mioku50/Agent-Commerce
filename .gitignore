@@ -62,3 +62,6 @@ cache/
 *.local
 docs/superpowers/plans/
 
+
+screen/
+diff.patch

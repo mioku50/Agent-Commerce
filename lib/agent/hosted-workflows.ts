@@ -36,7 +36,7 @@ import {
 } from "../services/presentation.ts";
 import type { HostedReportSynthesis } from "../llm/types.ts";
 import { BRAND } from "../brand.ts";
-import { API_QUALITY_FINALIZER_PRICE_USDC } from "../services/constants.ts";
+import { API_QUALITY_FINALIZER_PRICE_USDC, TREASURY_HEALTH_FINALIZER_PRICE_USDC } from "../services/constants.ts";
 import {
   canonicalAgentTrustInput,
   normalizeAgentTrustInput,
@@ -46,7 +46,7 @@ import type {
   AgentTrustReportInput,
 } from "../agent-trust/types.ts";
 
-export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType, API_QUALITY_FINALIZER_PRICE_USDC };
+export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType, API_QUALITY_FINALIZER_PRICE_USDC, TREASURY_HEALTH_FINALIZER_PRICE_USDC };
 
 export const HOSTED_WORKFLOW_MAX_INPUT_LENGTH = 5_000;
 export const HOSTED_WORKFLOW_MIN_INPUT_LENGTH = 20;
@@ -156,6 +156,7 @@ const WORKFLOW_LABELS: Record<HostedWorkflowType, string> = {
   builder_update: "Builder Update Summary",
   market_context: "Market Context Brief",
   custom_task: "Custom Task",
+  treasury_health: "Treasury Health Report",
 };
 
 const OBVIOUS_SECRET_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
@@ -289,7 +290,7 @@ export function validateHostedWorkflowRequest(input: {
 }): HostedWorkflowRequest {
   if (!isHostedWorkflowType(input.workflowType)) {
     throw new Error(
-      "Workflow type must be github_due_diligence, agent_trust_report, paid_api_quality, sentiment_tone, builder_update, market_context, or custom_task.",
+      "Workflow type must be github_due_diligence, agent_trust_report, paid_api_quality, sentiment_tone, builder_update, market_context, custom_task, or treasury_health.",
     );
   }
 
@@ -408,6 +409,9 @@ export function defaultWorkflowTask(workflowType: HostedWorkflowType) {
   if (workflowType === "paid_api_quality") {
     return "Evaluate and compare paid APIs using observed pricing, latency, availability, response validity, payment execution, and settlement history.";
   }
+  if (workflowType === "treasury_health") {
+    return "Analyze USDC transfer history and produce a deterministic Treasury Health Report.";
+  }
   if (workflowType === "sentiment_tone") {
     return "Analyze the submitted text and produce a sentiment and tone workflow report.";
   }
@@ -444,6 +448,9 @@ export function effectiveWorkflowTask(input: HostedWorkflowRequest) {
   }
   if (input.workflowType === "paid_api_quality") {
     return `${input.task} Evaluate and benchmark paid API telemetry, latency distribution, availability, response validity, and Arc settlement proofs.`;
+  }
+  if (input.workflowType === "treasury_health") {
+    return `${input.task} Fetch on-chain USDC transfer events and calculate treasury health metrics.`;
   }
   if (input.workflowType === "sentiment_tone") {
     return `${input.task} Use paid text analysis and concise research context for the report.`;
@@ -503,6 +510,9 @@ export function createHostedWorkflowPlan(input: {
       }
       if (input.request.workflowType === "paid_api_quality") {
         return service.slug === "api-quality-finalizer";
+      }
+      if (input.request.workflowType === "treasury_health") {
+        return service.slug === "treasury-health-finalizer";
       }
       return true;
     },
@@ -620,6 +630,12 @@ function deterministicWorkflowFindings(request: HostedWorkflowRequest) {
     return [
       `Target paid API quality input: ${request.inputText}.`,
       "Deterministic API quality evaluation combines real observation telemetry, response validity checks, and Arc settlement proofs.",
+    ];
+  }
+  if (request.workflowType === "treasury_health") {
+    return [
+      `Target wallet address: ${request.inputText}.`,
+      "Deterministic treasury health evaluation based on on-chain USDC transfer events.",
     ];
   }
   const words: string[] = text.toLowerCase().match(/[a-z0-9'-]+/g) ?? [];

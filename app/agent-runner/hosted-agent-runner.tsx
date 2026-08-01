@@ -60,6 +60,7 @@ export function HostedAgentRunner({
   const [inputText, setInputText] = useState(initialRepository ?? "");
   const [agentId, setAgentId] = useState("");
   const [agentWallet, setAgentWallet] = useState("");
+  const [treasuryWalletAddress, setTreasuryWalletAddress] = useState("");
   const [agentRepositoryUrl, setAgentRepositoryUrl] = useState(
     initialWorkflowType === "agent_trust_report" ? initialRepository ?? "" : "",
   );
@@ -109,6 +110,8 @@ export function HostedAgentRunner({
   const agentIdValid = !agentId.trim() || /^agt_[a-z0-9]{20}$/.test(agentId.trim());
   const agentWalletValid =
     !agentWallet.trim() || /^0x[0-9a-fA-F]{40}$/.test(agentWallet.trim());
+  const treasuryWalletValid =
+    !treasuryWalletAddress.trim() || /^0x[0-9a-fA-F]{40}$/.test(treasuryWalletAddress.trim());
   const contractAddressValid =
     !contractAddress.trim() || /^0x[0-9a-fA-F]{40}$/.test(contractAddress.trim());
   const serviceEndpointValid = (() => {
@@ -136,7 +139,9 @@ export function HostedAgentRunner({
           (!agentRepositoryUrl.trim() || Boolean(agentRepositoryRef))
         : workflowType === "paid_api_quality"
           ? selectedQualityServices.length >= 1 && selectedQualityServices.length <= 5
-          : inputText.trim().length >= 20;
+          : workflowType === "treasury_health"
+            ? Boolean(treasuryWalletAddress.trim()) && treasuryWalletValid
+            : inputText.trim().length >= 20;
 
   const inputHelper = workflowType === "agent_trust_report"
     ? !hasAgentTrustPrimaryInput
@@ -165,6 +170,12 @@ export function HostedAgentRunner({
       ? "Select a maximum of 5 services for comparative analysis."
       : observationCountPreview && observationCountPreview.totalObservations < 10
       ? `Sample size warning: ${observationCountPreview.totalObservations} observation(s) recorded in window (< 10). High-confidence scoring requires at least 10 observations.`
+      : null
+    : workflowType === "treasury_health"
+    ? !treasuryWalletAddress.trim()
+      ? "Enter a wallet address (0x...) to analyze."
+      : !treasuryWalletValid
+      ? "Check the wallet address. It must be a valid EVM address (0x...)."
       : null
     : hostedInputPreviewHelper(inputText);
 
@@ -253,7 +264,9 @@ export function HostedAgentRunner({
       inputText:
         workflowType === "paid_api_quality"
           ? JSON.stringify({ serviceIds: selectedQualityServices, observationWindowDays }, null, 2)
-          : inputText,
+          : workflowType === "treasury_health"
+            ? JSON.stringify({ walletAddress: treasuryWalletAddress.trim() })
+            : inputText,
       agentTrustInput:
         workflowType === "agent_trust_report"
           ? {
@@ -613,6 +626,26 @@ export function HostedAgentRunner({
                   ) : null}
                 </div>
               </div>
+            ) : workflowType === "treasury_health" ? (
+              <div className="grid gap-4">
+                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
+                  <p className="font-semibold">Evaluate on-chain USDC treasury health.</p>
+                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                    Analyze inbound and outbound flows, recurring payments, concentration risk, and runway.
+                  </p>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="treasury-wallet">Wallet address</Label>
+                  <input
+                    id="treasury-wallet"
+                    value={treasuryWalletAddress}
+                    onChange={(event) => { setTreasuryWalletAddress(event.target.value); invalidatePlan(); }}
+                    placeholder="0x…"
+                    className="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono"
+                  />
+                  <p className="text-xs text-muted-foreground">The public EVM wallet address to analyze.</p>
+                </div>
+              </div>
             ) : workflowType === "github_due_diligence" ? (
               <div className="grid gap-2">
                 <div className="flex items-center justify-between gap-2">
@@ -846,6 +879,25 @@ export function HostedAgentRunner({
                           <li className="flex items-center gap-2">
                             <Check className="size-4 text-emerald-500" />
                             <span>Shareable report</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Arc verification</span>
+                          </li>
+                        </>
+                      ) : workflowType === "treasury_health" ? (
+                        <>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>On-chain USDC flow analysis</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Runway and burn rate estimation</span>
+                          </li>
+                          <li className="flex items-center gap-2">
+                            <Check className="size-4 text-emerald-500" />
+                            <span>Counterparty concentration risk</span>
                           </li>
                           <li className="flex items-center gap-2">
                             <Check className="size-4 text-emerald-500" />
