@@ -286,7 +286,7 @@ async function runQuoteUiAtViewport(input: {
     const quoteBody = (await quoteResponse.json()) as JsonObject;
     assert(
       quoteResponse.ok() && quoteBody.quote?.id && quoteBody.project360,
-      `Quote UI failed at ${input.viewport.width}px (HTTP ${quoteResponse.status()}).`,
+      `Quote UI failed at ${input.viewport.width}px (HTTP ${quoteResponse.status()}, code ${String(quoteBody.error?.code ?? "none")}, message ${String(quoteBody.error?.message ?? "none")}).`,
     );
     if (input.expectedQuoteId) {
       assert(quoteBody.quote.id === input.expectedQuoteId, "Responsive replay created a second quote.");
