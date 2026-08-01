@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   FileText,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -26,34 +27,34 @@ export const metadata = {
 
 export default function WorkflowsPage() {
   return (
-    <main className="min-h-screen bg-background">
-      <section className="border-b bg-secondary/20">
-        <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_0.72fr] lg:items-end">
+    <main className="min-h-screen bg-background text-foreground">
+      <section className="border-b border-white/5 bg-gradient-to-b from-[#0a0d15] via-[#080a0f] to-[#07090e] py-12 sm:py-16">
+        <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 sm:px-6 lg:grid-cols-[1fr_0.72fr] lg:items-end">
           <div>
-            <Badge className="mb-4">Workflow Templates</Badge>
-            <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">
-              Start with a useful, guarded workflow
+            <Badge className="mb-4 rounded-full border-cyan-500/30 bg-cyan-500/10 px-3.5 py-1 text-xs font-semibold text-cyan-300">
+              Curated Templates
+            </Badge>
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl gradient-text">
+              Guarded Workflow Catalog
             </h1>
-            <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-              Submit real input, preview the selected allowlisted services and
-              cost, then let the hosted agent buy the APIs through x402 and
-              assemble a shareable Final Report with receipts and Arc proofs.
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Submit real non-sensitive input, preview allowlisted service costs, and let the hosted agent execute x402 purchases and assemble Arc-verified reports.
             </p>
           </div>
-          <Card className="rounded-lg">
-            <CardContent className="grid gap-3 p-5 text-sm">
-              <p className="flex items-center gap-2 font-medium">
-                <ShieldCheck className="size-4 text-primary" />
-                Arc Testnet guardrails
+          <Card className="rounded-2xl border border-white/10 bg-[#090c13]/90 backdrop-blur-xl p-1 shadow-xl">
+            <CardContent className="grid gap-3.5 p-5 text-xs">
+              <p className="flex items-center gap-2 font-bold text-foreground">
+                <ShieldCheck className="size-4 text-cyan-400" />
+                Arc Testnet Safety Guardrails
               </p>
-              <p className="text-muted-foreground">
-                Project-owned payer · allowlisted services only · maximum 3 paid
-                calls · maximum 0.005 USDC per workflow.
+              <p className="text-muted-foreground leading-relaxed">
+                Project-owned payer · Allowlisted services only · Maximum 3 paid calls · Budget capped at 0.005 USDC.
               </p>
-              <Button asChild>
+              <Button asChild className="rounded-xl bg-primary hover:bg-blue-600 font-semibold text-white mt-1">
                 <Link href="/agent-runner">
+                  <Sparkles className="size-4 mr-1.5" />
                   Run Workflow
-                  <ArrowRight />
+                  <ArrowRight className="size-4 ml-1.5" />
                 </Link>
               </Button>
             </CardContent>
@@ -61,36 +62,41 @@ export default function WorkflowsPage() {
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-5 px-4 py-8 sm:px-6 lg:grid-cols-2">
+      <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-10 sm:px-6 lg:grid-cols-2">
         {curatedHostedWorkflowTemplates.map((template) => (
-          <Card key={template.value} className="command-card rounded-lg">
-            <CardHeader>
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-                <Badge variant="secondary">Hosted workflow</Badge>
-                <Badge variant="outline" className="font-mono">
-                  estimated {template.estimatedSpendUsdc.toFixed(4)} USDC
+          <Card key={template.value} className="rounded-2xl border border-white/10 bg-[#090c13]/90 backdrop-blur-xl p-1 transition-all duration-300 hover:border-primary/40 hover:shadow-[0_0_30px_rgba(61,126,255,0.12)]">
+            <CardHeader className="p-6 pb-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <Badge variant="secondary" className="border-primary/30 bg-primary/10 text-primary text-xs font-semibold">
+                  Hosted Workflow
+                </Badge>
+                <Badge variant="outline" className="border-white/10 font-mono text-xs text-muted-foreground">
+                  ~{template.estimatedSpendUsdc.toFixed(4)} USDC
                 </Badge>
               </div>
-              <CardTitle className="flex items-center gap-2 text-2xl">
-                <Bot className="size-5 text-primary" />
+              <CardTitle className="flex items-center gap-2.5 text-xl font-bold text-foreground">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Bot className="size-4" />
+                </div>
                 {template.label}
               </CardTitle>
-              <p className="leading-6 text-muted-foreground">
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
                 {template.description}
               </p>
             </CardHeader>
-            <CardContent className="grid gap-5">
+
+            <CardContent className="p-6 pt-0 grid gap-5">
               <div>
-                <p className="text-sm font-semibold">Paid services</p>
-                <div className="mt-3 grid gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground/80">Paid Services</p>
+                <div className="mt-2.5 grid gap-2">
                   {template.services.map((service) => (
                     <div
                       key={service.slug}
-                      className="grid gap-2 rounded-md border bg-background/60 p-3 sm:grid-cols-[1fr_auto]"
+                      className="grid gap-2 rounded-xl border border-white/5 bg-white/5 p-3 text-xs sm:grid-cols-[1fr_auto]"
                     >
                       <div>
-                        <p className="font-medium">{service.name}</p>
-                        <div className="mt-2">
+                        <p className="font-semibold text-foreground">{service.name}</p>
+                        <div className="mt-1.5">
                           <ServicePresentation
                             metadata={{
                               ...service.presentation,
@@ -101,37 +107,36 @@ export default function WorkflowsPage() {
                             }}
                           />
                         </div>
-                        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
                           {service.purpose}
                         </p>
                       </div>
-                      <span className="font-mono text-xs text-muted-foreground">
+                      <span className="font-mono text-[11px] text-muted-foreground shrink-0">
                         {service.priceUsdc.toFixed(4)} USDC
                       </span>
                     </div>
                   ))}
                 </div>
               </div>
+
               <div>
-                <p className="flex items-center gap-2 text-sm font-semibold">
-                  <FileText className="size-4" /> Expected Final Report
+                <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground/80">
+                  <FileText className="size-3.5 text-cyan-400" /> Expected Final Report Output
                 </p>
-                <div className="mt-3 grid gap-2">
+                <div className="mt-2.5 grid gap-1.5">
                   {template.expectedResult.map((result) => (
-                    <p
-                      key={result}
-                      className="flex gap-2 text-sm text-muted-foreground"
-                    >
-                      <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-primary" />
+                    <p key={result} className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <CheckCircle2 className="size-3.5 shrink-0 text-cyan-400" />
                       {result}
                     </p>
                   ))}
                 </div>
               </div>
-              <Button asChild>
+
+              <Button asChild className="rounded-xl bg-primary hover:bg-blue-600 font-semibold text-white">
                 <Link href={hostedWorkflowHref(template.value)}>
-                  Use this template
-                  <ArrowRight />
+                  Use This Template
+                  <ArrowRight className="size-4 ml-1" />
                 </Link>
               </Button>
             </CardContent>

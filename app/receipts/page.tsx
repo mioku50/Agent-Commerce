@@ -70,7 +70,7 @@ function onchainStatusLabel(receipt: CommerceReceipt) {
 
 function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
   return (
-    <Card className="command-card rounded-lg shadow-sm">
+    <Card className="rounded-2xl border border-white/10 bg-[#090c13]/90 backdrop-blur-xl p-1 transition-all duration-300 hover:border-primary/40 hover:shadow-[0_0_30px_rgba(61,126,255,0.12)]">
       <CardContent className="grid gap-4 p-5">
         <div className="grid min-w-0 gap-4 lg:grid-cols-[1fr_auto] lg:items-center">
           <div className="min-w-0">
@@ -80,10 +80,11 @@ function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
                 variant={
                   receipt.serviceSourceType === "seller_mock" ? "secondary" : "outline"
                 }
+                className="border-white/10 bg-white/5 text-xs"
               >
                 {receipt.sourceLabel}
               </Badge>
-              <Badge variant={receipt.paymentEvent ? "default" : "outline"}>
+              <Badge variant={receipt.paymentEvent ? "default" : "outline"} className="border-white/10 text-xs">
                 {receipt.paymentEventStatusLabel}
               </Badge>
               <Badge
@@ -94,148 +95,129 @@ function ReceiptCard({ receipt }: { receipt: CommerceReceipt }) {
                       ? "destructive"
                       : "outline"
                 }
+                className={receipt.onchainProof?.status === "verified" ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 text-xs" : "text-xs"}
               >
                 {onchainStatusLabel(receipt)}
               </Badge>
             </div>
-            <h2 className="truncate text-lg font-semibold">{receipt.serviceName}</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {formatDate(receipt.createdAt)}
-            </p>
+
+            <div className="flex flex-wrap items-baseline gap-2">
+              <h2 className="text-xl font-bold tracking-tight text-foreground">{receipt.serviceName}</h2>
+              {receipt.serviceSlug && (
+                <span className="font-mono text-xs text-muted-foreground">
+                  ({receipt.serviceSlug})
+                </span>
+              )}
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-4 text-xs text-muted-foreground border-t border-white/5 pt-3">
+              {receipt.buyerWallet && (
+                <div>
+                  Payer: <WalletAddress address={receipt.buyerWallet} />
+                </div>
+              )}
+              <div>Timestamp: {formatDate(receipt.createdAt)}</div>
+              {receipt.requestId && (
+                <div className="font-mono">Req ID: {shortenHash(receipt.requestId, 6)}</div>
+              )}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+
+          <div className="flex flex-col items-start gap-3 border-t border-white/5 pt-4 lg:items-end lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
             <USDCAmount value={receipt.amountUsdc} size="lg" />
-            <Button asChild>
-              <Link href={`/receipts/${receipt.id}`}>
-                View
-                <ArrowRight />
+            <Button asChild size="sm" className="rounded-xl bg-primary hover:bg-blue-600 font-semibold text-white">
+              <Link href={receipt.links.receipt}>
+                Inspect Receipt
+                <ArrowRight className="size-4 ml-1" />
               </Link>
             </Button>
           </div>
         </div>
 
-        <dl className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="text-muted-foreground">Method</dt>
-            <dd className="font-mono">{receipt.method ?? "n/a"}</dd>
+        {receipt.onchainProof?.transactionHash ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/5 bg-white/5 p-3 text-xs">
+            <div className="flex items-center gap-2">
+              <BadgeCheck className="size-4 text-emerald-400" />
+              <span className="font-mono text-muted-foreground">
+                Tx: {shortenHash(receipt.onchainProof.transactionHash)}
+              </span>
+            </div>
+            {receipt.onchainProof.transactionExplorerUrl ? (
+              <a
+                href={receipt.onchainProof.transactionExplorerUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="font-medium text-cyan-400 hover:underline"
+              >
+                View on Arc Explorer →
+              </a>
+            ) : null}
           </div>
-          <div>
-            <dt className="text-muted-foreground">Request ID</dt>
-            <dd className="font-mono">
-              {receipt.requestId ? shortenHash(receipt.requestId, 6) : "n/a"}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Buyer agent</dt>
-            <dd className="min-w-0">
-              {receipt.buyerWallet ? (
-                <WalletAddress address={receipt.buyerWallet} chars={5} copyable={false} />
-              ) : (
-                "n/a"
-              )}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-muted-foreground">Proof status</dt>
-            <dd>{onchainStatusLabel(receipt)}</dd>
-          </div>
-        </dl>
-        {receipt.endpoint ? (
-          <p className="break-all rounded-md bg-muted p-3 font-mono text-xs text-muted-foreground">
-            {receipt.endpoint}
-          </p>
         ) : null}
-        <div className="flex flex-col gap-3 border-t pt-4 sm:flex-row sm:flex-wrap">
-          <Button asChild variant="outline">
-            <Link href={receipt.links.run}>
-              Run timeline
-              <ListChecks />
-            </Link>
-          </Button>
-          {receipt.links.agent ? (
-            <Button asChild variant="outline">
-              <Link href={receipt.links.agent}>
-                Agent Passport
-                <BadgeCheck />
-              </Link>
-            </Button>
-          ) : null}
-          {receipt.links.service ? (
-            <Button asChild variant="outline">
-              <Link href={receipt.links.service}>
-                Service
-                <Store />
-              </Link>
-            </Button>
-          ) : null}
-        </div>
       </CardContent>
     </Card>
   );
 }
 
-async function ReceiptList({
-  wallet,
-  serviceSlug,
+async function ReceiptsContent({
+  searchParams,
 }: {
-  wallet?: string | null;
-  serviceSlug?: string | null;
+  searchParams?: Promise<{ wallet?: string; serviceSlug?: string }>;
 }) {
   await connection();
+  const params = await searchParams;
+  const walletFilter = params?.wallet;
+  const serviceSlugFilter = params?.serviceSlug;
 
   let receipts: CommerceReceipt[] = [];
   let error: string | null = null;
 
   try {
-    receipts = await fetchRecentReceipts({ limit: 30, wallet, serviceSlug });
+    receipts = await fetchRecentReceipts({
+      limit: 50,
+      wallet: walletFilter,
+      serviceSlug: serviceSlugFilter,
+    });
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
   }
 
+  if (error) {
+    return (
+      <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+        <Card className="rounded-2xl border border-destructive/30 bg-destructive/10 p-6 text-sm text-destructive backdrop-blur-xl">
+          Unable to load receipts: {error}
+        </Card>
+      </section>
+    );
+  }
+
+  if (receipts.length === 0) {
+    return (
+      <section className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6">
+        <EmptyState
+          icon={ReceiptText}
+          title="No receipts found"
+          description={
+            walletFilter || serviceSlugFilter
+              ? "No receipts match the specified filter criteria."
+              : "No x402 payments have been completed yet."
+          }
+          action={
+            walletFilter || serviceSlugFilter
+              ? { label: "Clear filters", href: "/receipts" }
+              : { label: "Run Workflow", href: "/agent-runner" }
+          }
+        />
+      </section>
+    );
+  }
+
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6">
-      {wallet || serviceSlug ? (
-        <Card className="rounded-lg">
-          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">
-              Showing receipts
-              {wallet ? (
-                <>
-                  {" "}for wallet <span className="font-mono text-foreground">{wallet}</span>
-                </>
-              ) : null}
-              {serviceSlug ? (
-                <>
-                  {" "}for service <span className="font-mono text-foreground">{serviceSlug}</span>
-                </>
-              ) : null}
-              .
-            </p>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/receipts">Clear filters</Link>
-            </Button>
-          </CardContent>
-        </Card>
-      ) : null}
-      {error ? (
-        <Card className="rounded-lg">
-          <CardContent className="p-6">
-            <p className="font-medium">Commerce receipts are not available yet.</p>
-            <p className="mt-2 text-sm text-muted-foreground">{error}</p>
-          </CardContent>
-        </Card>
-      ) : receipts.length === 0 ? (
-        <EmptyState
-          icon={FileSearch}
-          title="No paid commerce receipts yet."
-          description="Run a hosted workflow with real input to create the first paid receipt and Arc proof."
-          action={{ label: "Run Workflow", href: "/agent-runner" }}
-        />
-      ) : (
-        receipts.map((receipt) => (
-          <ReceiptCard key={receipt.id} receipt={receipt} />
-        ))
-      )}
+      {receipts.map((receipt) => (
+        <ReceiptCard key={receipt.id} receipt={receipt} />
+      ))}
     </section>
   );
 }
@@ -243,89 +225,53 @@ async function ReceiptList({
 function ReceiptsFallback() {
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6">
-      <Card className="rounded-lg">
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          Loading commerce receipts...
-        </CardContent>
+      <Card className="rounded-2xl border border-white/10 bg-[#090c13]/80 p-6 text-sm text-muted-foreground backdrop-blur-xl">
+        Loading receipts...
       </Card>
     </section>
   );
 }
 
-export default async function ReceiptsPage({ searchParams }: ReceiptsPageProps) {
-  const resolvedSearchParams = searchParams ? await searchParams : {};
-  const wallet = resolvedSearchParams.wallet ?? null;
-  const serviceSlug = resolvedSearchParams.serviceSlug ?? null;
-
+export default function ReceiptsPage({ searchParams }: ReceiptsPageProps) {
   return (
-    <main className="min-h-screen bg-background">
-      <section className="border-b bg-secondary/30">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-12 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+    <main className="min-h-screen bg-background text-foreground">
+      <section className="border-b border-white/5 bg-gradient-to-b from-[#0a0d15] via-[#080a0f] to-[#07090e] py-12 sm:py-16">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">Public audit trail</Badge>
-              <Badge variant="outline">Commerce receipts</Badge>
+              <Badge variant="secondary" className="border-primary/30 bg-primary/10 text-primary text-xs font-semibold">
+                Audit Trail
+              </Badge>
+              <Badge variant="outline" className="border-white/10 bg-white/5 text-xs text-muted-foreground">
+                x402 Micropayment Log
+              </Badge>
             </div>
-            <h1 className="text-4xl font-bold tracking-normal text-foreground sm:text-5xl">
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl gradient-text">
               Commerce Receipts
             </h1>
-            <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-              Each hosted workflow turns successful paid API calls into
-              shareable receipts linked to its Final Report, buyer Passport,
-              activity timeline, payment event, and app-owned Arc proof.
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Public audit trail and cryptographic evidence log for paid x402 service calls and Arc settlement receipts.
             </p>
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild variant="outline">
-              <Link href="/demo">
-                <Sparkles />
-                Guided Demo
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild size="sm" className="rounded-xl bg-primary hover:bg-blue-600 font-semibold">
               <Link href="/agent-runner">
-                <Bot />
+                <Bot className="size-4 mr-1" />
                 Run Workflow
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" size="sm" className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10">
               <Link href="/runs">
-                <ListChecks />
-                Activity
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/proofs">
-                <Store />
-                Arc Proofs
+                <ListChecks className="size-4 mr-1" />
+                Runs
               </Link>
             </Button>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 pt-8 sm:px-6 md:grid-cols-3">
-        {[
-          ["x402 paid", "Only successful paid purchase steps become receipts"],
-          ["Agent-linked", "Every receipt links to a buyer wallet and Passport"],
-          ["Onchain proof", "Receipt hashes are attested on Arc after settlement"],
-        ].map(([title, body]) => (
-          <Card key={title} className="rounded-lg">
-            <CardHeader>
-              <div className="mb-3 flex size-10 items-center justify-center rounded-md bg-secondary text-secondary-foreground">
-                <ReceiptText size={20} />
-              </div>
-              <CardTitle className="text-lg">{title}</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm leading-6 text-muted-foreground">
-              {body}
-            </CardContent>
-          </Card>
-        ))}
-      </section>
-
       <Suspense fallback={<ReceiptsFallback />}>
-        <ReceiptList wallet={wallet} serviceSlug={serviceSlug} />
+        <ReceiptsContent searchParams={searchParams} />
       </Suspense>
     </main>
   );

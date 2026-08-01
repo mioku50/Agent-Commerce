@@ -8,7 +8,27 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { Bot, Calculator, Check, CreditCard, LoaderCircle, Wallet } from "lucide-react";
+import {
+  Bot,
+  Calculator,
+  Check,
+  CreditCard,
+  LoaderCircle,
+  Wallet,
+  ShieldCheck,
+  Zap,
+  Github,
+  Activity,
+  BarChart3,
+  MessageSquareText,
+  Rocket,
+  ArrowRight,
+  Info,
+  Sparkles,
+  Layers,
+  AlertCircle,
+  FileCheck2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -35,6 +55,17 @@ import type {
   HostedWorkflowType,
   RecentHostedJob,
 } from "./types";
+
+const workflowIcons: Record<HostedWorkflowType, typeof Bot> = {
+  agent_trust_report: ShieldCheck,
+  treasury_health: Zap,
+  github_due_diligence: Github,
+  paid_api_quality: Activity,
+  market_context: BarChart3,
+  sentiment_tone: MessageSquareText,
+  builder_update: Rocket,
+  custom_task: Bot,
+};
 
 export function HostedAgentRunner({
   diagnostic,
@@ -149,35 +180,27 @@ export function HostedAgentRunner({
       : !agentIdValid
         ? "Check the public Agent ID. Use the agt_ identifier shown in Veyra."
         : !agentWalletValid
-          ? "Check the agent wallet. It must be a valid EVM address."
-          : agentRepositoryUrl.trim() && !agentRepositoryRef
-            ? "Check the public GitHub repository URL."
-            : !contractAddressValid
-              ? "Check the Arc Testnet contract address."
-              : !serviceEndpointValid
-                ? "Use a public HTTPS service endpoint. Local and private networks are blocked."
-                : null
-    : workflowType === "github_due_diligence"
-    ? !inputText.trim()
-      ? "Enter a public GitHub repository URL (e.g. github.com/owner/repository)."
-      : !repositoryRef
-      ? "Enter a valid public GitHub repository in owner/repository format."
-      : null
+          ? "Check the agent wallet format. Use a public 0x EVM address."
+          : !contractAddressValid
+            ? "Check the optional Arc contract address. Use a public 0x EVM address."
+            : !serviceEndpointValid
+              ? "Check the optional service endpoint. Use a public HTTPS URL."
+              : !agentRepositoryUrl.trim() || Boolean(agentRepositoryRef)
+                ? "Input valid. Ready to request a quote."
+                : "Check the optional GitHub URL format. Use https://github.com/owner/repository."
     : workflowType === "paid_api_quality"
-    ? selectedQualityServices.length === 0
-      ? "Select 1 to 5 public services to analyze or compare."
-      : selectedQualityServices.length > 5
-      ? "Select a maximum of 5 services for comparative analysis."
-      : observationCountPreview && observationCountPreview.totalObservations < 10
-      ? `Sample size warning: ${observationCountPreview.totalObservations} observation(s) recorded in window (< 10). High-confidence scoring requires at least 10 observations.`
-      : null
-    : workflowType === "treasury_health"
-    ? !treasuryWalletAddress.trim()
-      ? "Enter a wallet address (0x...) to analyze."
-      : !treasuryWalletValid
-      ? "Check the wallet address. It must be a valid EVM address (0x...)."
-      : null
-    : hostedInputPreviewHelper(inputText);
+      ? selectedQualityServices.length === 0
+        ? "Select at least 1 public service to evaluate."
+        : selectedQualityServices.length > 5
+          ? "Maximum 5 services can be compared in a single report."
+          : `Selected ${selectedQualityServices.length} service(s). Ready to request a quote.`
+      : workflowType === "treasury_health"
+        ? !treasuryWalletAddress.trim()
+          ? "Provide a public EVM wallet address to analyze."
+          : !treasuryWalletValid
+            ? "Check the wallet address format. Use a valid 0x EVM address."
+            : "Input valid. Ready to request a quote."
+        : hostedInputPreviewHelper(inputText);
 
   function invalidatePlan() {
     setPlan(null);
@@ -189,71 +212,75 @@ export function HostedAgentRunner({
     sponsoredSignature.current = null;
   }
 
-  function selectWorkflow(value: HostedWorkflowType) {
-    const workflow =
-      curatedHostedWorkflowTemplates.find(
-        (template) => template.value === value,
-      ) ?? curatedHostedWorkflowTemplates[0];
-    setWorkflowType(workflow.value);
-    setTask(workflow.task);
+  function selectWorkflow(nextType: HostedWorkflowType) {
+    const template = getHostedWorkflowTemplate(nextType);
+    setWorkflowType(nextType);
+    setTask(template?.task ?? "");
+    if (nextType !== "github_due_diligence" && nextType !== "agent_trust_report") {
+      setInputText("");
+    }
+    if (nextType !== "agent_trust_report") {
+      setAgentId("");
+      setAgentWallet("");
+      setAgentRepositoryUrl("");
+      setContractAddress("");
+      setServiceEndpoint("");
+    }
+    if (nextType !== "treasury_health") {
+      setTreasuryWalletAddress("");
+    }
     invalidatePlan();
   }
 
   function toggleQualityService(serviceId: string) {
-    let updated: string[];
-    if (selectedQualityServices.includes(serviceId)) {
-      updated = selectedQualityServices.filter((id) => id !== serviceId);
-    } else {
-      if (selectedQualityServices.length >= 5) return;
-      updated = [...selectedQualityServices, serviceId];
-    }
-    setSelectedQualityServices(updated);
-    setInputText(
-      JSON.stringify({ serviceIds: updated, observationWindowDays }, null, 2),
-    );
+    setSelectedQualityServices((prev) => {
+      if (prev.includes(serviceId)) {
+        if (prev.length <= 1) return prev;
+        return prev.filter((id) => id !== serviceId);
+      }
+      if (prev.length >= 5) return prev;
+      return [...prev, serviceId];
+    });
     invalidatePlan();
   }
 
-  function changeObservationWindow(windowDays: 7 | 30 | 90) {
-    setObservationWindowDays(windowDays);
-    setInputText(
-      JSON.stringify(
-        { serviceIds: selectedQualityServices, observationWindowDays: windowDays },
-        null,
-        2,
-      ),
-    );
+  function changeObservationWindow(days: 7 | 30 | 90) {
+    setObservationWindowDays(days);
     invalidatePlan();
   }
 
   useEffect(() => {
-    if (workflowType !== "paid_api_quality") return;
-    let active = true;
-    if (selectedQualityServices.length === 0) {
-      setObservationCountPreview({ totalObservations: 0, observationsByService: {} });
+    if (workflowType !== "paid_api_quality" || selectedQualityServices.length === 0) {
+      setObservationCountPreview(null);
       return;
     }
+
+    let cancelled = false;
     setLoadingObservations(true);
+
+    const serviceParams = selectedQualityServices
+      .map((s) => `services=${encodeURIComponent(s)}`)
+      .join("&");
+
     fetch(
-      `/api/store/observations?services=${encodeURIComponent(selectedQualityServices.join(","))}&windowDays=${observationWindowDays}`,
+      `/api/store/observations?${serviceParams}&windowDays=${observationWindowDays}&countOnly=true`,
     )
-      .then((res) => res.json())
+      .then((res) => (res.ok ? res.json() : null))
       .then((data) => {
-        if (active && typeof data.totalObservations === "number") {
+        if (!cancelled && data && typeof data.totalObservations === "number") {
           setObservationCountPreview({
             totalObservations: data.totalObservations,
             observationsByService: data.observationsByService || {},
           });
         }
       })
-      .catch(() => {
-        if (active) setObservationCountPreview({ totalObservations: 0, observationsByService: {} });
-      })
+      .catch(() => {})
       .finally(() => {
-        if (active) setLoadingObservations(false);
+        if (!cancelled) setLoadingObservations(false);
       });
+
     return () => {
-      active = false;
+      cancelled = true;
     };
   }, [workflowType, selectedQualityServices, observationWindowDays]);
 
@@ -262,35 +289,38 @@ export function HostedAgentRunner({
       workflowType,
       task,
       inputText:
-        workflowType === "paid_api_quality"
-          ? JSON.stringify({ serviceIds: selectedQualityServices, observationWindowDays }, null, 2)
-          : workflowType === "treasury_health"
-            ? JSON.stringify({ walletAddress: treasuryWalletAddress.trim() })
-            : inputText,
-      agentTrustInput:
-        workflowType === "agent_trust_report"
-          ? {
-              agentId: agentId.trim() || undefined,
-              agentWallet: agentWallet.trim() || undefined,
-              repositoryUrl: agentRepositoryUrl.trim() || undefined,
-              contractAddress: contractAddress.trim() || undefined,
-              serviceEndpoint: serviceEndpoint.trim() || undefined,
-            }
-          : undefined,
-      marketSymbol: workflowType === "market_context" ? marketSymbol : null,
+        workflowType === "github_due_diligence"
+          ? (repositoryRef?.canonicalUrl ?? inputText)
+          : workflowType === "market_context"
+            ? marketSymbol
+            : workflowType === "agent_trust_report"
+              ? JSON.stringify({
+                  agentId: agentId.trim() || undefined,
+                  agentWallet: agentWallet.trim() || undefined,
+                  repositoryUrl: agentRepositoryUrl.trim() || undefined,
+                  contractAddress: contractAddress.trim() || undefined,
+                  serviceEndpoint: serviceEndpoint.trim() || undefined,
+                })
+              : workflowType === "paid_api_quality"
+                ? JSON.stringify({
+                    services: selectedQualityServices,
+                    windowDays: observationWindowDays,
+                  })
+                : workflowType === "treasury_health"
+                  ? JSON.stringify({ walletAddress: treasuryWalletAddress.trim() })
+                  : inputText,
       budgetUsdc: budget,
     };
   }
 
   async function preview() {
-    if (!wallet.address) {
-      setError("Connect a wallet before creating the immutable workflow quote.");
-      return null;
-    }
+    if (!isInputValid || !wallet.address) return;
     setPreviewing(true);
     setError(null);
-    idempotencyKey.current ??= crypto.randomUUID();
     try {
+      if (!idempotencyKey.current) {
+        idempotencyKey.current = crypto.randomUUID();
+      }
       const response = await fetch("/api/hosted-agent/quotes", {
         method: "POST",
         headers: {
@@ -387,640 +417,351 @@ export function HostedAgentRunner({
   const humanized = error ? humanizeError(error) : null;
 
   return (
-    <main className="min-h-screen bg-background">
-      <section className="border-b bg-secondary/20">
-        <div className="mx-auto w-full max-w-6xl px-4 py-10 sm:px-6">
-          <Badge className="mb-4">Create verified agent report · Arc Testnet</Badge>
-          <h1 className="text-4xl font-bold tracking-normal sm:text-5xl">New Report</h1>
-          <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-            Select a workflow, provide your input, preview the total price, and generate a verified report.
+    <main className="min-h-screen bg-background text-foreground">
+      {/* Header Banner */}
+      <section className="border-b border-white/5 bg-gradient-to-b from-[#0a0d15] to-[#07090e] py-10 sm:py-14">
+        <div className="mx-auto w-full max-w-6xl px-4 sm:px-6">
+          <Badge className="mb-4 rounded-full border-emerald-500/30 bg-emerald-500/10 px-3.5 py-1 text-xs font-semibold text-emerald-300">
+            <span className="mr-2 inline-block size-2 rounded-full bg-emerald-400 animate-pulse" />
+            Arc Testnet Hosted Runner
+          </Badge>
+          <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl gradient-text">
+            New Verified Report
+          </h1>
+          <p className="mt-3 max-w-2xl text-sm text-muted-foreground sm:text-base leading-relaxed">
+            Select a workflow template, provide your target parameters, obtain an immutable price quote, and launch an Arc-verified execution.
           </p>
+
+          {/* Stepper Wizard Indicator */}
+          <div className="mt-8 flex items-center gap-2 overflow-x-auto pb-2 text-xs font-semibold text-muted-foreground border-t border-white/5 pt-6">
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${!quote ? "bg-primary/15 text-primary border border-primary/30" : "bg-white/5 text-foreground"}`}>
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary text-[11px] text-white">1</span>
+              Configure Input
+            </div>
+            <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/40" />
+            <div className={`flex items-center gap-2 rounded-lg px-3 py-1.5 ${quote ? "bg-primary/15 text-primary border border-primary/30" : "bg-white/5"}`}>
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary/20 text-[11px] text-muted-foreground">2</span>
+              Review Quote
+            </div>
+            <ArrowRight className="size-3.5 shrink-0 text-muted-foreground/40" />
+            <div className="flex items-center gap-2 rounded-lg px-3 py-1.5 bg-white/5">
+              <span className="flex size-5 items-center justify-center rounded-full bg-primary/20 text-[11px] text-muted-foreground">3</span>
+              Generate Report
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-6xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[0.9fr_1.1fr]">
-        <Card className="rounded-lg">
-          <CardHeader><CardTitle>Workflow input</CardTitle></CardHeader>
-          <CardContent className="grid gap-5">
-            <div className="grid gap-2">
-              <Label htmlFor="workflow-type">Workflow</Label>
-              <select
-                id="workflow-type"
-                value={workflowType}
-                onChange={(event) => selectWorkflow(event.target.value as HostedWorkflowType)}
-                className="h-10 rounded-md border bg-background px-3 text-sm"
-              >
-                {curatedHostedWorkflowTemplates.map((workflow) => (
-                  <option key={workflow.value} value={workflow.value}>{workflow.label}</option>
-                ))}
-              </select>
-              <p className="text-xs text-muted-foreground">{getHostedWorkflowTemplate(workflowType)?.description}</p>
-            </div>
-            {workflowType === "agent_trust_report" ? (
-              <div className="grid gap-4">
-                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
-                  <p className="font-semibold">Verify an AI agent before you use, pay, or integrate it.</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Start with any one primary identifier. Add optional public signals for a broader, evidence-backed report.
-                  </p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="agent-trust-agent-id">Agent ID</Label>
-                  <input
-                    id="agent-trust-agent-id"
-                    value={agentId}
-                    onChange={(event) => { setAgentId(event.target.value); invalidatePlan(); }}
-                    placeholder="agt_…"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground">Public Veyra Agent ID. One primary identifier is required.</p>
-                </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="agent-trust-wallet">Agent wallet</Label>
-                  <input
-                    id="agent-trust-wallet"
-                    value={agentWallet}
-                    onChange={(event) => { setAgentWallet(event.target.value); invalidatePlan(); }}
-                    placeholder="0x…"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground">Public EVM address associated with the agent.</p>
-                </div>
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="agent-trust-repository">GitHub repository</Label>
-                    {agentRepositoryRef ? <Badge variant="secondary" className="font-mono text-xs">{agentRepositoryRef.fullName}</Badge> : null}
-                  </div>
-                  <input
-                    id="agent-trust-repository"
-                    value={agentRepositoryUrl}
-                    onChange={(event) => { setAgentRepositoryUrl(event.target.value); invalidatePlan(); }}
-                    placeholder="https://github.com/owner/repository"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  />
-                  <p className="text-xs text-muted-foreground">Public repository only. Enables the full GitHub Due Diligence evidence pipeline.</p>
-                </div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <div className="grid gap-2">
-                    <Label htmlFor="agent-trust-contract">Arc contract <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                    <input
-                      id="agent-trust-contract"
-                      value={contractAddress}
-                      onChange={(event) => { setContractAddress(event.target.value); invalidatePlan(); }}
-                      placeholder="0x…"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono"
-                    />
-                  </div>
-                  <div className="grid gap-2">
-                    <Label htmlFor="agent-trust-endpoint">Service endpoint <span className="font-normal text-muted-foreground">(optional)</span></Label>
-                    <input
-                      id="agent-trust-endpoint"
-                      value={serviceEndpoint}
-                      onChange={(event) => { setServiceEndpoint(event.target.value); invalidatePlan(); }}
-                      placeholder="https://api.example.com/health"
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                    />
-                  </div>
-                </div>
-                <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
-                  <p className="font-semibold">Public evidence only</p>
-                  <p className="mt-1">Do not submit secrets or credentials. Private and local endpoints are blocked, and tenant-private history is never exposed.</p>
-                </div>
-              </div>
-            ) : workflowType === "paid_api_quality" ? (
-              <div className="grid gap-4">
-                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
-                  <p className="font-semibold">Evaluate and compare paid API quality and reliability telemetry.</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Select 1 to 5 public services and choose an observation window. We analyze uptime, latency P50/P95, validity, payment execution, and settlement reliability.
-                  </p>
-                </div>
-
-                <div className="grid gap-2">
-                  <Label htmlFor="observation-window-picker">Observation window</Label>
-                  <div className="flex items-center gap-2" id="observation-window-picker">
-                    {[7, 30, 90].map((days) => (
-                      <Button
-                        key={days}
-                        type="button"
-                        variant={observationWindowDays === days ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => changeObservationWindow(days as 7 | 30 | 90)}
-                      >
-                        {days} Days
-                      </Button>
-                    ))}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Telemetry observations will be aggregated over the last {observationWindowDays} days.
-                  </p>
-                </div>
-
-                <div className="grid gap-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <Label htmlFor="service-search">
-                      Target Services ({selectedQualityServices.length}/5 selected)
-                    </Label>
-                    <Badge
-                      variant={selectedQualityServices.length > 0 ? "secondary" : "outline"}
-                      className="font-mono text-xs"
+      {/* Main Form Section */}
+      <section className="mx-auto grid w-full max-w-6xl gap-8 px-4 py-8 sm:px-6 lg:grid-cols-[1.1fr_0.9fr]">
+        {/* Left Column: Input Form */}
+        <div className="grid gap-6">
+          <Card className="rounded-2xl border border-white/10 bg-[#090c13]/90 backdrop-blur-xl shadow-xl p-1">
+            <CardHeader className="p-6 pb-4">
+              <CardTitle className="text-xl font-bold flex items-center gap-2.5">
+                <Layers className="size-5 text-primary" />
+                Select Workflow Template
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-6 pt-0 grid gap-6">
+              {/* Visual Workflow Selector Cards */}
+              <div className="grid gap-3 sm:grid-cols-2">
+                {curatedHostedWorkflowTemplates.map((workflow) => {
+                  const isSelected = workflowType === workflow.value;
+                  const Icon = workflowIcons[workflow.value as HostedWorkflowType] ?? Bot;
+                  return (
+                    <button
+                      key={workflow.value}
+                      type="button"
+                      onClick={() => selectWorkflow(workflow.value as HostedWorkflowType)}
+                      className={`group flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all duration-200 ${
+                        isSelected
+                          ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(61,126,255,0.2)]"
+                          : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10"
+                      }`}
                     >
-                      {selectedQualityServices.length <= 1
-                        ? "Single Service Review"
-                        : `${selectedQualityServices.length} Services Comparison`}
-                    </Badge>
+                      <div className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${isSelected ? "bg-primary text-white" : "bg-white/10 text-muted-foreground group-hover:text-foreground"}`}>
+                        <Icon className="size-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-1">
+                          <p className={`text-xs font-bold ${isSelected ? "text-primary" : "text-foreground"}`}>
+                            {workflow.label}
+                          </p>
+                          {isSelected && <Check className="size-3.5 text-primary shrink-0" />}
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground/80 leading-relaxed">
+                          {getHostedWorkflowTemplate(workflow.value as HostedWorkflowType)?.description}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Input Form Fields */}
+              <div className="border-t border-white/5 pt-6 grid gap-5">
+                {workflowType === "agent_trust_report" ? (
+                  <div className="grid gap-4">
+                    <div className="rounded-xl border border-purple-500/20 bg-purple-500/5 p-4 text-xs">
+                      <p className="font-semibold text-purple-300">Verify an AI Agent</p>
+                      <p className="mt-1 text-muted-foreground leading-relaxed">
+                        Provide at least one primary identifier (Agent ID, wallet, or GitHub repo).
+                      </p>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label htmlFor="agent-trust-agent-id" className="text-xs font-semibold">Agent ID</Label>
+                      <input
+                        id="agent-trust-agent-id"
+                        value={agentId}
+                        onChange={(event) => { setAgentId(event.target.value); invalidatePlan(); }}
+                        placeholder="agt_…"
+                        className="h-11 w-full rounded-xl border border-white/10 bg-[#06080d] px-3.5 text-xs font-mono placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label htmlFor="agent-trust-wallet" className="text-xs font-semibold">Agent Wallet</Label>
+                      <input
+                        id="agent-trust-wallet"
+                        value={agentWallet}
+                        onChange={(event) => { setAgentWallet(event.target.value); invalidatePlan(); }}
+                        placeholder="0x…"
+                        className="h-11 w-full rounded-xl border border-white/10 bg-[#06080d] px-3.5 text-xs font-mono placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+
+                    <div className="grid gap-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <Label htmlFor="agent-trust-repository" className="text-xs font-semibold">GitHub Repository</Label>
+                        {agentRepositoryRef ? <Badge variant="secondary" className="font-mono text-[10px]">{agentRepositoryRef.fullName}</Badge> : null}
+                      </div>
+                      <input
+                        id="agent-trust-repository"
+                        value={agentRepositoryUrl}
+                        onChange={(event) => { setAgentRepositoryUrl(event.target.value); invalidatePlan(); }}
+                        placeholder="https://github.com/owner/repository"
+                        className="h-11 w-full rounded-xl border border-white/10 bg-[#06080d] px-3.5 text-xs placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
                   </div>
+                ) : workflowType === "paid_api_quality" ? (
+                  <div className="grid gap-4">
+                    <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-xs">
+                      <p className="font-semibold text-cyan-300">Evaluate Paid API Quality</p>
+                      <p className="mt-1 text-muted-foreground leading-relaxed">
+                        Select 1 to 5 public services to compare latency, uptime, and settlement.
+                      </p>
+                    </div>
 
-                  <input
-                    type="text"
-                    id="service-search"
-                    value={serviceSearchQuery}
-                    onChange={(e) => setServiceSearchQuery(e.target.value)}
-                    placeholder="Filter services by name, category, or ID..."
-                    className="h-9 w-full rounded-md border bg-background px-3 text-xs placeholder:text-muted-foreground"
-                  />
-
-                  <div className="grid gap-2 max-h-64 overflow-y-auto pt-1">
-                    {[
-                      { id: "pyth-market-price", name: "Live Market Price", category: "Market Data", priceUsdc: "0.0010 USDC", description: "Pyth Network real-time prices" },
-                      { id: "github-repository-intelligence", name: "GitHub Repository Intelligence", category: "Developer Intelligence", priceUsdc: "0.0015 USDC", description: "GitHub metadata & activity" },
-                      { id: "text-analyzer", name: "Text Analyzer", category: "Compute", priceUsdc: "0.0003 USDC", description: "Paid compute text analysis" },
-                      { id: "premium-quote", name: "Premium Quote", category: "Research", priceUsdc: "0.0010 USDC", description: "Traceable research quote" },
-                      { id: "agent-task", name: "Agent Task", category: "Agent Work", priceUsdc: "0.0300 USDC", description: "Multi-step task execution" },
-                      { id: "github-due-diligence-analysis", name: "GitHub Due Diligence Analysis", category: "Risk Analysis", priceUsdc: "0.0005 USDC", description: "Deterministic due diligence" },
-                    ]
-                      .filter(
-                        (s) =>
-                          !serviceSearchQuery.trim() ||
-                          s.name.toLowerCase().includes(serviceSearchQuery.toLowerCase()) ||
-                          s.category.toLowerCase().includes(serviceSearchQuery.toLowerCase()) ||
-                          s.id.toLowerCase().includes(serviceSearchQuery.toLowerCase()),
-                      )
-                      .map((s) => {
-                        const isSelected = selectedQualityServices.includes(s.id);
-                        const obsCountForService =
-                          observationCountPreview?.observationsByService?.[s.id];
-                        return (
-                          <div
-                            key={s.id}
-                            onClick={() => toggleQualityService(s.id)}
-                            className={`flex items-start justify-between gap-3 rounded-md border p-3 cursor-pointer transition-colors ${
-                              isSelected ? "border-primary bg-primary/5" : "hover:border-primary/50"
-                            }`}
+                    <div className="grid gap-2">
+                      <Label className="text-xs font-semibold">Observation Window</Label>
+                      <div className="flex gap-2">
+                        {[7, 30, 90].map((days) => (
+                          <Button
+                            key={days}
+                            type="button"
+                            variant={observationWindowDays === days ? "default" : "outline"}
+                            size="sm"
+                            className="rounded-lg text-xs"
+                            onClick={() => changeObservationWindow(days as 7 | 30 | 90)}
                           >
-                            <div className="flex items-start gap-2.5">
-                              <input
-                                type="checkbox"
-                                checked={isSelected}
-                                onChange={() => {}}
-                                className="mt-1 size-4 rounded border-primary text-primary focus:ring-primary cursor-pointer"
-                              />
-                              <div>
-                                <div className="flex items-center gap-2">
-                                  <p className="font-semibold text-sm">{s.name}</p>
-                                  <Badge variant="outline" className="text-[10px] py-0">
-                                    {s.category}
-                                  </Badge>
-                                </div>
-                                <p className="mt-0.5 text-xs text-muted-foreground">{s.description}</p>
-                                <code className="mt-1 text-[11px] text-muted-foreground block font-mono">
-                                  id: {s.id}
-                                </code>
-                              </div>
-                            </div>
-                            <div className="text-right shrink-0">
-                              <span className="text-xs font-mono font-medium">{s.priceUsdc}</span>
-                              {typeof obsCountForService === "number" ? (
-                                <p className="mt-1 text-[10px] text-muted-foreground">
-                                  {obsCountForService} obs
-                                </p>
-                              ) : null}
-                            </div>
-                          </div>
-                        );
-                      })}
-                  </div>
-                </div>
-
-                <div className="rounded-md border bg-secondary/20 p-3 text-xs grid gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium text-foreground">Telemetry Observation Preview</span>
-                    {loadingObservations ? (
-                      <span className="text-muted-foreground animate-pulse">Loading count...</span>
-                    ) : (
-                      <Badge variant="secondary" className="font-mono">
-                        {observationCountPreview?.totalObservations ?? 0} total observations
-                      </Badge>
-                    )}
-                  </div>
-                  <p className="text-muted-foreground">
-                    Telemetry aggregated across {selectedQualityServices.length} selected service(s) over {observationWindowDays} days.
-                  </p>
-                  {observationCountPreview && observationCountPreview.totalObservations < 10 ? (
-                    <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-amber-200 mt-1 flex items-start gap-2">
-                      <span className="font-semibold shrink-0 text-amber-400">⚠️ Sample Size Warning:</span>
-                      <div>
-                        Only {observationCountPreview.totalObservations} observation(s) recorded in the selected {observationWindowDays}-day window. A minimum of 10 observations is required for high-confidence scoring.
+                            {days} Days
+                          </Button>
+                        ))}
                       </div>
                     </div>
-                  ) : null}
+
+                    <div className="grid gap-2">
+                      <Label className="text-xs font-semibold">Target Services ({selectedQualityServices.length}/5)</Label>
+                      <div className="grid gap-2 max-h-60 overflow-y-auto pr-1">
+                        {[
+                          { id: "pyth-market-price", name: "Live Market Price", category: "Market Data", priceUsdc: "0.0010 USDC" },
+                          { id: "github-repository-intelligence", name: "GitHub Intelligence", category: "Developer", priceUsdc: "0.0015 USDC" },
+                          { id: "text-analyzer", name: "Text Analyzer", category: "Compute", priceUsdc: "0.0003 USDC" },
+                          { id: "premium-quote", name: "Premium Quote", category: "Research", priceUsdc: "0.0010 USDC" },
+                        ].map((s) => {
+                          const isSelected = selectedQualityServices.includes(s.id);
+                          return (
+                            <div
+                              key={s.id}
+                              onClick={() => toggleQualityService(s.id)}
+                              className={`flex items-center justify-between rounded-xl border p-3 cursor-pointer text-xs transition-colors ${isSelected ? "border-primary bg-primary/10" : "border-white/5 bg-white/5 hover:border-white/20"}`}
+                            >
+                              <div className="flex items-center gap-2.5">
+                                <input type="checkbox" checked={isSelected} readOnly className="rounded border-primary text-primary" />
+                                <span className="font-semibold text-foreground">{s.name}</span>
+                              </div>
+                              <span className="font-mono text-muted-foreground">{s.priceUsdc}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                ) : workflowType === "treasury_health" ? (
+                  <div className="grid gap-4">
+                    <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-xs">
+                      <p className="font-semibold text-amber-300">Stablecoin Treasury Health</p>
+                      <p className="mt-1 text-muted-foreground leading-relaxed">
+                        Analyze on-chain USDC flows, burn rate, counterparty concentration, and runway.
+                      </p>
+                    </div>
+
+                    <div className="grid gap-2">
+                      <Label htmlFor="treasury-wallet" className="text-xs font-semibold">Wallet Address</Label>
+                      <input
+                        id="treasury-wallet"
+                        value={treasuryWalletAddress}
+                        onChange={(event) => { setTreasuryWalletAddress(event.target.value); invalidatePlan(); }}
+                        placeholder="0x…"
+                        className="h-11 w-full rounded-xl border border-white/10 bg-[#06080d] px-3.5 text-xs font-mono placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                      />
+                    </div>
+                  </div>
+                ) : workflowType === "github_due_diligence" ? (
+                  <div className="grid gap-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="github-repo" className="text-xs font-semibold">Repository URL</Label>
+                      {repositoryRef && <Badge variant="secondary" className="font-mono text-[10px]">{repositoryRef.fullName}</Badge>}
+                    </div>
+                    <input
+                      id="github-repo"
+                      type="url"
+                      value={inputText}
+                      onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }}
+                      placeholder="https://github.com/owner/repository"
+                      className="h-11 w-full rounded-xl border border-white/10 bg-[#06080d] px-3.5 text-xs placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                ) : (
+                  <div className="grid gap-2">
+                    <Label htmlFor="input-text" className="text-xs font-semibold">Input Content</Label>
+                    <textarea
+                      id="input-text"
+                      rows={4}
+                      value={inputText}
+                      onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }}
+                      placeholder="Enter details..."
+                      className="w-full rounded-xl border border-white/10 bg-[#06080d] p-3 text-xs placeholder:text-muted-foreground/50 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </div>
+                )}
+
+                {/* Helper Banner */}
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Info className="size-4 shrink-0 text-primary" />
+                  <span>{inputHelper}</span>
                 </div>
+
+                {/* Request Quote Button */}
+                <Button
+                  onClick={preview}
+                  disabled={!isInputValid || previewing || !wallet.address}
+                  className="mt-2 h-12 w-full rounded-xl bg-gradient-to-r from-primary to-blue-600 font-bold text-white shadow-[0_0_20px_rgba(61,126,255,0.3)] transition-all hover:scale-[1.01]"
+                >
+                  {previewing ? (
+                    <>
+                      <LoaderCircle className="size-4 animate-spin mr-2" />
+                      Generating Quote...
+                    </>
+                  ) : (
+                    <>
+                      <Calculator className="size-4 mr-2" />
+                      Calculate Quote & Build Plan
+                    </>
+                  )}
+                </Button>
               </div>
-            ) : workflowType === "treasury_health" ? (
-              <div className="grid gap-4">
-                <div className="rounded-md border border-primary/20 bg-primary/5 p-3 text-sm">
-                  <p className="font-semibold">Evaluate on-chain USDC treasury health.</p>
-                  <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                    Analyze inbound and outbound flows, recurring payments, concentration risk, and runway.
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Right Column: Quote & Payment Panel */}
+        <div className="grid gap-6">
+          <Card className="rounded-2xl border border-white/10 bg-[#090c13]/90 backdrop-blur-xl shadow-xl p-1 lg:sticky lg:top-20">
+            <CardHeader className="p-6 pb-4">
+              <CardTitle className="text-xl font-bold flex items-center justify-between">
+                <span className="flex items-center gap-2.5">
+                  <FileCheck2 className="size-5 text-cyan-400" />
+                  Workflow Quote
+                </span>
+                {quote && (
+                  <Badge variant={quote.paymentMode === "sponsored" ? "secondary" : "default"} className={quote.paymentMode === "sponsored" ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-300" : "bg-primary text-white"}>
+                    {quote.paymentMode === "sponsored" ? "Sponsored (Free)" : "USDC Payment"}
+                  </Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="p-6 pt-0 grid gap-5">
+              {!quote ? (
+                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-white/10 p-8 text-center text-muted-foreground">
+                  <Calculator className="size-10 text-muted-foreground/40 mb-3" />
+                  <p className="text-sm font-semibold text-foreground">No Quote Generated</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Provide required input on the left and click &quot;Calculate Quote&quot; to inspect exact pricing.
                   </p>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="treasury-wallet">Wallet address</Label>
-                  <input
-                    id="treasury-wallet"
-                    value={treasuryWalletAddress}
-                    onChange={(event) => { setTreasuryWalletAddress(event.target.value); invalidatePlan(); }}
-                    placeholder="0x…"
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm font-mono"
-                  />
-                  <p className="text-xs text-muted-foreground">The public EVM wallet address to analyze.</p>
-                </div>
-              </div>
-            ) : workflowType === "github_due_diligence" ? (
-              <div className="grid gap-2">
-                <div className="flex items-center justify-between gap-2">
-                  <Label htmlFor="hosted-input">Repository URL</Label>
-                  {repositoryRef ? (
-                    <Badge variant="secondary" className="font-mono text-xs">
-                      {repositoryRef.fullName}
-                    </Badge>
-                  ) : null}
-                </div>
-                <input
-                  type="text"
-                  id="hosted-input"
-                  aria-describedby="hosted-input-description hosted-input-helper external-llm-processing-notice"
-                  value={inputText}
-                  onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }}
-                  placeholder="https://github.com/owner/repository"
-                  required
-                  className="h-10 w-full rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                />
-                <div id="hosted-input-description" className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                  <span>Public GitHub repositories only.</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const demoRepo = process.env.NEXT_PUBLIC_GITHUB_DEMO_REPOSITORY || "https://github.com/circlefin/developer-controlled-wallets-web-sdk";
-                      setInputText(demoRepo);
-                      invalidatePlan();
-                    }}
-                    className="font-medium text-primary hover:underline cursor-pointer"
-                  >
-                    Try Example
-                  </button>
-                </div>
-                {repositoryRef ? (
-                  <div className="text-xs text-muted-foreground">
-                    Normalized: <code className="font-mono">github.com/{repositoryRef.fullName}</code>
-                  </div>
-                ) : null}
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                <Label htmlFor="hosted-input">Input text</Label>
-                <textarea
-                  id="hosted-input"
-                  aria-describedby="hosted-input-description hosted-input-helper external-llm-processing-notice"
-                  value={inputText}
-                  onChange={(event) => { setInputText(event.target.value); invalidatePlan(); }}
-                  placeholder={getHostedWorkflowTemplate(workflowType)?.placeholder}
-                  minLength={20}
-                  maxLength={5000}
-                  required
-                  className="min-h-36 max-w-full rounded-md border bg-background px-3 py-2 text-sm"
-                />
-                <p id="hosted-input-description" className="text-xs text-muted-foreground">
-                  {inputText.length}/5000 · Required. Credentials and private keys are rejected. Sensitive details are automatically redacted.
-                </p>
-                <div id="external-llm-processing-notice" role="note" className="rounded-md border border-amber-400/30 bg-amber-400/5 p-3 text-xs leading-5 text-amber-100">
-                  <p className="font-semibold">AI processing</p>
-                  <p className="mt-1">Your input may be processed by an external AI provider to prepare the report. Do not submit private keys, passwords, API keys, or other secrets.</p>
-                </div>
-              </div>
-            )}
-            {workflowType === "market_context" ? (
-              <div className="grid gap-2">
-                <Label htmlFor="market-symbol">Market asset</Label>
-                <select
-                  id="market-symbol"
-                  value={marketSymbol}
-                  onChange={(event) => {
-                    setMarketSymbol(event.target.value as PythMarketSymbol);
-                    invalidatePlan();
-                  }}
-                  className="h-10 rounded-md border bg-background px-3 text-sm"
-                >
-                  <option value="BTC/USD">BTC/USD</option>
-                  <option value="ETH/USD">ETH/USD</option>
-                  <option value="SOL/USD">SOL/USD</option>
-                </select>
-                <p className="text-xs text-muted-foreground">
-                  Choose the market asset to include in your report.
-                </p>
-              </div>
-            ) : null}
-            <div className="rounded-md border p-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="font-medium">{HOSTED_REQUESTER_IDENTITY_LABEL} <span className="font-normal text-muted-foreground">(required)</span></p>
-                  <p className="mt-1 text-xs font-semibold">{HOSTED_REQUESTER_NOT_CHARGED_COPY}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{HOSTED_REQUESTER_PAYMENT_COPY}</p>
-                </div>
-                {wallet.address ? (
-                  <Badge variant="secondary" className="font-mono">{shortenHash(wallet.address, 6)}</Badge>
-                ) : (
-                  <Button type="button" variant="outline" onClick={() => void wallet.connect()} disabled={!wallet.providerAvailable || wallet.connecting}>
-                    <Wallet />{wallet.connecting ? "Connecting…" : "Connect Wallet"}
-                  </Button>
-                )}
-              </div>
-            </div>
-            {humanized ? (
-              <div className="rounded-md border border-destructive/30 bg-destructive/5 p-4">
-                <div className="flex flex-col gap-2">
-                  <h4 className="font-semibold text-destructive">{humanized.title}</h4>
-                  <p className="text-sm text-destructive/90">{humanized.message}</p>
-                  {humanized.actionLabel ? (
-                    <div className="mt-1">
-                      {humanized.actionHref ? (
-                        <Button asChild size="sm" variant="outline">
-                          <Link href={humanized.actionHref}>{humanized.actionLabel}</Link>
-                        </Button>
-                      ) : humanized.action === "switch_network" || humanized.actionLabel === "Switch Network" ? (
-                        <Button size="sm" variant="outline" onClick={() => void wallet.switchToArc()}>
-                          {humanized.actionLabel}
-                        </Button>
-                      ) : humanized.action === "switch_wallet" || humanized.actionLabel === "How to Switch Wallet" || humanized.actionLabel === "Switch Wallet" ? (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            alert("Open your wallet extension (MetaMask/Rabby) and select the registered account.");
-                          }}
-                        >
-                          {humanized.actionLabel}
-                        </Button>
-                      ) : humanized.action === "refresh_price" || humanized.actionLabel === "Refresh Price" ? (
-                        <Button size="sm" variant="outline" onClick={() => void preview()}>
-                          {humanized.actionLabel}
-                        </Button>
-                      ) : (
-                        <Button size="sm" variant="outline" onClick={() => setError(null)}>
-                          {humanized.actionLabel}
-                        </Button>
-                      )}
-                    </div>
-                  ) : null}
-                  {humanized.technicalCode ? (
-                    <details className="mt-2 text-xs">
-                      <summary className="cursor-pointer text-muted-foreground">Technical details</summary>
-                      <code>{humanized.technicalCode}</code>
-                    </details>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-            {inputHelper ? <p id="hosted-input-helper" role="status" className="text-sm font-medium text-amber-300">{inputHelper}</p> : <span id="hosted-input-helper" className="sr-only">Input is ready for workflow preview.</span>}
-            <Button
-              size="lg"
-              variant={plan ? "outline" : "default"}
-              onClick={() => void preview()}
-              disabled={previewing || launching || !diagnostic.configured || !diagnostic.checkout.configured || !wallet.address || !isInputValid}
-            >
-              {previewing ? <LoaderCircle className="animate-spin" /> : <Calculator />}
-              {previewing ? "Preparing Price…" : quote ? "Refresh Price" : "See Final Price"}
-            </Button>
-            <div className="pt-1">
-              <Link href="/results" className="text-xs text-muted-foreground hover:text-foreground">
-                View previous reports →
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="grid content-start gap-6">
-          <Card className="rounded-lg">
-            <CardHeader><CardTitle>Report Quote</CardTitle></CardHeader>
-            <CardContent className="grid gap-4">
-              {!quote || !plan ? (
-                <p className="text-sm text-muted-foreground">
-                  Select a workflow and add your input to see the final price.
-                </p>
               ) : (
-                <>
-                  <div>
-                    <h3 className="text-lg font-semibold">{plan.workflowLabel}</h3>
-                  </div>
-                  <div className="rounded-md border bg-secondary/20 p-4">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Includes</p>
-                    <ul className="grid gap-2 text-sm text-muted-foreground">
-                      {workflowType === "agent_trust_report" ? (
-                        <>
-                          {agentId.trim() || agentWallet.trim() ? (
-                            <li className="flex items-center gap-2">
-                              <Check className="size-4 text-emerald-500" />
-                              <span>Veyra registry identity and policy signals</span>
-                            </li>
-                          ) : null}
-                          {agentRepositoryRef ? (
-                            <li className="flex items-center gap-2">
-                              <Check className="size-4 text-emerald-500" />
-                              <span>GitHub repository intelligence and due diligence</span>
-                            </li>
-                          ) : (
-                            <li className="text-xs">GitHub evidence will be marked unavailable because no repository was provided.</li>
-                          )}
-                          {contractAddress.trim() ? (
-                            <li className="flex items-center gap-2">
-                              <Check className="size-4 text-emerald-500" />
-                              <span>Read-only Arc Testnet contract snapshot</span>
-                            </li>
-                          ) : (
-                            <li className="text-xs">Contract transparency will be excluded from scoring.</li>
-                          )}
-                          {serviceEndpoint.trim() ? (
-                            <li className="flex items-center gap-2">
-                              <Check className="size-4 text-emerald-500" />
-                              <span>Protected endpoint availability snapshot</span>
-                            </li>
-                          ) : (
-                            <li className="text-xs">Endpoint availability will be marked not provided.</li>
-                          )}
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Deterministic Trust Score, receipts, and real Arc proof status</span>
-                          </li>
-                        </>
-                      ) : workflowType === "github_due_diligence" ? (
-                        <>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Live repository data</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Activity and contributor analysis</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Documentation and release review</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Shareable report</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Arc verification</span>
-                          </li>
-                        </>
-                      ) : workflowType === "treasury_health" ? (
-                        <>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>On-chain USDC flow analysis</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Runway and burn rate estimation</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Counterparty concentration risk</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Arc verification</span>
-                          </li>
-                        </>
-                      ) : (
-                        <>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Live market data / compute</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Text analysis</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Shareable report</span>
-                          </li>
-                          <li className="flex items-center gap-2">
-                            <Check className="size-4 text-emerald-500" />
-                            <span>Arc verification</span>
-                          </li>
-                        </>
-                      )}
-                    </ul>
+                <div className="grid gap-5">
+                  {/* Pricing Overview Box */}
+                  <div className="rounded-xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-transparent p-4">
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-xs font-semibold text-muted-foreground">Total Quoted Price:</span>
+                      <span className="text-2xl font-extrabold text-foreground tracking-tight">
+                        {quote.pricing.amountDueUsdc} <span className="text-xs text-primary font-bold">USDC</span>
+                      </span>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2.5 text-xs text-muted-foreground">
+                      <span>Services Included:</span>
+                      <span className="font-semibold text-foreground">{quote.plan.selectedServices.length} Allowlisted Services</span>
+                    </div>
                   </div>
 
-                  <div className="rounded-md bg-secondary/30 p-4">
-                    <p className="text-2xl font-bold">
-                      {quote.paymentMode === "sponsored"
-                        ? "Total: 0 USDC · Sponsored run"
-                        : `Total: ${quote.pricing.amountDueUsdc.toFixed(3)} USDC`}
-                    </p>
+                  {/* Service Breakdown */}
+                  <div className="grid gap-2">
+                    <p className="text-xs font-semibold text-muted-foreground">Service Breakdown:</p>
+                    <div className="grid gap-1.5 max-h-40 overflow-y-auto pr-1">
+                      {quote.plan.selectedServices.map((svc) => (
+                        <div key={svc.id} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-xs">
+                          <span className="font-medium text-foreground truncate">{svc.name}</span>
+                          <span className="font-mono text-muted-foreground shrink-0">{svc.priceUsdc} USDC</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
+
+                  {/* Payment Button */}
+                  {humanized && (
+                    <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive flex items-start gap-2">
+                      <AlertCircle className="size-4 shrink-0 mt-0.5" />
+                      <div>
+                        <span className="font-semibold">{humanized.title}: </span>
+                        <span>{humanized.message}</span>
+                      </div>
+                    </div>
+                  )}
 
                   <Button
-                    size="lg"
-                    onClick={() => void launch()}
-                    disabled={launching || previewing || plan.selectedServices.length === 0}
+                    onClick={launch}
+                    disabled={launching}
+                    className="h-12 w-full rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 font-bold text-white shadow-[0_0_20px_rgba(0,208,132,0.3)] transition-all hover:scale-[1.01]"
                   >
                     {launching ? (
-                      <LoaderCircle className="animate-spin" />
-                    ) : quote.paymentMode === "sponsored" ? (
-                      <Bot />
+                      <>
+                        <LoaderCircle className="size-4 animate-spin mr-2" />
+                        Executing & Verifying...
+                      </>
                     ) : (
-                      <CreditCard />
+                      <>
+                        <CreditCard className="size-4 mr-2" />
+                        {quote.paymentMode === "sponsored" ? "Authorize Sponsored Run" : `Pay ${quote.pricing.amountDueUsdc} USDC & Launch`}
+                      </>
                     )}
-                    {launching
-                      ? paymentTransactionHash.current
-                        ? "Confirming existing payment…"
-                        : "Confirming workflow checkout…"
-                      : quote.paymentMode === "sponsored"
-                      ? "Generate Sponsored Report"
-                      : `Pay ${quote.pricing.amountDueUsdc.toFixed(3)} USDC & Generate Report`}
                   </Button>
-
-                  <details className="mt-4 rounded-md border p-3 text-xs">
-                    <summary className="cursor-pointer font-semibold text-muted-foreground hover:text-foreground">
-                      Technical details
-                    </summary>
-                    <div className="mt-3 grid gap-2 text-muted-foreground">
-                      <p className="mb-2 font-medium text-amber-300/80">These details are intended for developers and auditors.</p>
-                      <div>
-                        <span className="font-medium text-foreground">Project Payer:</span>{" "}
-                        <code className="break-all">{diagnostic.payerAddress ?? "Unavailable"}</code>
-                      </div>
-                      <div>
-                        <span className="font-medium text-foreground">Treasury Address:</span>{" "}
-                        <code className="break-all">{quote.treasuryAddress}</code>
-                      </div>
-                      <div>
-                        <span className="font-medium text-foreground">Provider Cost:</span>{" "}
-                        <span className="font-mono">{quote.pricing.estimatedProviderCostUsdc.toFixed(4)} USDC</span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-foreground">Platform Fee:</span>{" "}
-                        <span className="font-mono">{quote.pricing.platformFeeUsdc.toFixed(4)} USDC</span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-foreground">Quote Expiration:</span>{" "}
-                        <span>{new Date(quote.expiresAt).toLocaleString()}</span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-foreground">Input Hash (SHA-256):</span>{" "}
-                        <code className="break-all">{plan.inputSha256}</code>
-                      </div>
-                      {idempotencyKey.current ? (
-                        <div>
-                          <span className="font-medium text-foreground">Idempotency Key:</span>{" "}
-                          <code className="break-all">{idempotencyKey.current}</code>
-                        </div>
-                      ) : null}
-                      <div>
-                        <span className="font-medium text-foreground">Arc Chain ID:</span>{" "}
-                        <span>{quote.chainId}</span>
-                      </div>
-                      <div>
-                        <span className="font-medium text-foreground">Raw Service Methods & Endpoints ({plan.selectedServices.length}):</span>
-                        <ul className="mt-1 grid gap-1 font-mono text-[11px]">
-                          {plan.selectedServices.map((service) => (
-                            <li key={service.slug} className="break-all">
-                              {service.name} ({service.priceUsdc.toFixed(4)} USDC) — {service.method} {service.endpoint}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      {plan.skippedServices.length ? (
-                        <div>
-                          <span className="font-medium text-foreground">Skipped Services:</span>{" "}
-                          <span>{plan.skippedServices.map((s) => s.name).join(", ")}</span>
-                        </div>
-                      ) : null}
-                      {error ? (
-                        <div>
-                          <span className="font-medium text-destructive">Raw Error:</span>{" "}
-                          <code className="break-all text-destructive">{error}</code>
-                        </div>
-                      ) : null}
-                    </div>
-                  </details>
-                </>
+                </div>
               )}
             </CardContent>
           </Card>

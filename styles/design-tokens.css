@@ -1,4 +1,5 @@
 :root {
+  /* ── Base palette ── */
   --color-bg-base: #080a0f;
   --color-bg-panel: #0e1117;
   --color-bg-elevated: #141820;
@@ -14,9 +15,39 @@
   --color-text-muted: #4a5166;
   --color-text-code: #7fdbca;
 
+  /* ── Fonts ── */
   --font-sans: var(--font-dm-sans), system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), "SFMono-Regular", Consolas, monospace;
 
+  /* ── Transitions ── */
   --transition-fast: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
   --transition-base: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+
+  /* ── Glassmorphism ── */
+  --glass-bg: rgba(14, 17, 23, 0.6);
+  --glass-bg-solid: rgba(14, 17, 23, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.06);
+  --glass-border-hover: rgba(255, 255, 255, 0.1);
+  --glass-blur: 16px;
+  --glass-blur-heavy: 24px;
+
+  /* ── Gradient accents per workflow ── */
+  --accent-github: linear-gradient(135deg, #3d7eff, #00d084);
+  --accent-trust: linear-gradient(135deg, #a855f7, #ec4899);
+  --accent-treasury: linear-gradient(135deg, #f59e0b, #ef4444);
+  --accent-quality: linear-gradient(135deg, #06b6d4, #3b82f6);
+  --accent-sentiment: linear-gradient(135deg, #10b981, #14b8a6);
+  --accent-market: linear-gradient(135deg, #f97316, #eab308);
+  --accent-custom: linear-gradient(135deg, #6366f1, #8b5cf6);
+
+  /* ── Shadows & glows ── */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-card-hover: 0 8px 32px rgba(61, 126, 255, 0.12);
+  --shadow-glow-blue: 0 0 24px rgba(61, 126, 255, 0.2);
+  --shadow-glow-cyan: 0 0 24px rgba(0, 208, 132, 0.15);
+  --shadow-glow-sm: 0 0 12px rgba(61, 126, 255, 0.15);
 }

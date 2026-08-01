@@ -44,7 +44,7 @@ async function RunsList() {
   let error: string | null = null;
 
   try {
-    runs = await fetchRecentAgentRuns(50); // Increased limit slightly to ensure enough successful runs if many failed
+    runs = await fetchRecentAgentRuns(50);
   } catch (caught) {
     error = caught instanceof Error ? caught.message : String(caught);
   }
@@ -55,10 +55,8 @@ async function RunsList() {
 function RunsFallback() {
   return (
     <section className="mx-auto grid w-full max-w-6xl gap-4 px-4 py-8 sm:px-6">
-      <Card className="rounded-lg">
-        <CardContent className="p-6 text-sm text-muted-foreground">
-          Loading agent runs...
-        </CardContent>
+      <Card className="rounded-2xl border border-white/10 bg-[#090c13]/80 p-6 text-sm text-muted-foreground backdrop-blur-xl">
+        Loading agent runs...
       </Card>
     </section>
   );
@@ -66,52 +64,42 @@ function RunsFallback() {
 
 export default function RunsPage() {
   return (
-    <main className="min-h-screen bg-background">
-      <section className="border-b bg-secondary/30">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 py-12 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
+    <main className="min-h-screen bg-background text-foreground">
+      <section className="border-b border-white/5 bg-gradient-to-b from-[#0a0d15] via-[#080a0f] to-[#07090e] py-12 sm:py-16">
+        <div className="mx-auto flex w-full max-w-6xl flex-col gap-6 px-4 sm:px-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-4 flex flex-wrap items-center gap-2">
-              <Badge variant="secondary">Buyer Agent</Badge>
-              <Badge variant="outline">Public purchase timeline</Badge>
+              <Badge variant="secondary" className="border-primary/30 bg-primary/10 text-primary text-xs font-semibold">
+                Buyer Agent Activity
+              </Badge>
+              <Badge variant="outline" className="border-white/10 bg-white/5 text-xs text-muted-foreground">
+                Public Purchase Timeline
+              </Badge>
             </div>
-            <h1 className="text-4xl font-bold tracking-normal text-foreground sm:text-5xl">
-              Activity
+            <h1 className="text-3xl font-extrabold tracking-tight sm:text-5xl gradient-text">
+              Activity Archive
             </h1>
-            <p className="mt-4 max-w-3xl leading-7 text-muted-foreground">
-              Inspect how hosted and advanced operator workflows plan, select
-              and purchase services through x402/Gateway, publish receipts,
-              and record post-settlement Arc proof progress.
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground sm:text-base">
+              Inspect how hosted and advanced operator workflows plan, select and purchase services through x402/Gateway, publish receipts, and record post-settlement Arc proofs.
             </p>
           </div>
-          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Button asChild variant="outline">
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="outline" size="sm" className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10">
               <Link href="/demo">
-                <Sparkles />
-                Guided Demo
+                <Sparkles className="size-4 mr-1 text-cyan-400" />
+                Demo
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild size="sm" className="rounded-xl bg-primary hover:bg-blue-600 font-semibold">
               <Link href="/agent-runner">
-                <Bot />
+                <Bot className="size-4 mr-1" />
                 Run Workflow
               </Link>
             </Button>
-            <Button asChild variant="outline">
+            <Button asChild variant="outline" size="sm" className="rounded-xl border-white/10 bg-white/5 hover:bg-white/10">
               <Link href="/results">
-                <Store />
-                Final Reports
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/agents">
-                <BadgeCheck />
-                Agent Passports
-              </Link>
-            </Button>
-            <Button asChild variant="outline">
-              <Link href="/receipts">
-                <ReceiptText />
-                Receipts
+                <Store className="size-4 mr-1" />
+                Reports
               </Link>
             </Button>
           </div>
