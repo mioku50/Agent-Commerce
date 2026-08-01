@@ -5,7 +5,12 @@
 
 import type { ServicePresentationMetadata } from "../services/presentation.ts";
 import { BRAND } from "../brand.ts";
-import { API_QUALITY_FINALIZER_PRICE_USDC, TREASURY_HEALTH_FINALIZER_PRICE_USDC } from "../services/constants.ts";
+import {
+  ARC_CONTRACT_ANALYSIS_FINALIZER_PRICE_USDC,
+  API_QUALITY_FINALIZER_PRICE_USDC,
+  PROJECT_360_FINALIZER_PRICE_USDC,
+  TREASURY_HEALTH_FINALIZER_PRICE_USDC,
+} from "../services/constants.ts";
 
 export const HOSTED_WORKFLOW_TYPES = [
   "github_due_diligence",
@@ -16,6 +21,7 @@ export const HOSTED_WORKFLOW_TYPES = [
   "market_context",
   "custom_task",
   "treasury_health",
+  "project_360",
 ] as const;
 
 export type HostedWorkflowType = (typeof HOSTED_WORKFLOW_TYPES)[number];
@@ -28,6 +34,7 @@ export const CURATED_HOSTED_WORKFLOW_TYPES = [
   "sentiment_tone",
   "builder_update",
   "treasury_health",
+  "project_360",
 ] as const satisfies readonly HostedWorkflowType[];
 
 export type CuratedHostedWorkflowType =
@@ -57,7 +64,9 @@ export type HostedWorkflowTemplate = {
       | "github-due-diligence-analysis"
       | "agent-trust-finalizer"
       | "api-quality-finalizer"
-      | "treasury-health-finalizer";
+      | "treasury-health-finalizer"
+      | "arc-contract-analysis-finalizer"
+      | "project-360-finalizer";
     name: string;
     priceUsdc: number;
     purpose: string;
@@ -183,6 +192,40 @@ const treasuryHealthFinalizerService: HostedWorkflowTemplate["services"][number]
   },
 };
 
+const arcContractAnalysisFinalizerService: HostedWorkflowTemplate["services"][number] = {
+  slug: "arc-contract-analysis-finalizer",
+  name: "Arc Contract Analysis",
+  priceUsdc: Number(ARC_CONTRACT_ANALYSIS_FINALIZER_PRICE_USDC),
+  purpose:
+    "Collects deterministic Arc Testnet bytecode, proxy, owner, admin, and pause transparency signals.",
+  presentation: {
+    providerType: "internal_deterministic",
+    providerName: null,
+    providerStatus: "deterministic",
+    assetSymbol: null,
+    dataFreshness: "Read from Arc Testnet at execution time",
+    billingLabel:
+      `${ARC_CONTRACT_ANALYSIS_FINALIZER_PRICE_USDC} USDC pays ${BRAND.name} for Arc Testnet contract transparency analysis. This is not a security audit.`,
+  },
+};
+
+const project360FinalizerService: HostedWorkflowTemplate["services"][number] = {
+  slug: "project-360-finalizer",
+  name: "Project 360 Canonical Finalization",
+  priceUsdc: Number(PROJECT_360_FINALIZER_PRICE_USDC),
+  purpose:
+    "Binds confirmed sources, module states, child hashes, score, coverage, and the fifteen report sections to one canonical Arc proof.",
+  presentation: {
+    providerType: "internal_deterministic",
+    providerName: null,
+    providerStatus: "deterministic",
+    assetSymbol: null,
+    dataFreshness: null,
+    billingLabel:
+      `${PROJECT_360_FINALIZER_PRICE_USDC} USDC pays ${BRAND.name} for visible aggregate report finalization and Arc proof publication.`,
+  },
+};
+
 const marketServices: HostedWorkflowTemplate["services"] = [
   {
     slug: "text-analyzer",
@@ -215,6 +258,32 @@ const marketServices: HostedWorkflowTemplate["services"] = [
 ];
 
 export const hostedWorkflowTemplates: HostedWorkflowTemplate[] = [
+  {
+    value: "project_360",
+    label: `${BRAND.name} Project 360 Due Diligence`,
+    shortLabel: "Project 360",
+    description:
+      "Discover project sources for free, explicitly choose evidence, then orchestrate only the quoted trust modules into one verified report.",
+    task:
+      "Run the explicitly selected Project 360 modules from the immutable confirmed-source snapshot and produce one aggregate report.",
+    placeholder: "Start with a GitHub repository, wallet, Agent ID, Arc contract, or public HTTPS endpoint",
+    estimatedSpendUsdc: 0.0072,
+    benefitLabel:
+      "Free discovery · Transparent module pricing · Arc verification",
+    services: [
+      ...githubServices,
+      agentTrustFinalizerService,
+      treasuryHealthFinalizerService,
+      apiQualityFinalizerService,
+      arcContractAnalysisFinalizerService,
+      project360FinalizerService,
+    ],
+    expectedResult: [
+      "Free source candidates with file, line, and confidence before payment",
+      "Five-module coverage matrix with missing and failed evidence kept neutral",
+      "One canonical Project 360 report hash and aggregate Arc proof",
+    ],
+  },
   {
     value: "github_due_diligence",
     label: "GitHub Project Due Diligence",

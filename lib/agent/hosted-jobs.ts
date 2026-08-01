@@ -60,6 +60,20 @@ import {
 } from "../reports/api-quality-report.ts";
 import { analyzeTreasuryHealth } from "../providers/treasury-health.ts";
 import { buildTreasuryHealthPublicReport } from "../reports/treasury-health-report.ts";
+import { snapshotArcContract } from "../agent-trust/contract.ts";
+import { snapshotEndpointAvailability } from "../agent-trust/endpoint.ts";
+import {
+  buildArcContractAnalysisReport,
+  buildProject360Report,
+  moduleResultFromReport,
+  project360ModuleInputHash,
+} from "../project-360/report.ts";
+import {
+  PROJECT_360_MODULES,
+  type Project360Module,
+  type Project360ModuleResult,
+  type Project360Report,
+} from "../project-360/types.ts";
 
 export type HostedJobStatus = "queued" | "running" | "completed" | "failed";
 export type HostedJobProgressStage =
@@ -216,11 +230,156 @@ async function claimHostedAgentJob(jobId: string) {
   return data === true;
 }
 
+async function initializeProject360ModuleRuns(
+  jobId: string,
+  projectInput: NonNullable<HostedWorkflowRequest["project360Input"]>,
+) {
+  const rows = PROJECT_360_MODULES.map((module) => ({
+    job_id: jobId,
+    module,
+    status: projectInput.modules.includes(module)
+      ? "pending"
+      : projectInput.sources.some((source) => source.module === module)
+        ? "not_selected"
+        : "not_provided",
+    input_hash: project360ModuleInputHash(projectInput, module),
+    attempt_count: 0,
+    confidence: "insufficient",
+  }));
+  const result = await getHostedClient()
+    .from("project_360_module_runs")
+    .upsert(rows, {
+      onConflict: "job_id,module",
+      ignoreDuplicates: true,
+    });
+  if (result.error) throw new Error("Unable to initialize Project 360 module states.");
+}
+
+async function markProject360ModuleRunning(
+  jobId: string,
+  module: Project360Module,
+) {
+  const result = await getHostedClient()
+    .from("project_360_module_runs")
+    .update({
+      status: "running",
+      started_at: new Date().toISOString(),
+      attempt_count: 1,
+    })
+    .eq("job_id", jobId)
+    .eq("module", module)
+    .eq("status", "pending");
+  if (result.error) throw new Error("Unable to update Project 360 module state.");
+}
+
+function responseReport<T>(value: unknown): T | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const report = record.report ?? value;
+  return report && typeof report === "object" && !Array.isArray(report)
+    ? report as T
+    : null;
+}
+
+function failedProject360ModuleResult(
+  projectInput: NonNullable<HostedWorkflowRequest["project360Input"]>,
+  module: Project360Module,
+): Project360ModuleResult {
+  return {
+    module,
+    status: "failed",
+    inputHash: project360ModuleInputHash(projectInput, module),
+    childReportHash: null,
+    score: null,
+    confidence: "insufficient",
+    errorCode: "provider_failure",
+    report: null,
+  };
+}
+
+function buildProject360ModuleResults(input: {
+  projectInput: NonNullable<HostedWorkflowRequest["project360Input"]>;
+  runtimeServiceOutputs: ReadonlyMap<string, unknown>;
+  agentTrustReport: AgentTrustReport | null;
+}) {
+  return input.projectInput.modules.map((module): Project360ModuleResult => {
+    const inputHash = project360ModuleInputHash(input.projectInput, module);
+    if (module === "github_due_diligence") {
+      const analysis = input.runtimeServiceOutputs.get("github-due-diligence-analysis") as
+        | { assessment?: GitHubDueDiligenceAssessment }
+        | undefined;
+      return analysis?.assessment
+        ? moduleResultFromReport({ module, inputHash, report: analysis.assessment })
+        : failedProject360ModuleResult(input.projectInput, module);
+    }
+    if (module === "agent_trust_report") {
+      const report = responseReport<AgentTrustReport>(
+        input.runtimeServiceOutputs.get("agent-trust-finalizer"),
+      );
+      return report && input.agentTrustReport
+        ? moduleResultFromReport({ module, inputHash, report })
+        : failedProject360ModuleResult(input.projectInput, module);
+    }
+    if (module === "treasury_health") {
+      const report = responseReport<ReturnType<typeof buildTreasuryHealthPublicReport>>(
+        input.runtimeServiceOutputs.get("treasury-health-finalizer"),
+      );
+      return report
+        ? moduleResultFromReport({ module, inputHash, report })
+        : failedProject360ModuleResult(input.projectInput, module);
+    }
+    if (module === "paid_api_quality") {
+      const report = responseReport<ReturnType<typeof buildApiQualityPublicReport>>(
+        input.runtimeServiceOutputs.get("api-quality-finalizer"),
+      );
+      return report
+        ? moduleResultFromReport({ module, inputHash, report })
+        : failedProject360ModuleResult(input.projectInput, module);
+    }
+    const report = responseReport<ReturnType<typeof buildArcContractAnalysisReport>>(
+      input.runtimeServiceOutputs.get("arc-contract-analysis-finalizer"),
+    );
+    return report
+      ? moduleResultFromReport({ module, inputHash, report })
+      : failedProject360ModuleResult(input.projectInput, module);
+  });
+}
+
+async function persistProject360ModuleResults(
+  jobId: string,
+  results: Project360ModuleResult[],
+) {
+  const completedAt = new Date().toISOString();
+  for (const result of results) {
+    const update = await getHostedClient()
+      .from("project_360_module_runs")
+      .update({
+        status: result.status,
+        child_report_hash: result.childReportHash,
+        score: result.score,
+        confidence: result.confidence,
+        result_snapshot: result.report,
+        error_code: result.errorCode,
+        completed_at: completedAt,
+      })
+      .eq("job_id", jobId)
+      .eq("module", result.module)
+      .neq("status", "completed");
+    if (update.error) throw new Error("Unable to persist Project 360 module result.");
+  }
+}
+
 function validatedExecutionRequest(job: HostedAgentJobRow, inputText: string) {
+  const project360Input =
+    job.workflow_type === "project_360"
+      ? (job.planner_snapshot.metadata as Record<string, unknown> | undefined)
+          ?.project360Input
+      : undefined;
   const request = validateHostedWorkflowRequest({
     workflowType: job.workflow_type,
     task: job.task,
     inputText,
+    project360Input,
     marketSymbol: job.planner_snapshot.marketSymbol,
     budgetUsdc: Number(job.budget_usdc),
   });
@@ -244,6 +403,11 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
     const config = getHostedRunnerConfig();
     const plannerSnapshot = job.planner_snapshot;
     let agentTrustReport: AgentTrustReport | null = null;
+    let project360Report: Project360Report | null = null;
+    let project360ModuleResults: Project360ModuleResult[] = [];
+    if (request.workflowType === "project_360" && request.project360Input) {
+      await initializeProject360ModuleRuns(jobId, request.project360Input);
+    }
     const result = await executeBuyerAgent({
       task: plannerSnapshot.effectiveTask ?? job.task,
       requestInputText: request.inputText,
@@ -264,7 +428,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       planningPolicy: {
         allowOfficial: true,
         allowSellerCreated: false,
-        maxPaidCalls: 3,
+        maxPaidCalls: request.workflowType === "project_360" ? 7 : 3,
         maxServicePriceUsd: Number(job.budget_usdc),
       },
       continueOnServiceFailure: true,
@@ -281,9 +445,13 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       }) => {
         if (
           service.slug === "agent-trust-finalizer" &&
-          request.workflowType === "agent_trust_report" &&
+          (request.workflowType === "agent_trust_report" ||
+            request.workflowType === "project_360") &&
           request.agentTrustInput
         ) {
+          if (request.workflowType === "project_360") {
+            await markProject360ModuleRunning(jobId, "agent_trust_report");
+          }
           const githubSnapshot =
             runtimeServiceOutputs.get("github-repository-intelligence") as
               | GitHubRepositorySnapshot
@@ -311,16 +479,29 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
 
         if (
           service.slug === "api-quality-finalizer" &&
-          request.workflowType === "paid_api_quality"
+          (request.workflowType === "paid_api_quality" ||
+            request.workflowType === "project_360")
         ) {
-          const { targetServices, observationWindowDays } = parseApiQualityJobInput(
-            request.inputText,
-            plannerSnapshot,
-          );
-          const observationsByService = await fetchApiQualityObservationsForServices(
-            targetServices,
-            observationWindowDays,
-          );
+          if (request.workflowType === "project_360") {
+            await markProject360ModuleRunning(jobId, "paid_api_quality");
+          }
+          const projectEndpoint = request.project360Input?.sources.find(
+            (source) => source.type === "public_api_endpoint",
+          )?.canonicalValue;
+          const { targetServices, observationWindowDays } = projectEndpoint
+            ? { targetServices: [projectEndpoint], observationWindowDays: 30 }
+            : parseApiQualityJobInput(request.inputText, plannerSnapshot);
+          // A discovered endpoint is not a trusted Veyra service identifier.
+          // Never let an arbitrary URL enter the internal service-observation
+          // lookup; Project 360 evaluates it with the protected availability
+          // probe only. Existing standalone API Quality reports retain their
+          // persisted service observations.
+          const observationsByService = projectEndpoint
+            ? { [projectEndpoint]: [] }
+            : await fetchApiQualityObservationsForServices(
+                targetServices,
+                observationWindowDays,
+              );
           const qualityReport = buildApiQualityPublicReport({
             jobId,
             workflow: "paid_api_quality",
@@ -329,21 +510,75 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
             observationWindowDays,
             observationsByService,
           });
+          if (projectEndpoint) {
+            const endpointAvailability = await snapshotEndpointAvailability(projectEndpoint);
+            Object.assign(qualityReport, {
+              endpointAvailability,
+              availabilityOnly:
+                Object.values(observationsByService).every(
+                  (observations) => observations.length === 0,
+                ),
+            });
+          }
           return { report: qualityReport };
         }
 
         if (
           service.slug === "treasury-health-finalizer" &&
-          request.workflowType === "treasury_health"
+          (request.workflowType === "treasury_health" ||
+            request.workflowType === "project_360")
         ) {
-          const analytics = await analyzeTreasuryHealth(request.inputText);
+          if (request.workflowType === "project_360") {
+            await markProject360ModuleRunning(jobId, "treasury_health");
+          }
+          const targetWallet = request.project360Input?.sources.find(
+            (source) => source.type === "project_wallet",
+          )?.canonicalValue ?? request.inputText;
+          const analytics = await analyzeTreasuryHealth(targetWallet);
           const treasuryReport = buildTreasuryHealthPublicReport({
             reportId: jobId,
-            targetWallet: request.inputText,
+            targetWallet,
             analytics,
             status: "completed",
           });
           return { report: treasuryReport };
+        }
+
+        if (
+          service.slug === "arc-contract-analysis-finalizer" &&
+          request.workflowType === "project_360" &&
+          request.project360Input
+        ) {
+          await markProject360ModuleRunning(jobId, "arc_contract_analysis");
+          const targetContract = request.project360Input.sources.find(
+            (source) => source.type === "arc_contract",
+          )?.canonicalValue;
+          if (!targetContract) throw new Error("project360_contract_source_missing");
+          const contractReport = buildArcContractAnalysisReport({
+            reportId: jobId,
+            targetContract,
+            snapshot: await snapshotArcContract(targetContract),
+          });
+          return { report: contractReport };
+        }
+
+        if (
+          service.slug === "project-360-finalizer" &&
+          request.workflowType === "project_360" &&
+          request.project360Input
+        ) {
+          project360ModuleResults = buildProject360ModuleResults({
+            projectInput: request.project360Input,
+            runtimeServiceOutputs,
+            agentTrustReport,
+          });
+          await persistProject360ModuleResults(jobId, project360ModuleResults);
+          project360Report = buildProject360Report({
+            reportId: jobId,
+            projectInput: request.project360Input,
+            moduleResults: project360ModuleResults,
+          });
+          return { report: project360Report };
         }
 
         return undefined;
@@ -363,10 +598,15 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
     });
 
     let proofTransactionHashes: string[] = [];
+    let proofRows: Array<{
+      response_hash: string | null;
+      onchain_tx_hash: string | null;
+      onchain_status: string | null;
+    }> = [];
     if (result.paymentEventIds.length > 0) {
       const { data, error } = await getHostedClient()
         .from("payment_events")
-        .select("onchain_tx_hash")
+        .select("response_hash,onchain_tx_hash,onchain_status")
         .in("id", result.paymentEventIds)
         .eq("onchain_status", "verified");
       if (error) {
@@ -374,10 +614,30 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
           `[hosted-agent] job=${jobId} proof metadata will reconcile on read: ${safeHostedError(error)}`,
         );
       } else {
-        proofTransactionHashes = (data ?? [])
+        proofRows = (data ?? []) as typeof proofRows;
+        proofTransactionHashes = proofRows
           .map((row) => (row as { onchain_tx_hash: string | null }).onchain_tx_hash)
           .filter((value): value is string => Boolean(value));
       }
+    }
+    const completedProject360Report = project360Report as Project360Report | null;
+    if (completedProject360Report) {
+      const aggregateProof = proofRows.find(
+        (row) =>
+          row.response_hash?.toLowerCase() ===
+          completedProject360Report.verification.reportHash.toLowerCase(),
+      );
+      project360Report = {
+        ...completedProject360Report,
+        verification: {
+          ...completedProject360Report.verification,
+          status: aggregateProof?.onchain_status === "verified"
+            ? "verified"
+            : aggregateProof?.onchain_status === "failed"
+              ? "verification_failed"
+              : "verification_pending",
+        },
+      };
     }
     if (
       request.workflowType === "agent_trust_report" &&
@@ -414,6 +674,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
       executionResult: result,
       explorerUrl: configuredExplorerUrl(),
       agentTrustReport,
+      project360Report,
     });
     const structuredResult = await synthesizeHostedFinalReport({
       request,
@@ -697,6 +958,43 @@ export async function getHostedAgentJobView(jobId: string) {
         workflowData: {
           ...trustData,
           report: reconciledReport,
+        },
+      } as HostedFinalReport;
+      shouldPersistReconciliation = true;
+    }
+  }
+
+  const project360Data = structuredResult?.workflowData as
+    | { kind?: string; report?: Project360Report }
+    | null
+    | undefined;
+  if (
+    job.status === "completed" &&
+    project360Data?.kind === "project_360_report" &&
+    project360Data.report
+  ) {
+    const aggregateProof = proofs.find(
+      (proof) =>
+        proof.responseHash?.toLowerCase() ===
+        project360Data.report!.verification.reportHash.toLowerCase(),
+    );
+    const status = aggregateProof?.status === "verified"
+      ? "verified"
+      : aggregateProof?.status === "failed"
+        ? "verification_failed"
+        : "verification_pending";
+    if (status !== project360Data.report.verification.status) {
+      structuredResult = {
+        ...structuredResult,
+        workflowData: {
+          ...project360Data,
+          report: {
+            ...project360Data.report,
+            verification: {
+              ...project360Data.report.verification,
+              status,
+            },
+          },
         },
       } as HostedFinalReport;
       shouldPersistReconciliation = true;

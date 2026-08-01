@@ -259,6 +259,14 @@ export async function POST(request: NextRequest) {
     (body.workflowType as string) ||
     "github_due_diligence";
 
+  if (workflow === "project_360") {
+    return createMachineErrorResponse(
+      "invalid_request",
+      "Use the free /api/agent/v1/project-360/discoveries endpoint, then create the quote from its confirmed candidate IDs.",
+      400,
+    );
+  }
+
   if (isSellerWorkflowType(workflow)) {
     try {
       return await createMachineSellerQuote({

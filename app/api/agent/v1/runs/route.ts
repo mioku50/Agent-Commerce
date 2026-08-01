@@ -412,7 +412,11 @@ export async function POST(request: NextRequest) {
   const serverEnforcedBody = {
     workflowType: storedQuote.workflow_type,
     inputText:
-      storedQuote.workflow_type === "agent_trust_report"
+      storedQuote.workflow_type === "project_360"
+        ? JSON.stringify(
+            storedQuote.planner_snapshot?.metadata?.project360Input ?? {},
+          )
+        : storedQuote.workflow_type === "agent_trust_report"
         ? JSON.stringify(
             storedQuote.planner_snapshot?.metadata?.agentTrustInput ?? {},
           )
@@ -422,6 +426,10 @@ export async function POST(request: NextRequest) {
     agentTrustInput:
       storedQuote.workflow_type === "agent_trust_report"
         ? storedQuote.planner_snapshot?.metadata?.agentTrustInput
+        : undefined,
+    project360Input:
+      storedQuote.workflow_type === "project_360"
+        ? storedQuote.planner_snapshot?.metadata?.project360Input
         : undefined,
     marketSymbol: storedQuote.planner_snapshot?.marketSymbol,
     task: storedQuote.task,
@@ -441,19 +449,20 @@ export async function POST(request: NextRequest) {
 
   const runnerConfig = getHostedRunnerConfig();
   const inputSha256 = hashHostedWorkflowInput(workflowRequest.inputText);
-  const idempotencyHash = hostedIdempotencyHash(
-    runnerConfig.rateLimitSecret,
-    idempotencyKey,
-  );
-  const requestHash = hostedIdempotencyRequestHash({
-    secret: runnerConfig.rateLimitSecret,
-    workflowType: workflowRequest.workflowType,
-    inputSha256,
-    task: workflowRequest.task,
-    marketSymbol: workflowRequest.marketSymbol,
-    repository: workflowRequest.repository,
-    budgetUsdc: workflowRequest.budgetUsdc,
-  });
+  const idempotencyHash = storedQuote.workflow_type === "project_360"
+    ? storedQuote.idempotency_hash
+    : hostedIdempotencyHash(runnerConfig.rateLimitSecret, idempotencyKey);
+  const requestHash = storedQuote.workflow_type === "project_360"
+    ? storedQuote.request_hash
+    : hostedIdempotencyRequestHash({
+        secret: runnerConfig.rateLimitSecret,
+        workflowType: workflowRequest.workflowType,
+        inputSha256,
+        task: workflowRequest.task,
+        marketSymbol: workflowRequest.marketSymbol,
+        repository: workflowRequest.repository,
+        budgetUsdc: workflowRequest.budgetUsdc,
+      });
 
   // Atomically reserve immediately before checkout mutates quote/job state.
   const reservation = await resolveMachineIdempotency(

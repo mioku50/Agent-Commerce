@@ -192,6 +192,135 @@ async function githubFetchReadmeExcerpt(
   }
 }
 
+export type GitHubDiscoveryFile = {
+  path: string;
+  content: string;
+  sizeBytes: number;
+};
+
+function discoveryPathPriority(path: string) {
+  const normalized = path.toLowerCase();
+  const fileName = normalized.split("/").at(-1) ?? normalized;
+  if (/^readme(?:\.[a-z0-9]+)?$/.test(fileName)) return 0;
+  if (
+    [
+      "package.json", "pyproject.toml", "requirements.txt", "cargo.toml",
+      "go.mod", "foundry.toml", "hardhat.config.ts", "hardhat.config.js",
+      "vercel.json", "docker-compose.yml", "docker-compose.yaml",
+    ].includes(fileName)
+  ) return 1;
+  if (
+    /(?:^|\/)(?:config|configs|deploy|deployment|docs?|\.github)(?:\/|$)/.test(normalized) ||
+    /\.(?:ya?ml|json|toml|ini|config|md|mdx)$/.test(normalized)
+  ) return 2;
+  if (
+    /(?:^|\/)(?:src|app|lib|contracts?|packages?|services?)(?:\/|$)/.test(normalized) &&
+    /\.(?:ts|tsx|js|jsx|mts|mjs|py|go|rs|sol)$/.test(normalized)
+  ) return 3;
+  return 9;
+}
+
+/**
+ * Bounded public-file reader used by the free Project 360 discovery plane.
+ * It only calls fixed GitHub API hosts through githubFetch and never executes
+ * repository content.
+ */
+export async function fetchGitHubDiscoveryFiles(
+  repository: GitHubRepositoryRef,
+  limits: {
+    maxFiles?: number;
+    maxFileBytes?: number;
+    maxTotalBytes?: number;
+  } = {},
+): Promise<GitHubDiscoveryFile[]> {
+  const deadline = Date.now() + 14_000;
+  const remainingTimeout = (capMs: number) =>
+    Math.max(250, Math.min(capMs, deadline - Date.now()));
+  const maxFiles = Math.max(1, Math.min(limits.maxFiles ?? 40, 40));
+  const maxFileBytes = Math.max(1_024, Math.min(limits.maxFileBytes ?? 64 * 1_024, 64 * 1_024));
+  const maxTotalBytes = Math.max(maxFileBytes, Math.min(limits.maxTotalBytes ?? 512 * 1_024, 512 * 1_024));
+  const metadata = await githubFetch<{ default_branch?: string }>(
+    `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}`,
+    { timeoutMs: remainingTimeout(4_000) },
+  );
+  const branch = metadata.default_branch?.trim() || "main";
+  const tree = await githubFetch<{
+    tree?: Array<{ path?: string; type?: string; size?: number }>;
+  }>(
+    `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/git/trees/${encodeURIComponent(branch)}?recursive=1`,
+    { timeoutMs: remainingTimeout(5_000) },
+  );
+  const selected = (tree.tree ?? [])
+    .filter((item) =>
+      item.type === "blob" &&
+      typeof item.path === "string" &&
+      item.path.length <= 240 &&
+      item.path.split("/").length <= 8 &&
+      typeof item.size === "number" &&
+      item.size > 0 &&
+      item.size <= maxFileBytes &&
+      discoveryPathPriority(item.path) < 9,
+    )
+    .sort((left, right) => {
+      const priority = discoveryPathPriority(left.path!) - discoveryPathPriority(right.path!);
+      return priority || left.path!.localeCompare(right.path!);
+    })
+    .slice(0, maxFiles);
+
+  const fetched: Array<GitHubDiscoveryFile | null> = Array(selected.length).fill(null);
+  let nextIndex = 0;
+  let firstNonMissingError: unknown = null;
+  const worker = async () => {
+    while (Date.now() < deadline) {
+      const index = nextIndex;
+      nextIndex += 1;
+      if (index >= selected.length) return;
+      const item = selected[index];
+      const path = item.path!;
+      try {
+        const data = await githubFetch<{
+          content?: string;
+          encoding?: string;
+          size?: number;
+        }>(
+          `/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.name)}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(branch)}`,
+          { timeoutMs: remainingTimeout(3_000) },
+        );
+        if (!data.content) continue;
+        const raw = data.encoding === "base64"
+          ? Buffer.from(data.content.replace(/\s/g, ""), "base64").toString("utf8")
+          : String(data.content);
+        const content = raw.slice(0, maxFileBytes);
+        const sizeBytes = Buffer.byteLength(content, "utf8");
+        if (sizeBytes > 0) fetched[index] = { path, content, sizeBytes };
+      } catch (error) {
+        if (error instanceof ProviderError && error.httpStatus === 404) continue;
+        firstNonMissingError ??= error;
+      }
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(8, selected.length) }, () => worker()),
+  );
+
+  const files: GitHubDiscoveryFile[] = [];
+  let totalBytes = 0;
+  for (const file of fetched) {
+    if (!file) continue;
+    if (totalBytes >= maxTotalBytes) break;
+    const availableBytes = maxTotalBytes - totalBytes;
+    const content = file.sizeBytes <= availableBytes
+      ? file.content
+      : Buffer.from(file.content, "utf8").subarray(0, availableBytes).toString("utf8");
+    const sizeBytes = Buffer.byteLength(content, "utf8");
+    if (sizeBytes === 0) continue;
+    files.push({ path: file.path, content, sizeBytes });
+    totalBytes += sizeBytes;
+  }
+  if (files.length === 0 && firstNonMissingError) throw firstNonMissingError;
+  return files;
+}
+
 function parseRequirementsTxt(content: string): { prod: string[]; dev: string[] } {
   const prod = new Set<string>();
   const dev = new Set<string>();

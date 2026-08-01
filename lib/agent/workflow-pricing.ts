@@ -3,7 +3,7 @@ import type { HostedPlannerSnapshot } from "./hosted-workflows.ts";
 import { ARC_TESTNET_CHAIN_ID } from "../wallet/arc.ts";
 
 export const HOSTED_WORKFLOW_DEFAULT_PLATFORM_FEE_USDC = 0.0007;
-export const HOSTED_WORKFLOW_DEFAULT_MAX_PRICE_USDC = 0.005;
+export const HOSTED_WORKFLOW_DEFAULT_MAX_PRICE_USDC = 0.01;
 export const HOSTED_WORKFLOW_DEFAULT_SPONSORED_QUOTA = 1;
 export const HOSTED_WORKFLOW_DEFAULT_QUOTE_EXPIRY_SECONDS = 600;
 

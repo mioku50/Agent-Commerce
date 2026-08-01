@@ -65,7 +65,12 @@ const workflowIcons: Record<HostedWorkflowType, typeof Bot> = {
   sentiment_tone: MessageSquareText,
   builder_update: Rocket,
   custom_task: Bot,
+  project_360: Layers,
 };
+
+const runnerWorkflowTemplates = curatedHostedWorkflowTemplates.filter(
+  (workflow) => workflow.value !== "project_360",
+);
 
 export function HostedAgentRunner({
   diagnostic,
@@ -83,9 +88,9 @@ export function HostedAgentRunner({
   const router = useRouter();
   const wallet = useArcWallet();
   const initial =
-    curatedHostedWorkflowTemplates.find(
+    runnerWorkflowTemplates.find(
       (workflow) => workflow.value === initialWorkflowType,
-    ) ?? curatedHostedWorkflowTemplates[0];
+    ) ?? runnerWorkflowTemplates[0];
   const [workflowType, setWorkflowType] = useState<HostedWorkflowType>(initial.value);
   const [task, setTask] = useState(initial.task);
   const [inputText, setInputText] = useState(initialRepository ?? "");
@@ -174,8 +179,12 @@ export function HostedAgentRunner({
             ? Boolean(treasuryWalletAddress.trim()) && treasuryWalletValid
             : inputText.trim().length >= 20;
 
-  const inputHelper = workflowType === "agent_trust_report"
-    ? !hasAgentTrustPrimaryInput
+  const inputHelper = workflowType === "github_due_diligence"
+    ? repositoryRef
+      ? "Repository valid. Ready to request a quote."
+      : "Enter a public GitHub repository URL (e.g. github.com/owner/repository)."
+    : workflowType === "agent_trust_report"
+      ? !hasAgentTrustPrimaryInput
       ? "Provide at least one Agent ID, agent wallet, or public GitHub repository."
       : !agentIdValid
         ? "Check the public Agent ID. Use the agt_ identifier shown in Veyra."
@@ -188,7 +197,7 @@ export function HostedAgentRunner({
               : !agentRepositoryUrl.trim() || Boolean(agentRepositoryRef)
                 ? "Input valid. Ready to request a quote."
                 : "Check the optional GitHub URL format. Use https://github.com/owner/repository."
-    : workflowType === "paid_api_quality"
+      : workflowType === "paid_api_quality"
       ? selectedQualityServices.length === 0
         ? "Select at least 1 public service to evaluate."
         : selectedQualityServices.length > 5
@@ -466,13 +475,14 @@ export function HostedAgentRunner({
             <CardContent className="p-6 pt-0 grid gap-6">
               {/* Visual Workflow Selector Cards */}
               <div className="grid gap-3 sm:grid-cols-2">
-                {curatedHostedWorkflowTemplates.map((workflow) => {
+                {runnerWorkflowTemplates.map((workflow) => {
                   const isSelected = workflowType === workflow.value;
                   const Icon = workflowIcons[workflow.value as HostedWorkflowType] ?? Bot;
                   return (
                     <button
                       key={workflow.value}
                       type="button"
+                      aria-pressed={isSelected}
                       onClick={() => selectWorkflow(workflow.value as HostedWorkflowType)}
                       className={`group flex min-h-[44px] items-start gap-3.5 rounded-xl border p-4 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                         isSelected

@@ -23,6 +23,7 @@ const workflowAliases: Record<string, HostedWorkflowType> = {
   market_context: "market_context",
   custom: "custom_task",
   custom_task: "custom_task",
+  project_360: "project_360",
 };
 
 const workflowQueryValues: Record<HostedWorkflowType, string> = {
@@ -34,6 +35,7 @@ const workflowQueryValues: Record<HostedWorkflowType, string> = {
   builder_update: "builder_update",
   market_context: "market_context",
   custom_task: "custom",
+  project_360: "project_360",
 };
 
 function firstString(value: unknown) {
@@ -74,6 +76,7 @@ export function hostedWorkflowHref(
   workflowType: HostedWorkflowType,
   marketSymbol: PythMarketSymbol = DEFAULT_MARKET_SYMBOL,
 ) {
+  if (workflowType === "project_360") return "/project-360";
   const safeWorkflow = HOSTED_WORKFLOW_TYPES.includes(workflowType)
     ? workflowType
     : DEFAULT_HOSTED_WORKFLOW;

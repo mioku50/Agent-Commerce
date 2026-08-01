@@ -34,6 +34,17 @@ export async function POST(request: NextRequest) {
         { status: 400 },
       );
     }
+    if (body.workflowType === "project_360") {
+      return NextResponse.json(
+        {
+          error:
+            "Project 360 quotes require a completed free discovery and an explicit source selection.",
+          reason: "project_360_discovery_required",
+          discoveryUrl: "/project-360",
+        },
+        { status: 400, headers: { "Cache-Control": "no-store" } },
+      );
+    }
     const template = getHostedWorkflowTemplate(body.workflowType);
     if (!template) {
       return NextResponse.json(

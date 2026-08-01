@@ -60,7 +60,29 @@ export type MachineErrorCode =
   | "api_quality_no_observations"
   | "api_quality_observation_store_unavailable"
   | "api_quality_comparison_incompatible"
-  | "api_quality_probe_budget_exceeded";
+  | "api_quality_probe_budget_exceeded"
+  | "project_source_required"
+  | "project_source_invalid"
+  | "project_source_type_invalid"
+  | "project_source_secret_blocked"
+  | "project_input_invalid"
+  | "project_sources_invalid"
+  | "project_modules_invalid"
+  | "project_module_source_missing"
+  | "project_360_unavailable"
+  | "project_360_services_unavailable"
+  | "discovery_not_found"
+  | "discovery_not_ready"
+  | "discovery_revision_conflict"
+  | "discovery_integrity_failed"
+  | "discovery_failed"
+  | "github_discovery_unavailable"
+  | "candidate_not_selectable"
+  | "duplicate_module_source"
+  | "source_module_not_selected"
+  | "project_quote_binding_failed"
+  | "project_quote_integrity_failed"
+  | "project_selection_integrity_failed";
 
 export interface MachineErrorResponseBody {
   error: {

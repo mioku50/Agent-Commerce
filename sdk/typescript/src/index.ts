@@ -86,6 +86,12 @@ export type WorkflowTemplate = {
   task: string;
   estimatedUsdc: number;
   inputSchema: Record<string, unknown>;
+  quoteFlow?: {
+    discovery?: string;
+    quote: string;
+    execution: string;
+    candidateSelectionRequired: boolean;
+  };
   arc: {
     chainId: 5_042_002;
     network: "arc-testnet";
@@ -98,6 +104,129 @@ export type WorkflowQuoteRequest = {
   workflow: string;
   repository?: string;
   input?: Record<string, unknown>;
+};
+
+export type Project360SourceType =
+  | "github_repository"
+  | "project_wallet"
+  | "agent_id"
+  | "arc_contract"
+  | "public_api_endpoint";
+
+export type Project360Module =
+  | "github_due_diligence"
+  | "agent_trust_report"
+  | "treasury_health"
+  | "paid_api_quality"
+  | "arc_contract_analysis";
+
+export type Project360Candidate = {
+  id: string;
+  type: Project360SourceType;
+  module: Project360Module;
+  value: string;
+  provenance: {
+    origin: "primary" | "github_file" | "public_record";
+    repository: string | null;
+    file: string | null;
+    lineStart: number | null;
+    lineEnd: number | null;
+    excerpt: string | null;
+  };
+  confidence: "high" | "medium" | "low";
+  confidenceScore: number;
+  reason: string;
+  validationStatus: "valid" | "unsupported" | "blocked";
+  /** Discovery is advisory: candidates are always returned unchecked. */
+  included: false;
+};
+
+export type Project360Discovery = {
+  id: string;
+  status: "queued" | "running" | "ready" | "failed" | "expired";
+  revision: number;
+  free: true;
+  paymentRequired: false;
+  primary: { type: Project360SourceType; value: string };
+  candidatesHash: string | null;
+  candidates: Project360Candidate[];
+  warnings: string[];
+  errorCode: string | null;
+  expiresAt: string;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+export type Project360QuoteSelection = {
+  discoveryId: string;
+  discoveryRevision: number;
+  discoverySnapshotHash: string;
+  selectionHash: string;
+  expectedCoverage: { selected: number; total: 5 };
+  expectedCoverageLabel: string;
+  warnings: string[];
+  confirmedSources: Array<{
+    candidateId: string;
+    type: Project360SourceType;
+    module: Project360Module;
+    canonicalValue: string;
+    valueHash: string;
+    origin: "primary" | "github_file" | "public_record";
+    confidence: "high" | "medium" | "low";
+  }>;
+  selectedModules: Project360Module[];
+  lineItems: Array<{
+    module: Project360Module | "project_360_finalization";
+    label: string;
+    serviceSlugs: string[];
+    priceUsdc: number;
+    sharedEvidence: boolean;
+  }>;
+  pricing: {
+    moduleSubtotalUsdc: number;
+    platformFeeUsdc: number;
+    totalUsdc: number;
+    amountDueUsdc: number;
+  };
+  canonicalInput: string;
+};
+
+export type Project360Quote = WorkflowQuote & {
+  workflow: "project_360";
+  project360: Project360QuoteSelection;
+};
+
+export type Project360Report = MachineReport & {
+  schema: "veyra.project360.v1";
+  workflow: "project_360";
+  workflowType: "project_360";
+  coverage: {
+    expected: number;
+    completed: number;
+    total: 5;
+    status: "complete" | "partial" | "limited" | "failed";
+    label: string;
+  };
+  score: {
+    formulaVersion: "project360-score-v1";
+    value: number | null;
+    confidencePercent: number;
+    confidence: "high" | "medium" | "low" | "insufficient";
+    breakdown: Array<{
+      module: Project360Module;
+      score: number;
+      weight: number;
+      confidence: "high" | "medium" | "low" | "insufficient";
+    }>;
+  };
+  sections: Array<{
+    number: number;
+    id: string;
+    title: string;
+    status: "available" | "not_provided" | "not_analyzed" | "failed" | "limited";
+    summary: string;
+    data: unknown;
+  }>;
 };
 
 export type AgentTrustReportInput = (
@@ -658,6 +787,57 @@ export class AgentCommerceClient {
     return response.workflows;
   }
 
+  /**
+   * Runs the free, non-transactional Project 360 discovery phase. Returned
+   * candidates are advisory and must be explicitly selected before quoting.
+   */
+  async discoverProject360(
+    input: { type: Project360SourceType; value: string },
+    options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+  ) {
+    return this.request<{ discovery: Project360Discovery; created: boolean }>(
+      "/api/agent/v1/project-360/discoveries",
+      { method: "POST", body: JSON.stringify(input) },
+      {
+        idempotencyKey:
+          options.idempotencyKey ?? createIdempotencyKey("project360-discovery"),
+        signal: options.signal,
+      },
+    );
+  }
+
+  async getProject360Discovery(
+    discoveryId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<{ discovery: Project360Discovery }>(
+      `/api/agent/v1/project-360/discoveries/${encodeURIComponent(discoveryId)}`,
+      { method: "GET" },
+      options,
+    );
+  }
+
+  /** Creates an immutable quote from an explicit discovery selection. */
+  async createProject360Quote(
+    discoveryId: string,
+    input: {
+      revision: number;
+      selectedCandidateIds: string[];
+      modules: Project360Module[];
+    },
+    options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+  ) {
+    return this.request<Project360Quote>(
+      `/api/agent/v1/project-360/discoveries/${encodeURIComponent(discoveryId)}/quote`,
+      { method: "POST", body: JSON.stringify(input) },
+      {
+        idempotencyKey:
+          options.idempotencyKey ?? createIdempotencyKey("project360-quote"),
+        signal: options.signal,
+      },
+    );
+  }
+
   async listWatchlists(options: { signal?: AbortSignal } = {}) {
     const response = await this.request<{ watchlists: TrustWatchlist[] }>(
       "/api/agent/v1/watchlists",
@@ -1004,7 +1184,9 @@ export class AgentCommerceClient {
     });
   }
 
-  async getReport<TReport extends MachineReport | AgentTrustReport = MachineReport>(
+  async getReport<
+    TReport extends MachineReport | AgentTrustReport | Project360Report = MachineReport,
+  >(
     reportId: string,
     options: { signal?: AbortSignal } = {},
   ) {

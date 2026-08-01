@@ -8,6 +8,7 @@ import { getAddress, isAddress, type Address, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 
 export const HOSTED_AGENT_MAX_BUDGET_USDC = 0.005;
+export const PROJECT_360_MAX_BUDGET_USDC = 0.01;
 export const HOSTED_AGENT_MIN_BUDGET_USDC = 0.001;
 export const HOSTED_AGENT_MAX_TASK_LENGTH = 500;
 export const HOSTED_AGENT_MIN_TASK_LENGTH = 10;
@@ -31,6 +32,21 @@ export const SAFE_HOSTED_SERVICES = [
   {
     slug: "api-quality-finalizer",
     endpoint: "/api/provider/api-quality-finalizer",
+    method: "POST" as const,
+  },
+  {
+    slug: "treasury-health-finalizer",
+    endpoint: "/api/provider/treasury-health-finalizer",
+    method: "POST" as const,
+  },
+  {
+    slug: "arc-contract-analysis-finalizer",
+    endpoint: "/api/provider/arc-contract-analysis-finalizer",
+    method: "POST" as const,
+  },
+  {
+    slug: "project-360-finalizer",
+    endpoint: "/api/provider/project-360-finalizer",
     method: "POST" as const,
   },
   {
@@ -103,7 +119,7 @@ export function hostedServiceAllowlist() {
   const requested = new Set(
     (
       process.env.HOSTED_AGENT_ALLOWED_SERVICE_SLUGS ??
-      "premium-quote,text-analyzer,agent-trust-finalizer,api-quality-finalizer,pyth-market-price,github-repository-intelligence,github-due-diligence-analysis"
+      "premium-quote,text-analyzer,agent-trust-finalizer,api-quality-finalizer,treasury-health-finalizer,arc-contract-analysis-finalizer,project-360-finalizer,pyth-market-price,github-repository-intelligence,github-due-diligence-analysis"
     )
       .split(",")
       .map((value) => value.trim())
@@ -159,6 +175,10 @@ export function getHostedRunnerDiagnostic() {
       maxBudgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
       supportedWorkflows: [
         "github_due_diligence",
+        "agent_trust_report",
+        "paid_api_quality",
+        "treasury_health",
+        "project_360",
         "sentiment_tone",
         "builder_update",
         "market_context",
@@ -182,6 +202,10 @@ export function getHostedRunnerDiagnostic() {
       maxBudgetUsdc: HOSTED_AGENT_MAX_BUDGET_USDC,
       supportedWorkflows: [
         "github_due_diligence",
+        "agent_trust_report",
+        "paid_api_quality",
+        "treasury_health",
+        "project_360",
         "sentiment_tone",
         "builder_update",
         "market_context",
@@ -210,16 +234,19 @@ export function validateHostedTask(value: unknown) {
   return task;
 }
 
-export function validateHostedBudget(value: unknown) {
+export function validateHostedBudget(
+  value: unknown,
+  maxBudgetUsdc = HOSTED_AGENT_MAX_BUDGET_USDC,
+) {
   const budget = typeof value === "string" ? Number(value) : value;
   if (
     typeof budget !== "number" ||
     !Number.isFinite(budget) ||
     budget < HOSTED_AGENT_MIN_BUDGET_USDC ||
-    budget > HOSTED_AGENT_MAX_BUDGET_USDC
+    budget > maxBudgetUsdc
   ) {
     throw new Error(
-      `Budget must be between ${HOSTED_AGENT_MIN_BUDGET_USDC} and ${HOSTED_AGENT_MAX_BUDGET_USDC} USDC.`,
+      `Budget must be between ${HOSTED_AGENT_MIN_BUDGET_USDC} and ${maxBudgetUsdc} USDC.`,
     );
   }
   const atomic = Math.round(budget * 1_000_000);
