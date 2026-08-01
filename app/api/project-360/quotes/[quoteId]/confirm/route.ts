@@ -6,7 +6,10 @@ import {
 } from "@/lib/agent/hosted-policy";
 import { getHostedAgentJob, runHostedAgentJob } from "@/lib/agent/hosted-jobs";
 import { validateHostedWorkflowRequest } from "@/lib/agent/hosted-workflows";
-import { confirmHostedWorkflowQuote } from "@/lib/commerce/workflow-checkout";
+import {
+  confirmHostedWorkflowQuote,
+  getHostedWorkflowUserPaymentForJob,
+} from "@/lib/commerce/workflow-checkout";
 import { project360ErrorResponse } from "@/lib/project-360/http";
 import {
   project360IdempotencyHash,
@@ -59,17 +62,32 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
       quoteId,
       ownerWallet: owner.wallet,
     });
-    const idempotencyHash = project360IdempotencyHash({
+    const transactionHash = typeof body.transactionHash === "string"
+      ? body.transactionHash
+      : null;
+    let idempotencyHash = project360IdempotencyHash({
       tenant: owner.wallet,
       idempotencyKey,
       purpose: "quote",
     });
+    // A client can lose its in-memory Idempotency-Key after the payment settles
+    // but before it receives the launch response. Resume only when the exact
+    // already-recorded transaction belongs to this owner-scoped consumed quote.
+    if (stored.quote.job_id && stored.quote.user_payment_id && transactionHash) {
+      const payment = await getHostedWorkflowUserPaymentForJob(stored.quote.job_id);
+      if (
+        payment?.transactionHash &&
+        payment.transactionHash.toLowerCase() === transactionHash.toLowerCase()
+      ) {
+        idempotencyHash = stored.quote.idempotency_hash;
+      }
+    }
     const result = await confirmHostedWorkflowQuote({
       quoteId,
       idempotencyHash,
       requestHash: stored.quote.request_hash,
       request: validateProjectRequest(stored.canonicalInput),
-      transactionHash: typeof body.transactionHash === "string" ? body.transactionHash : null,
+      transactionHash,
       signature: typeof body.signature === "string" ? body.signature : null,
     });
     if (!result.jobId) {

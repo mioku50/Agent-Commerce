@@ -248,8 +248,18 @@ const executionMigration = readFileSync(
   ),
   "utf8",
 );
+const legacyServiceMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260801223000_p421_project_360_legacy_service_constraint.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 assert.match(executionMigration, /jsonb_array_length\(selected_services\) <= 7/i);
 assert.match(executionMigration, /hosted_agent_jobs_spent_usdc_check/i);
+assert.match(legacyServiceMigration, /begin;[\s\S]*commit;/i);
+assert.match(legacyServiceMigration, /hosted_agent_jobs_selected_services_array_check/i);
+assert.match(legacyServiceMigration, /jsonb_array_length\(selected_services\) <= 7/i);
 for (const guard of [
   "validate_project_360_discovery_tenant",
   "validate_project_360_quote_binding",
@@ -292,5 +302,8 @@ const confirmationRoute = readFileSync(
 assert.match(confirmationRoute, /project_quote_immutable/);
 assert.match(confirmationRoute, /selectedCandidateIds/);
 assert.match(confirmationRoute, /amountUsdc/);
+assert.match(confirmationRoute, /getHostedWorkflowUserPaymentForJob/);
+assert.match(confirmationRoute, /payment\.transactionHash\.toLowerCase\(\) === transactionHash\.toLowerCase\(\)/);
+assert.match(confirmationRoute, /idempotencyHash = stored\.quote\.idempotency_hash/);
 
 console.log("Project 360 tests passed.");

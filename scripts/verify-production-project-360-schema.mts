@@ -207,6 +207,7 @@ async function verifyProductionProject360Schema() {
       "hosted_agent_jobs_budget_usdc_check",
       "hosted_workflow_quotes_selected_services_check",
       "hosted_agent_jobs_selected_services_check",
+      "hosted_agent_jobs_selected_services_array_check",
       "hosted_agent_jobs_spent_usdc_check",
     ]]);
     const definitions = new Map(
@@ -231,6 +232,7 @@ async function verifyProductionProject360Schema() {
     for (const name of [
       "hosted_workflow_quotes_selected_services_check",
       "hosted_agent_jobs_selected_services_check",
+      "hosted_agent_jobs_selected_services_array_check",
     ]) {
       assert(
         /7\)?/.test(definitions.get(name) ?? ""),
