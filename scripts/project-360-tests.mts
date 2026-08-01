@@ -274,6 +274,8 @@ assert.doesNotMatch(
   /from\("project_360_quotes"\)[\s\S]{0,160}\.upsert\(/,
   "Immutable Project 360 quote mappings must never be updated on replay.",
 );
+assert.match(serviceSource, /project_quote_checkout_unavailable/);
+assert.match(serviceSource, /error instanceof HostedCheckoutPolicyError/);
 
 const confirmationRoute = readFileSync(
   new URL("../app/api/project-360/quotes/[quoteId]/confirm/route.ts", import.meta.url),

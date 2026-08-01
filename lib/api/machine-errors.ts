@@ -81,6 +81,7 @@ export type MachineErrorCode =
   | "duplicate_module_source"
   | "source_module_not_selected"
   | "project_quote_binding_failed"
+  | "project_quote_checkout_unavailable"
   | "project_quote_integrity_failed"
   | "project_selection_integrity_failed";
 

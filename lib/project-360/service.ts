@@ -4,6 +4,7 @@ import { getByoaClient } from "../byoa/service.ts";
 import {
   createHostedWorkflowQuote,
   getHostedWorkflowQuote,
+  HostedCheckoutPolicyError,
   toPublicHostedWorkflowQuote,
 } from "../commerce/workflow-checkout.ts";
 import {
@@ -800,28 +801,48 @@ export async function createBrowserProject360Quote(input: {
     repository: request.repository,
     budgetUsdc: request.budgetUsdc,
   });
-  const quoteResult = await createHostedWorkflowQuote({
-    idempotencyHash,
-    requestHash,
-    requesterFingerprint: hostedRequesterFingerprint({
-      secret: project360Secret(),
-      forwardedFor: input.forwardedFor,
-      userAgent: input.userAgent,
-    }),
-    requesterWallet: input.ownerWallet,
-    byoaAgentId: input.byoaAgentId,
-    machineCredentialId: input.machineCredentialId,
-    ownerWallet: input.ownerWallet,
-    request,
-    plan,
-    metadata: {
-      project360Input: projectInput,
-      project360SelectionHash: selectionHash,
-      project360DiscoveryId: discovery.public_id,
-      project360LineItems: lineItems,
-      project360Warnings: warnings,
-    },
-  });
+  let quoteResult: Awaited<ReturnType<typeof createHostedWorkflowQuote>>;
+  try {
+    quoteResult = await createHostedWorkflowQuote({
+      idempotencyHash,
+      requestHash,
+      requesterFingerprint: hostedRequesterFingerprint({
+        secret: project360Secret(),
+        forwardedFor: input.forwardedFor,
+        userAgent: input.userAgent,
+      }),
+      requesterWallet: input.ownerWallet,
+      byoaAgentId: input.byoaAgentId,
+      machineCredentialId: input.machineCredentialId,
+      ownerWallet: input.ownerWallet,
+      request,
+      plan,
+      metadata: {
+        project360Input: projectInput,
+        project360SelectionHash: selectionHash,
+        project360DiscoveryId: discovery.public_id,
+        project360LineItems: lineItems,
+        project360Warnings: warnings,
+      },
+    });
+  } catch (error) {
+    if (error instanceof HostedCheckoutPolicyError) {
+      throw new Project360Error(
+        error.reason === "idempotency_conflict"
+          ? "The Idempotency-Key is already bound to a different Project 360 quote payload."
+          : "Project 360 checkout is temporarily limited by the active-run policy.",
+        error.reason,
+        error.reason === "rate_limited" ? 429 : 409,
+        error.reason !== "idempotency_conflict",
+      );
+    }
+    throw new Project360Error(
+      "The immutable Project 360 quote could not be created right now.",
+      "project_quote_checkout_unavailable",
+      503,
+      true,
+    );
+  }
   const mappingPayload = {
     quote_id: quoteResult.quote.id,
     discovery_id: discovery.id,
