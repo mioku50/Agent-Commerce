@@ -46,7 +46,12 @@ import type { QualityStatus } from "@/lib/providers/api-quality-types";
 import type { HostedJobView } from "./types";
 import { AgentTrustReportView } from "./agent-trust-report-view";
 import { Project360ReportView } from "./project-360-report-view";
-import type { Project360Report } from "@/lib/project-360/types";
+import {
+  PROJECT_360_MODULE_LABELS,
+  PROJECT_360_MODULES,
+  type Project360Module,
+  type Project360Report,
+} from "@/lib/project-360/types";
 
 const DEFAULT_CONSUMER_STAGES = [
   { id: "preparing", label: "Preparing report", matches: ["queued", "planning"] },
@@ -65,6 +70,17 @@ const GITHUB_CONSUMER_STAGES = [
   { id: "verifying", label: "Verifying the result on Arc", matches: ["publishing_onchain_proof"] },
   { id: "completed", label: "Completed", matches: ["completed"] },
 ] as const;
+
+const PROJECT_360_MODULE_SERVICES: Record<Project360Module, string[]> = {
+  github_due_diligence: [
+    "github-repository-intelligence",
+    "github-due-diligence-analysis",
+  ],
+  agent_trust_report: ["agent-trust-finalizer"],
+  treasury_health: ["treasury-health-finalizer"],
+  paid_api_quality: ["api-quality-finalizer"],
+  arc_contract_analysis: ["arc-contract-analysis-finalizer"],
+};
 
 function formatDate(value?: string | null) {
   if (!value) return "N/A";
@@ -340,6 +356,31 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
   const project360Report = isProject360Workflow
     ? ((view.job.structuredResult?.workflowData as { report?: Project360Report } | null)?.report ?? null)
     : null;
+  const project360Proof = project360Report
+    ? view.proofs.find(
+        (proof) =>
+          proof.responseHash?.toLowerCase() ===
+          project360Report.verification.reportHash.toLowerCase(),
+      ) ?? null
+    : null;
+  const project360ModuleProgress = PROJECT_360_MODULES.map((module) => {
+    const selected = view.job.project360Modules?.includes(module) ?? false;
+    const serviceSlugs = PROJECT_360_MODULE_SERVICES[module];
+    const moduleServices = view.services.filter((service) =>
+      serviceSlugs.includes(service.serviceSlug),
+    );
+    const status = !selected
+      ? "not_selected"
+      : moduleServices.some((service) => service.status === "failed")
+        ? "failed"
+        : moduleServices.filter((service) => service.status === "paid").length ===
+            serviceSlugs.length
+          ? "completed"
+          : moduleServices.length > 0
+            ? "running"
+            : "pending";
+    return { module, status };
+  });
   const isSellerWorkflow = String(view.job.workflowType).startsWith("seller_");
   const consumerStages = isGithubWorkflow ? GITHUB_CONSUMER_STAGES : DEFAULT_CONSUMER_STAGES;
   const currentIndex = DEFAULT_CONSUMER_STAGES.findIndex((stage) =>
@@ -680,8 +721,21 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
         )}
 
         <div className="grid content-start gap-6">
+          {isProject360Workflow ? (
+            <Card className="rounded-2xl border-white/10 bg-[#090c13]" data-testid="project-360-module-progress">
+              <CardHeader><CardTitle>Project 360 module progress</CardTitle></CardHeader>
+              <CardContent className="grid gap-2 sm:grid-cols-2">
+                {project360ModuleProgress.map((item) => (
+                  <div key={item.module} className="flex items-center justify-between gap-3 rounded-xl border border-white/10 p-3 text-sm">
+                    <span>{PROJECT_360_MODULE_LABELS[item.module]}</span>
+                    <Badge variant="outline">{item.status.replaceAll("_", " ")}</Badge>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
           {isProject360Workflow && project360Report ? (
-            <Project360ReportView report={project360Report} />
+            <Project360ReportView report={project360Report} proof={project360Proof} />
           ) : isApiQualityWorkflow && apiQualityReport ? (
             <Card className="rounded-lg">
               <CardContent className="p-6 grid gap-6">
@@ -1778,7 +1832,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
       </section>
 
       <section className="mx-auto w-full max-w-6xl px-4 pb-12 sm:px-6">
-        <details className="mt-6 rounded-md border p-4" id="technical-details">
+        {!isProject360Workflow ? <details className="mt-6 rounded-md border p-4" id="technical-details">
           <summary className="cursor-pointer font-semibold text-sm text-muted-foreground hover:text-foreground">
             Payment & verification details
           </summary>
@@ -1955,7 +2009,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
               </CardContent>
             </Card>
           </div>
-        </details>
+        </details> : null}
       </section>
     </main>
   );

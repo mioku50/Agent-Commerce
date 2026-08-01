@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   canonicalProject360Input,
   normalizeProject360Input,
@@ -207,5 +208,43 @@ const limitedReport = buildProject360Report({
 assert.equal(limitedReport.coverage.status, "limited");
 assert.equal(limitedReport.coverage.label, "Completed with limited coverage");
 assert.equal(limitedReport.score.value, 80);
+
+const migration = readFileSync(
+  new URL("../supabase/migrations/20260801120000_p42_project_360.sql", import.meta.url),
+  "utf8",
+);
+assert.match(migration, /begin;[\s\S]*commit;/i);
+for (const guard of [
+  "validate_project_360_discovery_tenant",
+  "validate_project_360_quote_binding",
+  "reject_project_360_quote_mutation",
+  "reject_quoted_project_360_candidate_mutation",
+  "reject_quoted_project_360_discovery_mutation",
+  "validate_project_360_module_run_tenant",
+]) {
+  assert.match(migration, new RegExp(`create trigger ${guard}`));
+}
+assert.match(
+  migration,
+  /revoke all on table public\.project_360_quotes from public, anon, authenticated;/,
+);
+
+const serviceSource = readFileSync(
+  new URL("../lib/project-360/service.ts", import.meta.url),
+  "utf8",
+);
+assert.doesNotMatch(
+  serviceSource,
+  /from\("project_360_quotes"\)[\s\S]{0,160}\.upsert\(/,
+  "Immutable Project 360 quote mappings must never be updated on replay.",
+);
+
+const confirmationRoute = readFileSync(
+  new URL("../app/api/project-360/quotes/[quoteId]/confirm/route.ts", import.meta.url),
+  "utf8",
+);
+assert.match(confirmationRoute, /project_quote_immutable/);
+assert.match(confirmationRoute, /selectedCandidateIds/);
+assert.match(confirmationRoute, /amountUsdc/);
 
 console.log("Project 360 tests passed.");

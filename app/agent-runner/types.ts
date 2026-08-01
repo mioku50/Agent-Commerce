@@ -152,6 +152,7 @@ export type HostedJobView = {
     paymentMode: "legacy_sponsored" | "sponsored" | "paid";
     workflowQuoteId: string | null;
     userPaymentId: string | null;
+    project360Modules?: string[];
   };
   userPayment: {
     id: string;
@@ -192,6 +193,7 @@ export type HostedJobView = {
   proofs: Array<{
     receiptId: string;
     status: "pending" | "verified" | "failed";
+    responseHash: string | null;
     transactionHash: string | null;
     blockNumber: number | null;
     contractAddress: string | null;
