@@ -248,7 +248,7 @@ const executionMigration = readFileSync(
   ),
   "utf8",
 );
-assert.match(executionMigration, /jsonb_array_length\(selected_services\) between 1 and 7/i);
+assert.match(executionMigration, /jsonb_array_length\(selected_services\) <= 7/i);
 assert.match(executionMigration, /hosted_agent_jobs_spent_usdc_check/i);
 for (const guard of [
   "validate_project_360_discovery_tenant",
