@@ -282,7 +282,10 @@ async function fetchGitHubDiscoveryFilesFromApi(
       item.path.split("/").length <= 8 &&
       typeof item.size === "number" &&
       item.size > 0 &&
-      item.size <= maxFileBytes &&
+      (
+        item.size <= maxFileBytes ||
+        (discoveryPathPriority(item.path) <= 1 && item.size <= maxFileBytes * 2)
+      ) &&
       discoveryPathPriority(item.path) < 9,
     )
     .sort((left, right) => {
