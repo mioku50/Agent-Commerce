@@ -6,7 +6,10 @@ import {
   normalizeProject360Source,
   project360SelectionHash,
 } from "../lib/project-360/input.ts";
-import { detectProject360CandidatesFromGitHubFiles } from "../lib/project-360/discovery.ts";
+import {
+  detectProject360CandidatesFromGitHubFiles,
+  limitProject360Candidates,
+} from "../lib/project-360/discovery.ts";
 import {
   buildProject360Report,
   computeProject360ReportHash,
@@ -57,6 +60,19 @@ assert.equal(
 );
 assert.ok(detected.candidates.every((candidate) => candidate.lineStart !== null));
 assert.ok(detected.candidates.every((candidate) => !candidate.safeExcerpt?.includes("sk-or-v1")));
+const crowded = limitProject360Candidates([
+  ...detected.candidates,
+  ...Array.from({ length: 30 }, (_, index) =>
+    detectProject360CandidatesFromGitHubFiles("acme/project", [{
+      path: `docs/endpoint-${index}.md`,
+      sizeBytes: 80,
+      content: `API endpoint: https://api-${index}.example.com/v1`,
+    }]).candidates[0],
+  ).filter(Boolean),
+]);
+assert.equal(crowded.length, 25);
+assert.ok(crowded.some((candidate) => candidate.sourceType === "agent_id"));
+assert.ok(crowded.some((candidate) => candidate.sourceType === "arc_contract"));
 
 function source(
   candidateId: string,

@@ -13,6 +13,7 @@ import type {
   Project360Module,
   Project360SourceType,
 } from "./types.ts";
+import { PROJECT_360_SOURCE_TYPES } from "./types.ts";
 
 const SECRET_LINE_PATTERN =
   /\b(?:private[_\s-]?key|seed[_\s-]?phrase|mnemonic|api[_\s-]?key|secret|password|authorization|bearer|access[_\s-]?token)\b|(?:sk-(?:or-v1-|proj-)?|ghp_|github_pat_)[a-z0-9_-]{12,}|-----BEGIN [A-Z ]*PRIVATE KEY-----/i;
@@ -238,6 +239,30 @@ function deduplicateCandidates(candidates: Project360CandidateDraft[]) {
   });
 }
 
+export function limitProject360Candidates(
+  candidates: Project360CandidateDraft[],
+  limit = 25,
+) {
+  const ordered = deduplicateCandidates(candidates);
+  const boundedLimit = Math.max(1, Math.min(limit, 25));
+  const selected: Project360CandidateDraft[] = [];
+  const fingerprints = new Set<string>();
+  const add = (candidate: Project360CandidateDraft | undefined) => {
+    if (!candidate || selected.length >= boundedLimit) return;
+    const fingerprint = `${candidate.sourceType}\n${candidate.valueHash}`;
+    if (fingerprints.has(fingerprint)) return;
+    selected.push(candidate);
+    fingerprints.add(fingerprint);
+  };
+
+  add(ordered.find((candidate) => candidate.originKind === "primary"));
+  for (const sourceType of PROJECT_360_SOURCE_TYPES) {
+    add(ordered.find((candidate) => candidate.sourceType === sourceType));
+  }
+  for (const candidate of ordered) add(candidate);
+  return selected;
+}
+
 export async function discoverProject360Candidates(input: {
   primaryType: Project360SourceType;
   primaryValue: string;
@@ -286,7 +311,7 @@ export async function discoverProject360Candidates(input: {
   }
   if (blockedCandidates > 0) warnings.push("unsafe_candidates_blocked");
 
-  const deduplicated = deduplicateCandidates(candidates).slice(0, 25);
+  const deduplicated = limitProject360Candidates(candidates);
   return {
     candidates: deduplicated,
     warnings,

@@ -220,22 +220,27 @@ export type GitHubDiscoveryFile = {
 function discoveryPathPriority(path: string) {
   const normalized = path.toLowerCase();
   const fileName = normalized.split("/").at(-1) ?? normalized;
-  if (/^readme(?:\.[a-z0-9]+)?$/.test(fileName)) return 0;
+  if (!normalized.includes("/") && /^readme(?:\.[a-z0-9]+)?$/.test(fileName)) return 0;
+  if (
+    /(?:^|\/)(?:openapi|agent-api)(?:[./_-]|$)/.test(normalized) ||
+    /(?:^|\/)contracts?\/readme(?:\.[a-z0-9]+)?$/.test(normalized)
+  ) return 1;
+  if (/^readme(?:\.[a-z0-9]+)?$/.test(fileName)) return 2;
   if (
     [
       "package.json", "pyproject.toml", "requirements.txt", "cargo.toml",
       "go.mod", "foundry.toml", "hardhat.config.ts", "hardhat.config.js",
       "vercel.json", "docker-compose.yml", "docker-compose.yaml",
     ].includes(fileName)
-  ) return 1;
+  ) return 3;
   if (
     /(?:^|\/)(?:config|configs|deploy|deployment|docs?|\.github)(?:\/|$)/.test(normalized) ||
     /\.(?:ya?ml|json|toml|ini|config|md|mdx)$/.test(normalized)
-  ) return 2;
+  ) return 4;
   if (
     /(?:^|\/)(?:src|app|lib|contracts?|packages?|services?)(?:\/|$)/.test(normalized) &&
     /\.(?:ts|tsx|js|jsx|mts|mjs|py|go|rs|sol)$/.test(normalized)
-  ) return 3;
+  ) return 5;
   return 9;
 }
 
