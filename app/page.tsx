@@ -186,7 +186,7 @@ export default async function Home() {
         <div className="mx-auto flex w-full max-w-7xl flex-col items-center px-4 text-center sm:px-6">
           <Badge className="mb-6 rounded-full border-emerald-500/30 bg-emerald-500/10 px-4 py-1 text-xs font-semibold text-emerald-300 backdrop-blur-md shadow-[0_0_15px_rgba(0,208,132,0.2)]">
             <span className="mr-2 inline-block size-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(0,208,132,0.8)]" />
-            Arc Testnet Mainnet-Ready Layer
+            Arc Testnet · Verifiable Execution
           </Badge>
           
           <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl leading-[1.1]">
@@ -195,7 +195,7 @@ export default async function Home() {
           </h1>
 
           <p className="mt-6 max-w-2xl text-base font-normal leading-relaxed text-muted-foreground sm:text-lg">
-            Run paid data, due diligence, and trust analysis workflows. Get immutable structured reports backed by Arc proofs & x402 verification.
+            Structured reports with verifiable execution, immutable result hashes, and Arc proofs.
           </p>
 
           <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">

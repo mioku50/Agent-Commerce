@@ -32,13 +32,13 @@
   --secondary: 222 30% 12%;
   --secondary-foreground: 225 32% 96%;
   --muted: 222 30% 11%;
-  --muted-foreground: 225 14% 65%;
+  --muted-foreground: 225 16% 72%; /* Enhanced contrast for WCAG AA */
   --accent: 222 30% 13%;
   --accent-foreground: 225 32% 96%;
   --destructive: 354 100% 64%;
   --destructive-foreground: 0 0% 100%;
-  --border: 222 20% 14%;
-  --input: 222 20% 14%;
+  --border: 222 20% 16%;
+  --input: 222 20% 16%;
   --ring: 220 100% 64%;
   --chart-1: 220 100% 64%;
   --chart-2: 174 57% 68%;
@@ -92,6 +92,7 @@
       radial-gradient(circle at 50% 60%, rgba(168, 85, 247, 0.06), transparent 40rem),
       linear-gradient(180deg, #07090e 0%, #0a0d14 50%, #07090e 100%);
     background-attachment: fixed;
+    overflow-x: hidden;
   }
 
   code,
@@ -102,6 +103,12 @@
 
   ::selection {
     background: rgba(61, 126, 255, 0.35);
+  }
+
+  /* Accessibility: Visible Focus Outline */
+  *:focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
   }
 }
 
@@ -185,6 +192,27 @@
   .pulse-glow-blue {
     box-shadow: 0 0 12px rgba(61, 126, 255, 0.5);
     animation: pulse-glow 2s ease-in-out infinite;
+  }
+}
+
+/* Fallback for browsers without backdrop-filter support */
+@supports not (backdrop-filter: blur(1px)) {
+  .glass,
+  .glass-solid,
+  .glass-card {
+    background: rgba(10, 13, 20, 0.95) !important;
+  }
+}
+
+/* Accessibility: Prefers Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

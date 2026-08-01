@@ -474,7 +474,7 @@ export function HostedAgentRunner({
                       key={workflow.value}
                       type="button"
                       onClick={() => selectWorkflow(workflow.value as HostedWorkflowType)}
-                      className={`group flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all duration-200 ${
+                      className={`group flex min-h-[44px] items-start gap-3.5 rounded-xl border p-4 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
                         isSelected
                           ? "border-primary bg-primary/10 shadow-[0_0_20px_rgba(61,126,255,0.2)]"
                           : "border-white/10 bg-white/5 hover:border-white/20 hover:bg-white/10"
@@ -490,7 +490,7 @@ export function HostedAgentRunner({
                           </p>
                           {isSelected && <Check className="size-3.5 text-primary shrink-0" />}
                         </div>
-                        <p className="mt-1 line-clamp-2 text-[11px] text-muted-foreground/80 leading-relaxed">
+                        <p className="mt-1 text-xs leading-relaxed text-muted-foreground/90 sm:line-clamp-none">
                           {getHostedWorkflowTemplate(workflow.value as HostedWorkflowType)?.description}
                         </p>
                       </div>
