@@ -13,6 +13,27 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 function buildInputSchema(workflowType: string) {
+  if (workflowType === "project_360") {
+    return {
+      type: "object",
+      description:
+        "Project 360 uses free discovery followed by explicit candidate selection; it cannot be quoted through the generic quote endpoint.",
+      properties: {
+        type: {
+          type: "string",
+          enum: [
+            "github_repository",
+            "project_wallet",
+            "agent_id",
+            "arc_contract",
+            "public_api_endpoint",
+          ],
+        },
+        value: { type: "string", minLength: 1, maxLength: 2048 },
+      },
+      required: ["type", "value"],
+    };
+  }
   if (workflowType === "agent_trust_report") {
     return {
       type: "object",
@@ -127,6 +148,20 @@ export async function GET(request: NextRequest) {
       task: template.task,
       estimatedUsdc: template.estimatedSpendUsdc,
       inputSchema: buildInputSchema(template.value),
+      quoteFlow:
+        template.value === "project_360"
+          ? {
+              discovery: "/api/agent/v1/project-360/discoveries",
+              quote:
+                "/api/agent/v1/project-360/discoveries/{discoveryId}/quote",
+              execution: "/api/agent/v1/runs",
+              candidateSelectionRequired: true,
+            }
+          : {
+              quote: "/api/agent/v1/quotes",
+              execution: "/api/agent/v1/runs",
+              candidateSelectionRequired: false,
+            },
       arc: {
         chainId: ARC_TESTNET_CHAIN_ID,
         network: "arc-testnet",

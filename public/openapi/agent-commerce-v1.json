@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Veyra Agent API",
-    "version": "1.4.0",
-    "description": "Machine API for verified Veyra workflows, continuous trust monitoring, alerts, signed webhooks, and public trust badges."
+    "version": "1.5.0",
+    "description": "Machine API for verified Veyra workflows, Project 360 free discovery and explicit quoting, continuous trust monitoring, alerts, signed webhooks, and public trust badges."
   },
   "servers": [
     {
@@ -59,6 +59,101 @@
           "500": {
             "$ref": "#/components/responses/InternalError"
           }
+        }
+      }
+    },
+    "/api/agent/v1/project-360/discoveries": {
+      "post": {
+        "summary": "Run free Project 360 discovery",
+        "description": "Scans one validated public identifier for Project 360 source candidates. Discovery is free and non-transactional. Every candidate is returned with included=false and cannot enter a paid module without a later explicit selection. Requires quotes:create scope and Idempotency-Key.",
+        "operationId": "discoverProject360",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/Project360DiscoveryRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent discovery replay",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Project360DiscoveryEnvelope" } } }
+          },
+          "201": {
+            "description": "Discovery completed",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Project360DiscoveryEnvelope" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/agent/v1/project-360/discoveries/{discoveryId}": {
+      "get": {
+        "summary": "Get Project 360 discovery",
+        "description": "Returns a discovery only to the credential that created it. Requires results:read scope.",
+        "operationId": "getProject360Discovery",
+        "parameters": [{
+          "name": "discoveryId",
+          "in": "path",
+          "required": true,
+          "schema": { "type": "string", "pattern": "^dsc_[0-9a-f]{20}$" }
+        }],
+        "responses": {
+          "200": {
+            "description": "Credential-scoped discovery",
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "required": ["discovery"],
+              "properties": { "discovery": { "$ref": "#/components/schemas/Project360Discovery" } }
+            } } }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
+        }
+      }
+    },
+    "/api/agent/v1/project-360/discoveries/{discoveryId}/quote": {
+      "post": {
+        "summary": "Create an immutable Project 360 quote",
+        "description": "Binds explicit candidate IDs and modules to the current discovery revision. The response lists every module price, total price, expected coverage, and incomplete-data warnings. No unselected candidate is included. Requires quotes:create scope and Idempotency-Key.",
+        "operationId": "createProject360Quote",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          {
+            "name": "discoveryId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "pattern": "^dsc_[0-9a-f]{20}$" }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Project360QuoteRequest" } } }
+        },
+        "responses": {
+          "200": {
+            "description": "Idempotent quote replay",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Project360QuoteResponse" } } }
+          },
+          "201": {
+            "description": "Immutable quote created",
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Project360QuoteResponse" } } }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "402": { "$ref": "#/components/responses/PaymentRequired" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/ServiceUnavailable" }
         }
       }
     },
@@ -264,7 +359,8 @@
                 "schema": {
                   "oneOf": [
                     { "$ref": "#/components/schemas/StructuredReportResponse" },
-                    { "$ref": "#/components/schemas/AgentTrustReportResponse" }
+                    { "$ref": "#/components/schemas/AgentTrustReportResponse" },
+                    { "$ref": "#/components/schemas/Project360ReportResponse" }
                   ]
                 }
               },
@@ -918,6 +1014,16 @@
               "required": { "type": "array", "items": { "type": "string" } }
             }
           },
+          "quoteFlow": {
+            "type": "object",
+            "required": ["quote", "execution", "candidateSelectionRequired"],
+            "properties": {
+              "discovery": { "type": "string" },
+              "quote": { "type": "string" },
+              "execution": { "type": "string" },
+              "candidateSelectionRequired": { "type": "boolean" }
+            }
+          },
           "arc": {
             "type": "object",
             "properties": {
@@ -1135,6 +1241,229 @@
             }
           }
         ]
+      },
+      "Project360SourceType": {
+        "type": "string",
+        "enum": [
+          "github_repository",
+          "project_wallet",
+          "agent_id",
+          "arc_contract",
+          "public_api_endpoint"
+        ]
+      },
+      "Project360Module": {
+        "type": "string",
+        "enum": [
+          "github_due_diligence",
+          "agent_trust_report",
+          "treasury_health",
+          "paid_api_quality",
+          "arc_contract_analysis"
+        ]
+      },
+      "Project360DiscoveryRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "value"],
+        "properties": {
+          "type": { "$ref": "#/components/schemas/Project360SourceType" },
+          "value": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "One public primary identifier. Secrets and authorization material are forbidden."
+          }
+        }
+      },
+      "Project360Candidate": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type", "module", "value", "provenance", "confidence", "confidenceScore", "reason", "validationStatus", "included"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^src_[0-9a-f]{20}$" },
+          "type": { "$ref": "#/components/schemas/Project360SourceType" },
+          "module": { "$ref": "#/components/schemas/Project360Module" },
+          "value": { "type": "string" },
+          "provenance": {
+            "type": "object",
+            "required": ["origin", "repository", "file", "lineStart", "lineEnd", "excerpt"],
+            "properties": {
+              "origin": { "type": "string", "enum": ["primary", "github_file", "public_record"] },
+              "repository": { "type": "string", "nullable": true },
+              "file": { "type": "string", "nullable": true },
+              "lineStart": { "type": "integer", "minimum": 1, "nullable": true },
+              "lineEnd": { "type": "integer", "minimum": 1, "nullable": true },
+              "excerpt": { "type": "string", "nullable": true }
+            }
+          },
+          "confidence": { "type": "string", "enum": ["high", "medium", "low"] },
+          "confidenceScore": { "type": "number", "minimum": 0, "maximum": 1 },
+          "reason": { "type": "string" },
+          "validationStatus": { "type": "string", "enum": ["valid", "unsupported", "blocked"] },
+          "included": {
+            "type": "boolean",
+            "enum": [false],
+            "description": "Fail-closed default. The API never preselects discovered sources."
+          }
+        }
+      },
+      "Project360Discovery": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "status", "revision", "free", "paymentRequired", "primary", "candidatesHash", "candidates", "warnings", "errorCode", "expiresAt", "createdAt", "completedAt"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^dsc_[0-9a-f]{20}$" },
+          "status": { "type": "string", "enum": ["queued", "running", "ready", "failed", "expired"] },
+          "revision": { "type": "integer", "minimum": 1 },
+          "free": { "type": "boolean", "enum": [true] },
+          "paymentRequired": { "type": "boolean", "enum": [false] },
+          "primary": {
+            "type": "object",
+            "required": ["type", "value"],
+            "properties": {
+              "type": { "$ref": "#/components/schemas/Project360SourceType" },
+              "value": { "type": "string" }
+            }
+          },
+          "candidatesHash": { "type": "string", "nullable": true },
+          "candidates": { "type": "array", "items": { "$ref": "#/components/schemas/Project360Candidate" } },
+          "warnings": { "type": "array", "items": { "type": "string" } },
+          "errorCode": { "type": "string", "nullable": true },
+          "expiresAt": { "type": "string", "format": "date-time" },
+          "createdAt": { "type": "string", "format": "date-time" },
+          "completedAt": { "type": "string", "format": "date-time", "nullable": true }
+        }
+      },
+      "Project360DiscoveryEnvelope": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["discovery", "created"],
+        "properties": {
+          "discovery": { "$ref": "#/components/schemas/Project360Discovery" },
+          "created": { "type": "boolean" }
+        }
+      },
+      "Project360QuoteRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["revision", "selectedCandidateIds", "modules"],
+        "properties": {
+          "revision": { "type": "integer", "minimum": 1 },
+          "selectedCandidateIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": { "type": "string", "pattern": "^src_[0-9a-f]{20}$" }
+          },
+          "modules": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "uniqueItems": true,
+            "items": { "$ref": "#/components/schemas/Project360Module" }
+          }
+        }
+      },
+      "Project360QuoteSelection": {
+        "type": "object",
+        "required": ["discoveryId", "discoveryRevision", "discoverySnapshotHash", "selectionHash", "expectedCoverage", "expectedCoverageLabel", "warnings", "confirmedSources", "selectedModules", "lineItems", "pricing", "canonicalInput"],
+        "properties": {
+          "discoveryId": { "type": "string", "pattern": "^dsc_[0-9a-f]{20}$" },
+          "discoveryRevision": { "type": "integer" },
+          "discoverySnapshotHash": { "type": "string" },
+          "selectionHash": { "type": "string" },
+          "expectedCoverage": {
+            "type": "object",
+            "required": ["selected", "total"],
+            "properties": {
+              "selected": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "total": { "type": "integer", "enum": [5] }
+            }
+          },
+          "expectedCoverageLabel": { "type": "string", "example": "3 of 5 modules" },
+          "warnings": { "type": "array", "items": { "type": "string" } },
+          "confirmedSources": { "type": "array", "items": { "type": "object" } },
+          "selectedModules": { "type": "array", "items": { "$ref": "#/components/schemas/Project360Module" } },
+          "lineItems": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["module", "label", "serviceSlugs", "priceUsdc", "sharedEvidence"],
+              "properties": {
+                "module": { "type": "string" },
+                "label": { "type": "string" },
+                "serviceSlugs": { "type": "array", "items": { "type": "string" } },
+                "priceUsdc": { "type": "number", "minimum": 0 },
+                "sharedEvidence": { "type": "boolean" }
+              }
+            }
+          },
+          "pricing": {
+            "type": "object",
+            "required": ["moduleSubtotalUsdc", "platformFeeUsdc", "totalUsdc", "amountDueUsdc"],
+            "properties": {
+              "moduleSubtotalUsdc": { "type": "number", "minimum": 0 },
+              "platformFeeUsdc": { "type": "number", "minimum": 0 },
+              "totalUsdc": { "type": "number", "minimum": 0 },
+              "amountDueUsdc": { "type": "number", "minimum": 0 }
+            }
+          },
+          "canonicalInput": { "type": "string" }
+        }
+      },
+      "Project360QuoteResponse": {
+        "allOf": [
+          { "$ref": "#/components/schemas/WorkflowQuoteResponse" },
+          {
+            "type": "object",
+            "required": ["project360"],
+            "properties": { "project360": { "$ref": "#/components/schemas/Project360QuoteSelection" } }
+          }
+        ]
+      },
+      "Project360ReportResponse": {
+        "type": "object",
+        "required": ["schema", "reportId", "workflow", "workflowType", "confirmedSources", "modules", "score", "coverage", "sections", "verification", "generatedAt"],
+        "properties": {
+          "schema": { "type": "string", "enum": ["veyra.project360.v1"] },
+          "reportId": { "type": "string" },
+          "workflow": { "type": "string", "enum": ["project_360"] },
+          "workflowType": { "type": "string", "enum": ["project_360"] },
+          "confirmedSources": { "type": "array", "items": { "type": "object" } },
+          "modules": { "type": "array", "items": { "type": "object" } },
+          "score": {
+            "type": "object",
+            "required": ["formulaVersion", "value", "confidencePercent", "confidence", "breakdown"],
+            "properties": {
+              "formulaVersion": { "type": "string", "enum": ["project360-score-v1"] },
+              "value": { "type": "integer", "minimum": 0, "maximum": 100, "nullable": true },
+              "confidencePercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+              "confidence": { "type": "string", "enum": ["high", "medium", "low", "insufficient"] },
+              "breakdown": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "coverage": {
+            "type": "object",
+            "required": ["expected", "completed", "total", "status", "label"],
+            "properties": {
+              "expected": { "type": "integer", "minimum": 1, "maximum": 5 },
+              "completed": { "type": "integer", "minimum": 0, "maximum": 5 },
+              "total": { "type": "integer", "enum": [5] },
+              "status": { "type": "string", "enum": ["complete", "partial", "limited", "failed"] },
+              "label": { "type": "string" }
+            }
+          },
+          "sections": {
+            "type": "array",
+            "minItems": 15,
+            "maxItems": 15,
+            "items": { "type": "object" }
+          },
+          "verification": { "type": "object" },
+          "generatedAt": { "type": "string", "format": "date-time" }
+        }
       },
       "WorkflowQuoteRequest": {
         "type": "object",

@@ -57,6 +57,108 @@ const mockFetch: typeof fetch = async (input, init = {}) => {
   if (url.endsWith("/api/agent/v1/watchlists") && method === "GET") {
     return Response.json({ watchlists: [] });
   }
+  if (url.endsWith("/api/agent/v1/project-360/discoveries") && method === "POST") {
+    return Response.json({
+      created: true,
+      discovery: {
+        id: "dsc_0123456789abcdef0123",
+        status: "ready",
+        revision: 1,
+        free: true,
+        paymentRequired: false,
+        primary: {
+          type: "github_repository",
+          value: "circlefin/example",
+        },
+        candidatesHash: "candidate-hash",
+        candidates: [{
+          id: "src_0123456789abcdef0123",
+          type: "github_repository",
+          module: "github_due_diligence",
+          value: "circlefin/example",
+          provenance: {
+            origin: "primary",
+            repository: "circlefin/example",
+            file: null,
+            lineStart: null,
+            lineEnd: null,
+            excerpt: null,
+          },
+          confidence: "high",
+          confidenceScore: 1,
+          reason: "primary_input",
+          validationStatus: "valid",
+          included: false,
+        }],
+        warnings: [],
+        errorCode: null,
+        expiresAt: "2026-08-01T12:00:00.000Z",
+        createdAt: "2026-08-01T11:00:00.000Z",
+        completedAt: "2026-08-01T11:00:01.000Z",
+      },
+    }, { status: 201 });
+  }
+  if (url.endsWith("/api/agent/v1/project-360/discoveries/dsc_0123456789abcdef0123") && method === "GET") {
+    return Response.json({
+      discovery: {
+        id: "dsc_0123456789abcdef0123",
+        status: "ready",
+        revision: 1,
+        free: true,
+        paymentRequired: false,
+        primary: { type: "github_repository", value: "circlefin/example" },
+        candidatesHash: "candidate-hash",
+        candidates: [],
+        warnings: [],
+        errorCode: null,
+        expiresAt: "2026-08-01T12:00:00.000Z",
+        createdAt: "2026-08-01T11:00:00.000Z",
+        completedAt: "2026-08-01T11:00:01.000Z",
+      },
+    });
+  }
+  if (url.endsWith("/api/agent/v1/project-360/discoveries/dsc_0123456789abcdef0123/quote") && method === "POST") {
+    return Response.json({
+      quoteId: "quote-360",
+      workflow: "project_360",
+      repository: null,
+      project360: {
+        discoveryId: "dsc_0123456789abcdef0123",
+        discoveryRevision: 1,
+        discoverySnapshotHash: "candidate-hash",
+        selectionHash: "selection-hash",
+        expectedCoverage: { selected: 1, total: 5 },
+        expectedCoverageLabel: "1 of 5 modules",
+        warnings: ["Partial Project 360 Report"],
+        confirmedSources: [],
+        selectedModules: ["github_due_diligence"],
+        lineItems: [{
+          module: "github_due_diligence",
+          label: "GitHub Due Diligence",
+          serviceSlugs: ["github-due-diligence"],
+          priceUsdc: 0.002,
+          sharedEvidence: false,
+        }],
+        pricing: {
+          moduleSubtotalUsdc: 0.0021,
+          platformFeeUsdc: 0,
+          totalUsdc: 0.0021,
+          amountDueUsdc: 0,
+        },
+        canonicalInput: "{}",
+      },
+      totalUsdc: 0.0021,
+      sponsored: true,
+      expiresAt: "2026-08-01T12:00:00.000Z",
+      requiredPayment: {
+        network: "arc-testnet",
+        asset: "USDC",
+        amount: 0,
+        treasuryAddress: "0x0000000000000000000000000000000000000001",
+        chainId: 5_042_002,
+      },
+    }, { status: 201 });
+  }
   if (url.endsWith("/api/agent/v1/watchlists/wtl_0123456789abcdef0123/rechecks")) {
     return Response.json({
       watchlistId: "wtl_0123456789abcdef0123",
@@ -196,6 +298,27 @@ const client = new AgentCommerceClient({
 const workflows = await client.listWorkflows();
 assert.deepEqual(workflows.map((workflow) => workflow.id), ["github_due_diligence"]);
 
+const discoveryResult = await client.discoverProject360(
+  { type: "github_repository", value: "circlefin/example" },
+  { idempotencyKey: "discovery-key" },
+);
+assert.equal(discoveryResult.discovery.free, true);
+assert.equal(discoveryResult.discovery.candidates[0]?.included, false);
+const discoveryReload = await client.getProject360Discovery(discoveryResult.discovery.id);
+assert.equal(discoveryReload.discovery.id, discoveryResult.discovery.id);
+const projectQuote = await client.createProject360Quote(
+  discoveryResult.discovery.id,
+  {
+    revision: discoveryResult.discovery.revision,
+    selectedCandidateIds: ["src_0123456789abcdef0123"],
+    modules: ["github_due_diligence"],
+  },
+  { idempotencyKey: "project360-quote-key" },
+);
+assert.equal(projectQuote.project360.expectedCoverage.selected, 1);
+assert.equal(projectQuote.project360.lineItems[0]?.priceUsdc, 0.002);
+assert.equal(projectQuote.project360.pricing.totalUsdc, projectQuote.totalUsdc);
+
 const execution = await client.executeWorkflow(
   {
     workflow: "github_due_diligence",
@@ -238,6 +361,21 @@ assert(
     (request) =>
       request.url.endsWith("/watchlists") &&
       request.headers.get("idempotency-key") === "watchlist-key",
+  ),
+);
+assert(
+  requests.some(
+    (request) =>
+      request.url.endsWith("/project-360/discoveries") &&
+      request.headers.get("idempotency-key") === "discovery-key",
+  ),
+);
+assert(
+  requests.some(
+    (request) =>
+      request.url.endsWith("/project-360/discoveries/dsc_0123456789abcdef0123/quote") &&
+      request.headers.get("idempotency-key") === "project360-quote-key" &&
+      Array.isArray((request.body as { selectedCandidateIds?: unknown }).selectedCandidateIds),
   ),
 );
 assert(
@@ -328,4 +466,4 @@ await assert.rejects(
   },
 );
 
-console.log("[machine-sdk-test] passed: typed flow, stable idempotency headers, verdict/report parsing, failed-run handling, normalized retryable errors");
+console.log("[machine-sdk-test] passed: typed Project 360 discovery/selection, stable idempotency headers, verdict/report parsing, failed-run handling, normalized retryable errors");

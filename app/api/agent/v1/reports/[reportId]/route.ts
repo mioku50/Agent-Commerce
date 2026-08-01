@@ -26,6 +26,10 @@ import {
   parseApiQualityJobInput,
 } from "../../../../../../lib/reports/api-quality-report.ts";
 import { fetchApiQualityObservationsForServices } from "../../../../../../lib/providers/api-quality.ts";
+import {
+  formatProject360ReportAsMarkdown,
+} from "../../../../../../lib/project-360/report.ts";
+import type { Project360Report } from "../../../../../../lib/project-360/types.ts";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -218,6 +222,43 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       });
     }
     return NextResponse.json(trustReport, {
+      status: 200,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
+  if (job.workflow_type === "project_360") {
+    const reconciledStructured = jobView?.job.structuredResult as
+      | { workflowData?: { kind?: string; report?: Project360Report } | null }
+      | null
+      | undefined;
+    const storedStructured = job.structured_result as
+      | { workflowData?: { kind?: string; report?: Project360Report } | null }
+      | null;
+    const projectReport =
+      reconciledStructured?.workflowData?.report ??
+      storedStructured?.workflowData?.report ??
+      null;
+    if (!projectReport || projectReport.schema !== "veyra.project360.v1") {
+      return createMachineErrorResponse(
+        job.status === "failed" ? "report_generation_failed" : "report_not_ready",
+        job.status === "failed"
+          ? "Project 360 report generation failed safely."
+          : "Project 360 report is not ready yet.",
+        job.status === "failed" ? 422 : 400,
+      );
+    }
+    const accept = request.headers.get("accept") ?? "";
+    if (accept.toLowerCase().includes("text/markdown")) {
+      return new NextResponse(formatProject360ReportAsMarkdown(projectReport), {
+        status: 200,
+        headers: {
+          "Content-Type": "text/markdown; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+    return NextResponse.json(projectReport, {
       status: 200,
       headers: { "Cache-Control": "no-store" },
     });

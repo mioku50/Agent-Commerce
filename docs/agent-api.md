@@ -13,6 +13,10 @@ An external agent can:
 6. save trust watchlists and trigger repeat checks with deterministic deltas;
 7. read trust alerts and manage signed webhook subscriptions when explicitly authorized.
 
+Project 360 adds a fail-closed pre-quote flow: free discovery returns advisory
+candidates, the caller explicitly selects source IDs and modules, and only then
+does Veyra create an immutable paid quote.
+
 Production base URL:
 
 ```text
@@ -133,6 +137,71 @@ The final internal x402 step costs `0.0001 USDC` and binds the deterministic
 `reportHash` to the proof registry response hash. `verifiedOnArc` becomes true
 only when that exact report-hash proof is verified; unrelated service receipt
 proofs cannot upgrade the report badge.
+
+### Project 360 Due Diligence
+
+Project 360 orchestrates the applicable GitHub Due Diligence, Agent Trust,
+Treasury Health, Paid API Quality, and Arc Contract Analysis modules. Start with
+one public identifier. The first phase is free and never creates a quote, job,
+payment, or provider purchase:
+
+```ts
+const { discovery } = await client.discoverProject360(
+  { type: "github_repository", value: "circlefin/agent-commerce" },
+  { idempotencyKey: "p360-discovery-001" },
+);
+
+for (const candidate of discovery.candidates) {
+  console.log(candidate.type, candidate.value, candidate.provenance,
+    candidate.confidence, candidate.included); // always false
+}
+```
+
+Discovery scans only bounded public material. A GitHub candidate includes its
+repository file, line, safe excerpt, confidence, and reason. Secrets and unsafe
+URLs are discarded. An endpoint is normalized and revalidated with DNS-pinned
+SSRF protection before quote creation and again before execution.
+
+Create the quote only from candidate IDs the agent deliberately accepts. One
+source per module is allowed, and `revision` prevents a stale UI or agent from
+substituting a changed candidate set:
+
+```ts
+const selected = discovery.candidates.filter((candidate) =>
+  candidate.module === "github_due_diligence" ||
+  candidate.module === "treasury_health"
+);
+
+const quote = await client.createProject360Quote(
+  discovery.id,
+  {
+    revision: discovery.revision,
+    selectedCandidateIds: selected.map((candidate) => candidate.id),
+    modules: selected.map((candidate) => candidate.module),
+  },
+  { idempotencyKey: "p360-quote-001" },
+);
+
+console.log(quote.project360.lineItems);       // per-module USDC prices
+console.log(quote.totalUsdc);                  // aggregate immutable total
+console.log(quote.project360.expectedCoverage); // 1..5
+console.log(quote.project360.warnings);        // partial-data warnings
+```
+
+After checking those fields, launch `quote.quoteId` through the standard
+`createRun` endpoint. The final report always has exactly 15 sections. Missing
+sources are `not_provided`, unselected sources are `not_analyzed`, and failed
+modules are isolated. The score uses only successfully completed, scorable
+modules; the report separately publishes actual coverage and confidence. Only
+five successful modules produce `complete` coverage. A child failure produces
+`limited` coverage without erasing successful evidence.
+
+The aggregate canonical payload binds the confirmed source hashes, discovery
+snapshot, selection hash, module statuses, child report hashes, score formula,
+coverage, evidence matrix, and all 15 sections to one final report hash and Arc
+proof. Generic `POST /api/agent/v1/quotes` intentionally rejects
+`project_360`; use the discovery endpoints so payment cannot bypass explicit
+source confirmation.
 
 ### Continuous Trust Monitoring
 

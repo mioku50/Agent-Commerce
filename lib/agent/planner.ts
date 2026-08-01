@@ -11,10 +11,13 @@ const PURCHASE_ORDER = [
   "text-analyzer",
   "agent-trust-finalizer",
   "api-quality-finalizer",
+  "treasury-health-finalizer",
+  "arc-contract-analysis-finalizer",
   "pyth-market-price",
   "premium-quote",
   "market-snapshot",
   "agent-task",
+  "project-360-finalizer",
 ] as const;
 
 export type AgentPlanDecision = {
@@ -166,6 +169,18 @@ function serviceReasonForSelection(service: ApiService, task: string) {
     return "The final paid response binds the deterministic API Quality Report hash to its Arc proof.";
   }
 
+  if (service.slug === "treasury-health-finalizer") {
+    return "The selected module computes deterministic Arc Testnet treasury health evidence and its canonical child hash.";
+  }
+
+  if (service.slug === "arc-contract-analysis-finalizer") {
+    return "The selected module computes deterministic Arc Testnet contract transparency evidence and its canonical child hash.";
+  }
+
+  if (service.slug === "project-360-finalizer") {
+    return "The final paid response binds the confirmed sources, module states, child hashes, score, coverage, and fifteen report sections to one aggregate Arc proof.";
+  }
+
   if (service.slug === "agent-task") {
     return "The task justifies a higher-value multi-step agent task, and the remaining budget can cover it.";
   }
@@ -206,6 +221,15 @@ function shouldSelectLiveService(service: ApiService, task: string, budget: numb
   }
   if (service.slug === "api-quality-finalizer") {
     return matches(task, /\b(api quality|quality report|benchmark|quality score|telemetry|evaluate|paid api)\b/);
+  }
+  if (service.slug === "treasury-health-finalizer") {
+    return matches(task, /\b(treasury health|treasury|usdc flow|project 360)\b/);
+  }
+  if (service.slug === "arc-contract-analysis-finalizer") {
+    return matches(task, /\b(arc contract|contract analysis|contract transparency|project 360)\b/);
+  }
+  if (service.slug === "project-360-finalizer") {
+    return matches(task, /\b(project 360|project360|aggregate report)\b/);
   }
   if (service.slug === "agent-task") {
     return (

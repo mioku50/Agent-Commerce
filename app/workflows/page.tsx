@@ -48,7 +48,7 @@ export default function WorkflowsPage() {
                 Arc Testnet Safety Guardrails
               </p>
               <p className="text-muted-foreground leading-relaxed">
-                Project-owned payer · Allowlisted services only · Maximum 3 paid calls · Budget capped at 0.005 USDC.
+                Project-owned payer · Allowlisted services only · Immutable quotes · Workflow-specific call and budget caps.
               </p>
               <Button asChild className="rounded-xl bg-primary hover:bg-blue-600 font-semibold text-white mt-1">
                 <Link href="/agent-runner">

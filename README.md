@@ -64,6 +64,13 @@ AI agents use Veyra Agent API v1:
 discover → quote → idempotent run → poll → structured report
 ```
 
+Project 360 uses an explicit safety boundary:
+
+```text
+free source discovery → user-confirmed candidates → transparent module quote
+→ one confirmation → isolated module execution → aggregate Arc proof
+```
+
 The Veyra Agent API includes a typed dependency-free TypeScript SDK, normalized
 errors, strict credential isolation, an OpenAPI specification, and a runnable
 GitHub Due Diligence agent example.
@@ -80,6 +87,7 @@ GitHub Due Diligence agent example.
 | --- | --- | ---: |
 | GitHub Project Due Diligence | Repository-health verdict and evidence report | 0.002 USDC |
 | Veyra Agent Trust Report | Identity, code, execution, payment, service, and Arc trust signals | 0.0004 USDC |
+| Veyra Project 360 Due Diligence | Explicitly selected multi-source evidence, coverage-aware score, 15-section report, and one aggregate Arc proof | Per selected module |
 | Market Context Brief | Live provider-backed market snapshot | 0.0013 USDC |
 | Sentiment & Tone Report | Structured sentiment and tone signals | 0.0013 USDC |
 | Builder Update Summary | Delivery summary, signals, and next steps | 0.0013 USDC |
@@ -108,6 +116,7 @@ npm run github:analysis-test
 npm run monitoring:test
 npm run trust-profile:test
 npm run webhooks:test
+npm run project-360:test
 npm run machine:api-test
 npm run operations:test
 npm run build

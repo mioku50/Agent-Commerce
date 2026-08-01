@@ -189,13 +189,21 @@ export default async function Home() {
             Arc Testnet · Verifiable Execution
           </Badge>
           
-          <h1 className="max-w-4xl text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl leading-[1.1]">
+          <h1 className="text-xl font-extrabold uppercase tracking-[0.24em] text-white">
+            {BRAND.name}
+          </h1>
+          <p className="mt-2 text-sm font-medium text-cyan-300">{BRAND.tagline}</p>
+
+          <h2 className="mt-5 max-w-4xl text-4xl font-extrabold tracking-tight sm:text-6xl lg:text-7xl leading-[1.1]">
             <span className="gradient-text">Verified Workflows</span> <br className="hidden sm:inline" />
             <span className="text-muted-foreground font-semibold">for People & AI Agents</span>
-          </h1>
+          </h2>
 
           <p className="mt-6 max-w-2xl text-base font-normal leading-relaxed text-muted-foreground sm:text-lg">
-            Structured reports with verifiable execution, immutable result hashes, and Arc proofs.
+            {BRAND.description}
+          </p>
+          <p className="mt-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+            Built for humans and autonomous agents
           </p>
 
           <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
@@ -408,7 +416,7 @@ export default async function Home() {
               { title: "Select Workflow", desc: "Pick from curated due diligence, quality, or trust templates." },
               { title: "Provide Input", desc: "Submit repository URL, agent ID, wallet address, or API endpoints." },
               { title: "Immutable Quote", desc: "Receive transparent pricing before confirming payment." },
-              { title: "Arc Proof Report", desc: "Receive structured report backed by on-chain proofs." },
+              { title: "Arc Verification", desc: "Receive a structured report with onchain verification status." },
             ].map((step, index) => (
               <li key={step.title} className="rounded-2xl border border-white/10 bg-gradient-to-b from-white/5 to-transparent p-6 backdrop-blur-xl">
                 <span className="flex size-9 items-center justify-center rounded-xl bg-primary font-bold text-white text-sm shadow-[0_0_15px_rgba(61,126,255,0.4)]">

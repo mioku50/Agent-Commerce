@@ -89,6 +89,12 @@ for (const template of curatedHostedWorkflowTemplates) {
     assert.equal(formattedPrice, "From 0.0020 USDC");
   } else if (template.value === "agent_trust_report") {
     assert.equal(formattedPrice, "From 0.0004 USDC");
+  } else if (template.value === "project_360") {
+    assert.equal(formattedPrice, "From 0.0072 USDC");
+  } else if (template.value === "paid_api_quality") {
+    assert.equal(formattedPrice, "From 0.0020 USDC");
+  } else if (template.value === "treasury_health") {
+    assert.equal(formattedPrice, "From 0.0025 USDC");
   } else {
     assert.equal(formattedPrice, "From 0.0013 USDC");
   }

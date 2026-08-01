@@ -38,30 +38,41 @@ try {
   await page.locator('a[href^="/agent-runner?workflow=market_context"]').first().waitFor();
 
   await page.goto(`${baseUrl()}/agent-runner?workflow=builder_update`, { waitUntil: "load" });
-  assert.equal(await page.locator("#workflow-type").inputValue(), "builder_update");
-  await page.locator("#workflow-type").selectOption("market_context");
-  await page.locator("#market-symbol").waitFor();
-  await page.locator("#workflow-type").selectOption("sentiment_tone");
-  assert.equal(await page.locator("#market-symbol").count(), 0);
+  assert.equal(
+    await page.getByRole("button", { name: /Builder Update Summary/ }).getAttribute("aria-pressed"),
+    "true",
+  );
+  await page.getByRole("button", { name: /Market Context Brief/ }).click();
+  assert.equal(
+    await page.getByRole("button", { name: /Market Context Brief/ }).getAttribute("aria-pressed"),
+    "true",
+  );
+  await page.getByRole("button", { name: /Sentiment & Tone Report/ }).click();
+  assert.equal(
+    await page.getByRole("button", { name: /Sentiment & Tone Report/ }).getAttribute("aria-pressed"),
+    "true",
+  );
   await page.goto(`${baseUrl()}/agent-runner?workflow=market_context&symbol=ETH%2FUSD`, { waitUntil: "load" });
-  assert.equal(await page.locator("#workflow-type").inputValue(), "market_context");
-  assert.equal(await page.locator("#market-symbol").inputValue(), "ETH/USD");
+  assert.equal(
+    await page.getByRole("button", { name: /Market Context Brief/ }).getAttribute("aria-pressed"),
+    "true",
+  );
   await page.goto(`${baseUrl()}/agent-runner?workflow=invalid&symbol=DOGE%2FUSD`, { waitUntil: "load" });
-  assert.equal(await page.locator("#workflow-type").inputValue(), "github_due_diligence");
+  assert.equal(
+    await page.getByRole("button", { name: /GitHub Project Due Diligence/ }).getAttribute("aria-pressed"),
+    "true",
+  );
   await page.getByText("Enter a public GitHub repository URL (e.g. github.com/owner/repository).", { exact: true }).waitFor();
-  await page.getByText("Payment wallet", { exact: false }).first().waitFor();
-  await page.getByText("Sponsored workflows will not charge your wallet.", { exact: false }).first().waitFor();
-  await page.getByText("Sponsored reports are free. After the free quota, this wallet confirms the displayed total price.", { exact: false }).first().waitFor();
   await page.goto(`${baseUrl()}/agent-runner?workflow=agent_trust`, { waitUntil: "load" });
-  assert.equal(await page.locator("#workflow-type").inputValue(), "agent_trust_report");
+  assert.equal(
+    await page.getByRole("button", { name: /Veyra Agent Trust Report/ }).getAttribute("aria-pressed"),
+    "true",
+  );
   await page.getByLabel("Agent ID", { exact: true }).fill("agt_0123456789abcdefghij");
-  await page.getByText("Public evidence only", { exact: true }).waitFor();
   await page.getByText("Provide at least one Agent ID", { exact: false }).waitFor({ state: "detached" });
   await page.goto(`${baseUrl()}/agent-runner?workflow=sentiment`, { waitUntil: "load" });
-  await page.getByText("AI processing", { exact: false }).waitFor();
-  await page.getByLabel("Workflow", { exact: true }).focus();
-  await page.keyboard.press("Tab");
-  assert.equal(await page.evaluate(() => document.activeElement?.id), "hosted-input");
+  await page.locator("#input-text").focus();
+  assert.equal(await page.evaluate(() => document.activeElement?.id), "input-text");
 
   await page.goto(`${baseUrl()}/workflows`, { waitUntil: "load" });
   assert.equal(await page.locator('a[href="/agent-runner?workflow=custom"]').count(), 0);

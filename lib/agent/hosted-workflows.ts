@@ -12,6 +12,7 @@ import type {
 import {
   HOSTED_AGENT_MAX_TASK_LENGTH,
   HOSTED_AGENT_MAX_BUDGET_USDC,
+  PROJECT_360_MAX_BUDGET_USDC,
   validateHostedBudget,
 } from "./hosted-policy.ts";
 import { planAgentPurchases } from "./planner.ts";
@@ -45,6 +46,15 @@ import type {
   AgentTrustReport,
   AgentTrustReportInput,
 } from "../agent-trust/types.ts";
+import {
+  canonicalProject360Input,
+  normalizeProject360Input,
+} from "../project-360/input.ts";
+import {
+  PROJECT_360_MODULES,
+  type Project360Input,
+  type Project360Report,
+} from "../project-360/types.ts";
 
 export { HOSTED_WORKFLOW_TYPES, type HostedWorkflowType, API_QUALITY_FINALIZER_PRICE_USDC, TREASURY_HEALTH_FINALIZER_PRICE_USDC };
 
@@ -60,6 +70,7 @@ export type HostedWorkflowRequest = {
   marketSymbol: PythMarketSymbol | null;
   repository: GitHubRepositoryRef | null;
   agentTrustInput: AgentTrustReportInput | null;
+  project360Input: Project360Input | null;
   budgetUsdc: number;
 };
 
@@ -157,6 +168,7 @@ const WORKFLOW_LABELS: Record<HostedWorkflowType, string> = {
   market_context: "Market Context Brief",
   custom_task: "Custom Task",
   treasury_health: "Treasury Health Report",
+  project_360: `${BRAND.name} Project 360 Due Diligence`,
 };
 
 const OBVIOUS_SECRET_PATTERNS: Array<{ label: string; pattern: RegExp }> = [
@@ -285,18 +297,20 @@ export function validateHostedWorkflowRequest(input: {
   agentWallet?: unknown;
   contractAddress?: unknown;
   serviceEndpoint?: unknown;
+  project360Input?: unknown;
   marketSymbol?: unknown;
   budgetUsdc?: unknown;
 }): HostedWorkflowRequest {
   if (!isHostedWorkflowType(input.workflowType)) {
     throw new Error(
-      "Workflow type must be github_due_diligence, agent_trust_report, paid_api_quality, sentiment_tone, builder_update, market_context, custom_task, or treasury_health.",
+      "Workflow type must be github_due_diligence, agent_trust_report, paid_api_quality, treasury_health, project_360, sentiment_tone, builder_update, market_context, or custom_task.",
     );
   }
 
   const workflowType = input.workflowType;
   let repository: GitHubRepositoryRef | null = null;
   let agentTrustInput: AgentTrustReportInput | null = null;
+  let project360Input: Project360Input | null = null;
   let rawInputText = typeof input.inputText === "string" ? input.inputText : "";
 
   if (workflowType === "github_due_diligence") {
@@ -330,6 +344,36 @@ export function validateHostedWorkflowRequest(input: {
     repository = agentTrustInput.repositoryUrl
       ? parseGitHubRepositoryInput(agentTrustInput.repositoryUrl)
       : null;
+  } else if (workflowType === "project_360") {
+    project360Input = normalizeProject360Input(
+      input.project360Input ?? rawInputText,
+    );
+    rawInputText = canonicalProject360Input(project360Input);
+    const repositorySource = project360Input.sources.find(
+      (source) => source.type === "github_repository",
+    );
+    repository = repositorySource
+      ? parseGitHubRepositoryInput(repositorySource.canonicalValue)
+      : null;
+    const agentSource = project360Input.sources.find(
+      (source) => source.type === "agent_id",
+    );
+    const walletSource = project360Input.sources.find(
+      (source) => source.type === "project_wallet",
+    );
+    const contractSource = project360Input.sources.find(
+      (source) => source.type === "arc_contract",
+    );
+    const endpointSource = project360Input.sources.find(
+      (source) => source.type === "public_api_endpoint",
+    );
+    agentTrustInput = normalizeAgentTrustInput({
+      agentId: agentSource?.canonicalValue,
+      agentWallet: walletSource?.canonicalValue,
+      repositoryUrl: repositorySource?.canonicalValue,
+      contractAddress: contractSource?.canonicalValue,
+      serviceEndpoint: endpointSource?.canonicalValue,
+    });
   }
 
   const rawTask = normalizedText(input.task).replace(/\s+/g, " ");
@@ -340,6 +384,7 @@ export function validateHostedWorkflowRequest(input: {
     workflowType === "github_due_diligence" ||
     workflowType === "agent_trust_report" ||
     workflowType === "paid_api_quality" ||
+    workflowType === "project_360" ||
     workflowType === "sentiment_tone" ||
     workflowType === "builder_update" ||
     workflowType === "market_context";
@@ -381,11 +426,14 @@ export function validateHostedWorkflowRequest(input: {
     marketSymbol = normalizePythSymbol(input.marketSymbol);
   }
 
+  const maxBudgetUsdc = workflowType === "project_360"
+    ? PROJECT_360_MAX_BUDGET_USDC
+    : HOSTED_AGENT_MAX_BUDGET_USDC;
   const rawBudget =
     input.budgetUsdc === undefined ||
     input.budgetUsdc === null ||
     input.budgetUsdc === ""
-      ? HOSTED_AGENT_MAX_BUDGET_USDC
+      ? maxBudgetUsdc
       : input.budgetUsdc;
 
   return {
@@ -395,7 +443,8 @@ export function validateHostedWorkflowRequest(input: {
     marketSymbol,
     repository,
     agentTrustInput,
-    budgetUsdc: validateHostedBudget(rawBudget),
+    project360Input,
+    budgetUsdc: validateHostedBudget(rawBudget, maxBudgetUsdc),
   };
 }
 
@@ -411,6 +460,9 @@ export function defaultWorkflowTask(workflowType: HostedWorkflowType) {
   }
   if (workflowType === "treasury_health") {
     return "Analyze USDC transfer history and produce a deterministic Treasury Health Report.";
+  }
+  if (workflowType === "project_360") {
+    return "Run the explicitly selected Project 360 modules from the immutable confirmed-source snapshot and produce one aggregate report.";
   }
   if (workflowType === "sentiment_tone") {
     return "Analyze the submitted text and produce a sentiment and tone workflow report.";
@@ -451,6 +503,10 @@ export function effectiveWorkflowTask(input: HostedWorkflowRequest) {
   }
   if (input.workflowType === "treasury_health") {
     return `${input.task} Fetch on-chain USDC transfer events and calculate treasury health metrics.`;
+  }
+  if (input.workflowType === "project_360" && input.project360Input) {
+    const labels = input.project360Input.modules.join(", ");
+    return `${input.task} Selected modules: ${labels}. Run GitHub repository due diligence, agent trust, treasury health, paid API quality, and Arc contract analysis only when present in the immutable selection. Finalize Project 360 after child module hashes are fixed.`;
   }
   if (input.workflowType === "sentiment_tone") {
     return `${input.task} Use paid text analysis and concise research context for the report.`;
@@ -514,6 +570,23 @@ export function createHostedWorkflowPlan(input: {
       if (input.request.workflowType === "treasury_health") {
         return service.slug === "treasury-health-finalizer";
       }
+      if (
+        input.request.workflowType === "project_360" &&
+        input.request.project360Input
+      ) {
+        const modules = new Set(input.request.project360Input.modules);
+        return (
+          (modules.has("github_due_diligence") && [
+            "github-repository-intelligence",
+            "github-due-diligence-analysis",
+          ].includes(service.slug)) ||
+          (modules.has("agent_trust_report") && service.slug === "agent-trust-finalizer") ||
+          (modules.has("treasury_health") && service.slug === "treasury-health-finalizer") ||
+          (modules.has("paid_api_quality") && service.slug === "api-quality-finalizer") ||
+          (modules.has("arc_contract_analysis") && service.slug === "arc-contract-analysis-finalizer") ||
+          service.slug === "project-360-finalizer"
+        );
+      }
       return true;
     },
   );
@@ -526,7 +599,10 @@ export function createHostedWorkflowPlan(input: {
     policy: {
       allowOfficial: true,
       allowSellerCreated: false,
-      maxPaidCalls: HOSTED_WORKFLOW_MAX_PAID_CALLS,
+      maxPaidCalls:
+        input.request.workflowType === "project_360"
+          ? 7
+          : HOSTED_WORKFLOW_MAX_PAID_CALLS,
       maxServicePriceUsd: input.request.budgetUsdc,
     },
   });
@@ -544,7 +620,10 @@ export function createHostedWorkflowPlan(input: {
     ),
     estimatedSpendUsdc: plan.estimatedSpendUsdc,
     remainingBudgetUsdc: plan.remainingBudgetUsdc,
-    maxPaidCalls: HOSTED_WORKFLOW_MAX_PAID_CALLS,
+    maxPaidCalls:
+      input.request.workflowType === "project_360"
+        ? 7
+        : HOSTED_WORKFLOW_MAX_PAID_CALLS,
     budgetCapUsdc: input.request.budgetUsdc,
     aggregationMode: "deterministic_execution_optional_llm",
     aggregationLabel: "Deterministic paid execution with optional OpenRouter synthesis",
@@ -571,7 +650,18 @@ export function createHostedWorkflowPlan(input: {
               ),
             },
           }
-        : undefined,
+        : input.request.workflowType === "project_360" && input.request.project360Input
+          ? {
+              project360Input: input.request.project360Input,
+              requestedSources: Object.fromEntries(
+                input.request.project360Input.sources.map((source) => [source.type, true]),
+              ),
+              expectedCoverage: {
+                selected: input.request.project360Input.modules.length,
+                total: PROJECT_360_MODULES.length,
+              },
+            }
+          : undefined,
   };
 }
 
@@ -636,6 +726,12 @@ function deterministicWorkflowFindings(request: HostedWorkflowRequest) {
     return [
       `Target wallet address: ${request.inputText}.`,
       "Deterministic treasury health evaluation based on on-chain USDC transfer events.",
+    ];
+  }
+  if (request.workflowType === "project_360" && request.project360Input) {
+    return [
+      `Project 360 confirmed ${request.project360Input.sources.length} source(s) for ${request.project360Input.modules.length} selected module(s).`,
+      `Expected coverage: ${request.project360Input.modules.length} of ${PROJECT_360_MODULES.length} modules. Missing modules remain unknown rather than scoring as zero.`,
     ];
   }
   const words: string[] = text.toLowerCase().match(/[a-z0-9'-]+/g) ?? [];
@@ -712,6 +808,7 @@ export function buildHostedFinalReport(input: {
   workflowArtifacts?: BuyerAgentWorkflowArtifacts | null;
   explorerUrl: string;
   agentTrustReport?: AgentTrustReport | null;
+  project360Report?: Project360Report | null;
 }): HostedFinalReport {
   const { request } = input;
   const serviceResults = input.serviceResults.map(safeHostedServiceResult);
@@ -724,7 +821,14 @@ export function buildHostedFinalReport(input: {
   const assessment = executionResult.workflowArtifacts?.githubDueDiligenceAssessment ?? null;
 
   const workflowData =
-    request.workflowType === "agent_trust_report"
+    request.workflowType === "project_360"
+      ? input.project360Report
+        ? {
+            kind: "project_360_report",
+            report: input.project360Report,
+          }
+        : null
+      : request.workflowType === "agent_trust_report"
       ? input.agentTrustReport
         ? {
             kind: "agent_trust_report",

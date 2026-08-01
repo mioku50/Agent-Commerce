@@ -19,7 +19,9 @@
 import type { ServicePresentationMetadata } from "./presentation.ts";
 import { BRAND } from "../brand.ts";
 import {
+  ARC_CONTRACT_ANALYSIS_FINALIZER_PRICE_USDC,
   API_QUALITY_FINALIZER_PRICE_USDC,
+  PROJECT_360_FINALIZER_PRICE_USDC,
   TREASURY_HEALTH_FINALIZER_PRICE_USDC,
 } from "./constants.ts";
 
@@ -472,6 +474,96 @@ export const serviceRegistry = [
       "The hosted Veyra workflow purchases final response hash attestation for a Treasury Health Report on Arc Testnet.",
     agentReasoningHint:
       "Use as the final step of Treasury Health Report to finalize on-chain evaluation and bind canonical report hash to an Arc proof.",
+  },
+  {
+    id: "arc-contract-analysis-finalizer",
+    slug: "arc-contract-analysis-finalizer",
+    name: "Arc Contract Analysis Finalizer",
+    shortDescription:
+      "Internal deterministic Arc Testnet contract analysis and child report finalization.",
+    longDescription:
+      "Validates a server-built Arc Testnet contract transparency report and binds its canonical child hash to the Project 360 evidence matrix. It is not a security audit.",
+    category: "Verification",
+    method: "POST",
+    endpoint: "/api/provider/arc-contract-analysis-finalizer",
+    priceLabel: `${ARC_CONTRACT_ANALYSIS_FINALIZER_PRICE_USDC} USDC`,
+    priceUsd: Number(ARC_CONTRACT_ANALYSIS_FINALIZER_PRICE_USDC),
+    status: "live",
+    sourceType: "static",
+    isPaid: true,
+    internalOnly: true,
+    inputSchema: {
+      type: "object",
+      properties: { report: { type: "object" } },
+      required: ["report"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        report: { type: "object" },
+        canonicalHash: { type: "string" },
+        paidAmountUsdc: { type: "string" },
+      },
+      required: ["report", "canonicalHash", "paidAmountUsdc"],
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/provider/arc-contract-analysis-finalizer",
+      body: { report: { workflowType: "arc_contract_analysis" } },
+    },
+    exampleResponse: {
+      report: { workflowType: "arc_contract_analysis" },
+      paidAmountUsdc: ARC_CONTRACT_ANALYSIS_FINALIZER_PRICE_USDC,
+    },
+    exampleUseCase:
+      "Project 360 records deterministic Arc Testnet contract transparency evidence as a child module result.",
+    agentReasoningHint:
+      "Use only for a user-confirmed Arc Testnet contract source in Project 360.",
+  },
+  {
+    id: "project-360-finalizer",
+    slug: "project-360-finalizer",
+    name: "Project 360 Canonical Finalizer",
+    shortDescription:
+      "Final aggregate step that binds the selected sources, module states, child hashes, score and coverage to one Arc proof.",
+    longDescription:
+      "Validates the complete public-safe Project 360 payload, recomputes its deterministic score and coverage, and exposes its canonical response hash to the existing Arc proof pipeline.",
+    category: "Verification",
+    method: "POST",
+    endpoint: "/api/provider/project-360-finalizer",
+    priceLabel: `${PROJECT_360_FINALIZER_PRICE_USDC} USDC`,
+    priceUsd: Number(PROJECT_360_FINALIZER_PRICE_USDC),
+    status: "live",
+    sourceType: "static",
+    isPaid: true,
+    internalOnly: true,
+    inputSchema: {
+      type: "object",
+      properties: { report: { type: "object" } },
+      required: ["report"],
+    },
+    outputSchema: {
+      type: "object",
+      properties: {
+        report: { type: "object" },
+        canonicalHash: { type: "string" },
+        paidAmountUsdc: { type: "string" },
+      },
+      required: ["report", "canonicalHash", "paidAmountUsdc"],
+    },
+    exampleRequest: {
+      method: "POST",
+      endpoint: "/api/provider/project-360-finalizer",
+      body: { report: { schema: "veyra.project360.v1" } },
+    },
+    exampleResponse: {
+      report: { schema: "veyra.project360.v1", workflowType: "project_360" },
+      paidAmountUsdc: PROJECT_360_FINALIZER_PRICE_USDC,
+    },
+    exampleUseCase:
+      "Project 360 publishes one canonical aggregate report proof after all selected modules settle.",
+    agentReasoningHint:
+      "Always use as the final Project 360 paid step; never run before module child hashes are fixed.",
   },
 
   {

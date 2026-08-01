@@ -105,12 +105,15 @@ const openApi = JSON.parse(
 assert.equal(openApi.info?.title, BRAND.agentApi);
 assert.equal(
   openApi.info?.description,
-  "Machine API for verified Veyra workflows, continuous trust monitoring, alerts, signed webhooks, and public trust badges.",
+  "Machine API for verified Veyra workflows, Project 360 free discovery and explicit quoting, continuous trust monitoring, alerts, signed webhooks, and public trust badges.",
 );
-assert.equal(openApi.info?.version, "1.4.0");
+assert.equal(openApi.info?.version, "1.5.0");
 assert.equal(openApi.servers?.[0]?.url, "https://agent-commerce-six.vercel.app");
 for (const path of [
   "/api/agent/v1/workflows",
+  "/api/agent/v1/project-360/discoveries",
+  "/api/agent/v1/project-360/discoveries/{discoveryId}",
+  "/api/agent/v1/project-360/discoveries/{discoveryId}/quote",
   "/api/agent/v1/quotes",
   "/api/agent/v1/runs",
   "/api/agent/v1/runs/{runId}",

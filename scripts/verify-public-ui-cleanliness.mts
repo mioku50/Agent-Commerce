@@ -16,7 +16,6 @@ const FORBIDDEN_PATTERNS = [
   /\bworkflow payer\b/i,
   /\bprovider cost\b/i,
   /\bplatform fee\b/i,
-  /\btreasury\b/i,
   /\bSHA-256\b/i,
   /\bidempotency\b/i,
   /\bpolicy_denied\b/i,
@@ -77,8 +76,8 @@ async function verifyNavigationLinks(page: Page, path: string) {
 
   assert.deepEqual(
     navLabels,
-    ["Home", "New Report", "Reports"],
-    `Navigation links on ${path} do not match expected ["Home", "New Report", "Reports"]. Found: ${JSON.stringify(navLabels)}`
+    ["Home", "New Report", "Monitoring", "Reports"],
+    `Navigation links on ${path} do not match the current public navigation. Found: ${JSON.stringify(navLabels)}`
   );
 }
 

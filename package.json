@@ -40,6 +40,8 @@
     "api-quality:test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/api-quality-tests.mts",
     "api-quality:db-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-api-quality-db.mts",
     "treasury:test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/treasury-health-tests.mts",
+    "project-360:test": "node --experimental-transform-types --no-warnings scripts/project-360-tests.mts",
+    "project-360:production-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-project-360-schema.mts",
     "monitoring:test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/monitoring-tests.mts",
     "trust-profile:test": "node --experimental-transform-types --no-warnings scripts/public-trust-profile-tests.mts",
     "webhooks:test": "node --experimental-transform-types --no-warnings scripts/webhook-tests.mts && node --experimental-transform-types --no-warnings scripts/trust-badge-tests.mts",

@@ -6,6 +6,8 @@ The SDK covers workflow discovery, immutable quotes, idempotent run creation,
 polling, structured reports, Markdown export, normalized errors, and Arc proof
 metadata. It also covers trust watchlists, public status, alerts, and signed
 webhook management when the credential has explicit trust automation scopes.
+Project 360 uses a separate free discovery phase so detected identifiers can
+never enter paid modules without an explicit selection.
 It works in Node.js 20+ and runtimes that provide `fetch`,
 `AbortController`, and `crypto.randomUUID`.
 
@@ -23,6 +25,35 @@ const { report } = await client.executeWorkflow({
 });
 
 console.log(report.verdict, report.verification);
+```
+
+Project 360 discovery is free. Every candidate is returned with
+`included: false`; your agent must inspect provenance and explicitly pass the
+selected candidate IDs and modules into the immutable quote:
+
+```ts
+const { discovery } = await client.discoverProject360(
+  { type: "github_repository", value: "circlefin/agent-commerce" },
+  { idempotencyKey: "project-360-discovery-001" },
+);
+
+const github = discovery.candidates.find(
+  (candidate) => candidate.module === "github_due_diligence",
+);
+if (!github) throw new Error("No validated GitHub source was discovered");
+
+const quote = await client.createProject360Quote(
+  discovery.id,
+  {
+    revision: discovery.revision,
+    selectedCandidateIds: [github.id],
+    modules: [github.module],
+  },
+  { idempotencyKey: "project-360-quote-001" },
+);
+
+// Verify quote.project360.lineItems, expectedCoverage, warnings, and totalUsdc
+// before calling createRun({ quoteId: quote.quoteId }).
 ```
 
 Agent Trust Report uses a structured public-identifier input and the same

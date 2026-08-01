@@ -45,6 +45,8 @@ import {
 import type { QualityStatus } from "@/lib/providers/api-quality-types";
 import type { HostedJobView } from "./types";
 import { AgentTrustReportView } from "./agent-trust-report-view";
+import { Project360ReportView } from "./project-360-report-view";
+import type { Project360Report } from "@/lib/project-360/types";
 
 const DEFAULT_CONSUMER_STAGES = [
   { id: "preparing", label: "Preparing report", matches: ["queued", "planning"] },
@@ -334,6 +336,10 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
   const isGithubWorkflow = view.job.workflowType === "github_due_diligence";
   const isAgentTrustWorkflow = view.job.workflowType === "agent_trust_report";
   const isApiQualityWorkflow = view.job.workflowType === "paid_api_quality";
+  const isProject360Workflow = view.job.workflowType === "project_360";
+  const project360Report = isProject360Workflow
+    ? ((view.job.structuredResult?.workflowData as { report?: Project360Report } | null)?.report ?? null)
+    : null;
   const isSellerWorkflow = String(view.job.workflowType).startsWith("seller_");
   const consumerStages = isGithubWorkflow ? GITHUB_CONSUMER_STAGES : DEFAULT_CONSUMER_STAGES;
   const currentIndex = DEFAULT_CONSUMER_STAGES.findIndex((stage) =>
@@ -674,7 +680,9 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
         )}
 
         <div className="grid content-start gap-6">
-          {isApiQualityWorkflow && apiQualityReport ? (
+          {isProject360Workflow && project360Report ? (
+            <Project360ReportView report={project360Report} />
+          ) : isApiQualityWorkflow && apiQualityReport ? (
             <Card className="rounded-lg">
               <CardContent className="p-6 grid gap-6">
                 {/* 1. Header & Actions */}
