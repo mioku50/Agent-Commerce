@@ -4,7 +4,11 @@ import {
   PROJECT_360_MAX_BUDGET_USDC,
   validateIdempotencyKey,
 } from "@/lib/agent/hosted-policy";
-import { getHostedAgentJob, runHostedAgentJob } from "@/lib/agent/hosted-jobs";
+import {
+  getHostedAgentJob,
+  recoverHostedProject360AggregateProof,
+  runHostedAgentJob,
+} from "@/lib/agent/hosted-jobs";
 import { validateHostedWorkflowRequest } from "@/lib/agent/hosted-workflows";
 import {
   confirmHostedWorkflowQuote,
@@ -112,6 +116,17 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
           await runHostedAgentJob(result.jobId!, stored.canonicalInput);
         } catch {
           // Job state and a sanitized failure are persisted by the hosted runner.
+        }
+      });
+    } else if (
+      job?.status === "completed" &&
+      job.workflow_type === "project_360"
+    ) {
+      after(async () => {
+        try {
+          await recoverHostedProject360AggregateProof(result.jobId!);
+        } catch {
+          // The persisted proof event remains recoverable on a later replay.
         }
       });
     }

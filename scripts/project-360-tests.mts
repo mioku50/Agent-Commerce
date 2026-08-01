@@ -305,5 +305,15 @@ assert.match(confirmationRoute, /amountUsdc/);
 assert.match(confirmationRoute, /getHostedWorkflowUserPaymentForJob/);
 assert.match(confirmationRoute, /payment\.transactionHash\.toLowerCase\(\) === transactionHash\.toLowerCase\(\)/);
 assert.match(confirmationRoute, /idempotencyHash = stored\.quote\.idempotency_hash/);
+assert.match(confirmationRoute, /recoverHostedProject360AggregateProof/);
+assert.match(checkoutSource, /HostedCheckoutInfrastructureStage/);
+
+const hostedJobsSource = readFileSync(
+  new URL("../lib/agent/hosted-jobs.ts", import.meta.url),
+  "utf8",
+);
+assert.match(hostedJobsSource, /recoverHostedProject360AggregateProof/);
+assert.match(hostedJobsSource, /workflowData\.report!\.verification\.reportHash/);
+assert.match(hostedJobsSource, /publishStoredProof/);
 
 console.log("Project 360 tests passed.");

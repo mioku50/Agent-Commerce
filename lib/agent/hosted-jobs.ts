@@ -27,7 +27,10 @@ import {
 } from "./hosted-workflows.ts";
 import {
   configuredExplorerUrl,
+  onchainPaymentEventColumns,
   onchainProofMetadataFromRow,
+  publishStoredProof,
+  type OnchainPaymentEventRecord,
 } from "../commerce/onchain-proof.ts";
 import { serviceRegistry } from "../services/registry.ts";
 import { getServerSupabaseConfig } from "../supabase/server-env.ts";
@@ -794,6 +797,60 @@ export async function recoverAndRunHostedAgentJob(jobId: string, inputText: stri
   return {
     recovered: true as const,
     execution: await runHostedAgentJob(jobId, inputText),
+  };
+}
+
+export async function recoverHostedProject360AggregateProof(jobId: string) {
+  const job = await getHostedAgentJob(jobId);
+  const workflowData = job?.structured_result?.workflowData as
+    | { kind?: string; report?: Project360Report }
+    | null
+    | undefined;
+  if (
+    !job ||
+    job.status !== "completed" ||
+    job.workflow_type !== "project_360" ||
+    workflowData?.kind !== "project_360_report" ||
+    !workflowData.report ||
+    workflowData.report.verification.status === "verified"
+  ) {
+    return { recovered: false as const, reason: "not_recoverable" as const };
+  }
+  const eventIds = Array.isArray(job.raw?.paymentEventIds)
+    ? job.raw.paymentEventIds.filter(
+        (value): value is string =>
+          typeof value === "string" &&
+          /^[0-9a-f-]{36}$/i.test(value),
+      )
+    : [];
+  if (eventIds.length === 0) {
+    return { recovered: false as const, reason: "proof_event_missing" as const };
+  }
+  const { data, error } = await getHostedClient()
+    .from("payment_events")
+    .select(onchainPaymentEventColumns)
+    .in("id", eventIds)
+    .in("onchain_status", ["pending", "failed"]);
+  if (error) throw new Error("Unable to load the aggregate Project 360 proof event.");
+  const aggregate = ((data ?? []) as unknown as OnchainPaymentEventRecord[]).find(
+    (row) =>
+      String(row.response_hash ?? "").toLowerCase() ===
+      workflowData.report!.verification.reportHash.toLowerCase(),
+  );
+  if (!aggregate) {
+    return { recovered: false as const, reason: "proof_event_missing" as const };
+  }
+  const result = await publishStoredProof({
+    supabase: getHostedClient(),
+    record: aggregate as unknown as OnchainPaymentEventRecord,
+  });
+  if (result.status === "verified") {
+    await getHostedAgentJobView(jobId);
+  }
+  return {
+    recovered: result.status === "verified",
+    status: result.status,
+    transactionHash: result.transactionHash,
   };
 }
 
