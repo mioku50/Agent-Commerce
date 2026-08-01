@@ -328,5 +328,6 @@ assert.match(hostedJobsSource, /recoverHostedProject360AggregateProof/);
 assert.match(hostedJobsSource, /workflowData\.report!\.verification\.reportHash/);
 assert.match(hostedJobsSource, /publishStoredProof/);
 assert.match(hostedJobsSource, /delete safeProof\.paymentEventId/);
+assert.match(hostedJobsSource, /delete safeResult\.paymentEventId/);
 
 console.log("Project 360 tests passed.");

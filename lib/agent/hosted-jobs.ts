@@ -1170,6 +1170,21 @@ export function redactPublicSellerAccounting<T extends {
       const { metadata: _metadata, ...publicPlanner } = planner;
       safeJob.plannerSnapshot = publicPlanner;
     }
+    const structuredResult = safeJob.structuredResult as
+      | (Record<string, unknown> & { apiResults?: unknown[] })
+      | null
+      | undefined;
+    if (structuredResult && Array.isArray(structuredResult.apiResults)) {
+      safeJob.structuredResult = {
+        ...structuredResult,
+        apiResults: structuredResult.apiResults.map((result) => {
+          if (!result || typeof result !== "object") return result;
+          const safeResult = { ...(result as Record<string, unknown>) };
+          delete safeResult.paymentEventId;
+          return safeResult;
+        }),
+      };
+    }
     safeJob.project360Modules = selectedProject360Modules;
     for (const key of [
       "requesterWallet",
