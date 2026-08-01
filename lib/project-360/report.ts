@@ -535,7 +535,15 @@ export function validateProject360ReportPayload(value: unknown): value is Projec
     expectedScore.value !== report.score.value ||
     expectedScore.confidencePercent !== report.score.confidencePercent ||
     expectedScore.confidence !== report.score.confidence ||
-    JSON.stringify(expectedScore.breakdown) !== JSON.stringify(report.score.breakdown)
+    expectedScore.breakdown.length !== report.score.breakdown.length ||
+    expectedScore.breakdown.some((expected, index) => {
+      const actual = report.score.breakdown[index];
+      return !actual ||
+        actual.module !== expected.module ||
+        actual.score !== expected.score ||
+        actual.weight !== expected.weight ||
+        actual.confidence !== expected.confidence;
+    })
   ) return false;
   const completed = report.modules.filter((result) => result.status === "completed").length;
   const selected = report.modules.filter(

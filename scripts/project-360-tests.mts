@@ -225,6 +225,18 @@ const limitedReport = buildProject360Report({
 assert.equal(limitedReport.coverage.status, "limited");
 assert.equal(limitedReport.coverage.label, "Completed with limited coverage");
 assert.equal(limitedReport.score.value, 80);
+assert.equal(validateProject360ReportPayload({
+  ...partialReport,
+  score: {
+    ...partialReport.score,
+    breakdown: partialReport.score.breakdown.map((item) => ({
+      score: item.score,
+      module: item.module,
+      weight: item.weight,
+      confidence: item.confidence,
+    })),
+  },
+}), true, "Persisted JSONB key ordering must not invalidate a canonical report.");
 
 const migration = readFileSync(
   new URL("../supabase/migrations/20260801120000_p42_project_360.sql", import.meta.url),
