@@ -36,6 +36,30 @@ import {
   hostedWorkflowTemplates,
 } from "../lib/agent/workflow-templates.ts";
 import { BRAND } from "../lib/brand.ts";
+import { ARC_TESTNET_CHAIN_ID_HEX } from "../lib/wallet/arc.ts";
+import { requestArcTestnet } from "../lib/wallet/request-arc-testnet.ts";
+
+const switchCalls: Array<{ method: string; params?: unknown[] | Record<string, unknown> }> = [];
+let firstSwitch = true;
+await requestArcTestnet({
+  async request(args) {
+    switchCalls.push(args);
+    if (args.method === "wallet_switchEthereumChain" && firstSwitch) {
+      firstSwitch = false;
+      throw Object.assign(new Error("Unknown chain"), { code: 4902 });
+    }
+    return null;
+  },
+});
+assert.deepEqual(switchCalls.map(({ method }) => method), [
+  "wallet_switchEthereumChain",
+  "wallet_addEthereumChain",
+  "wallet_switchEthereumChain",
+]);
+assert.equal(
+  (switchCalls[1].params as Array<{ chainId: string }>)[0].chainId,
+  ARC_TESTNET_CHAIN_ID_HEX,
+);
 
 const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 assert(readme.split(/\r?\n/).length <= 220, "README must remain under 220 lines");

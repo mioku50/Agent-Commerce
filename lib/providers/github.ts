@@ -382,30 +382,34 @@ async function fetchGitHubDiscoveryFilesFromRaw(
   for (const branch of ["main", "master"]) {
     const files = await Promise.all(
       DISCOVERY_FALLBACK_PATHS.slice(0, maxFiles).map(async (path) => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 4_000);
-        try {
-          const encodedPath = path.split("/").map(encodeURIComponent).join("/");
-          const response = await fetch(
-            `${GITHUB_RAW_BASE}/${encodedRepository}/${encodeURIComponent(branch)}/${encodedPath}`,
-            {
+        const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+        const urls = [
+          `${GITHUB_RAW_BASE}/${encodedRepository}/${encodeURIComponent(branch)}/${encodedPath}`,
+          `https://cdn.jsdelivr.net/gh/${encodedRepository}@${encodeURIComponent(branch)}/${encodedPath}`,
+        ];
+        for (const url of urls) {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 4_000);
+          try {
+            const response = await fetch(url, {
               headers: {
                 Accept: "text/plain",
                 Range: `bytes=0-${maxFileBytes - 1}`,
                 "User-Agent": "Veyra-Project-360-Discovery",
               },
               signal: controller.signal,
-            },
-          );
-          if (!response.ok) return null;
-          const content = await boundedResponseText(response, maxFileBytes);
-          const sizeBytes = Buffer.byteLength(content, "utf8");
-          return sizeBytes > 0 ? { path, content, sizeBytes } : null;
-        } catch {
-          return null;
-        } finally {
-          clearTimeout(timer);
+            });
+            if (!response.ok) continue;
+            const content = await boundedResponseText(response, maxFileBytes);
+            const sizeBytes = Buffer.byteLength(content, "utf8");
+            if (sizeBytes > 0) return { path, content, sizeBytes };
+          } catch {
+            // The next fixed public-content host is the bounded fallback.
+          } finally {
+            clearTimeout(timer);
+          }
         }
+        return null;
       }),
     );
     const bounded: GitHubDiscoveryFile[] = [];

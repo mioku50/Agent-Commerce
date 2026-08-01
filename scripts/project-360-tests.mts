@@ -45,6 +45,7 @@ const detected = detectProject360CandidatesFromGitHubFiles("acme/project", [
       "Arc contract: 0x1111111111111111111111111111111111111111",
       "Veyra Agent ID: agt_1234567890abcdefghij",
       "Related repository: https://github.com/acme/related/tree/main",
+      "Maintainer profile: https://github.com/acme",
       "API_KEY=sk-or-v1-this-line-must-never-be-stored",
     ].join("\n"),
   },

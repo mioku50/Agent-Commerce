@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { getAddress, isAddress } from "viem";
-import { parseGitHubRepositoryInput } from "../providers/github-repository-ref.ts";
+import {
+  InvalidGitHubRepositoryError,
+  parseGitHubRepositoryInput,
+} from "../providers/github-repository-ref.ts";
 import { validateUrlSsrf } from "../seller/ssrf.ts";
 import { BRAND } from "../brand.ts";
 import {
@@ -101,7 +104,15 @@ export function normalizeProject360Source(input: {
   const value = requiredSafeText(input.value);
   let canonicalValue: string;
   if (input.type === "github_repository") {
-    canonicalValue = parseGitHubRepositoryInput(value).canonicalUrl;
+    try {
+      canonicalValue = parseGitHubRepositoryInput(value).canonicalUrl;
+    } catch (error) {
+      if (!(error instanceof InvalidGitHubRepositoryError)) throw error;
+      throw new Project360InputError(
+        "Enter a valid public GitHub repository.",
+        "project_source_invalid",
+      );
+    }
   } else if (input.type === "agent_id") {
     if (!/^agt_[a-z0-9]{20}$/.test(value)) {
       throw new Project360InputError(

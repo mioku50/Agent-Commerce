@@ -34,19 +34,17 @@ import {
 } from "viem";
 import {
   ARC_TESTNET_CHAIN_ID,
-  ARC_TESTNET_CHAIN_ID_HEX,
-  ARC_TESTNET_EXPLORER_URL,
   ARC_TESTNET_RPC_URL,
   ARC_TESTNET_USDC_ADDRESS,
   ARC_TESTNET_USDC_DECIMALS,
   arcTestnetChain,
 } from "@/lib/wallet/arc";
+import {
+  requestArcTestnet,
+  type ArcNetworkProvider,
+} from "@/lib/wallet/request-arc-testnet";
 
-export type EthereumProvider = {
-  request<T = unknown>(args: {
-    method: string;
-    params?: unknown[] | Record<string, unknown>;
-  }): Promise<T>;
+export type EthereumProvider = ArcNetworkProvider & {
   on?(
     event: "accountsChanged" | "chainChanged",
     listener: (...args: unknown[]) => void,
@@ -220,10 +218,25 @@ export function useArcWallet() {
       const connectedChainId = await provider.request<string>({
         method: "eth_chainId",
       });
+      const nextAddress = accounts[0] ?? null;
+      const nextChainId = parseChainId(connectedChainId);
 
-      setAddress(accounts[0] ?? null);
-      setChainId(parseChainId(connectedChainId));
-      setError(null);
+      setAddress(nextAddress);
+      setChainId(nextChainId);
+      if (nextAddress && nextChainId !== ARC_TESTNET_CHAIN_ID) {
+        setSwitching(true);
+        try {
+          await requestArcTestnet(provider);
+          setChainId(ARC_TESTNET_CHAIN_ID);
+          setError(null);
+        } catch (caught) {
+          setError(`Wallet connected. Switch to Arc Testnet to continue: ${getErrorMessage(caught)}`);
+        } finally {
+          setSwitching(false);
+        }
+      } else {
+        setError(null);
+      }
     } catch (caught) {
       setError(getErrorMessage(caught));
     } finally {
@@ -240,37 +253,7 @@ export function useArcWallet() {
 
     setSwitching(true);
     try {
-      try {
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: ARC_TESTNET_CHAIN_ID_HEX }],
-        });
-      } catch (caught) {
-        if (!isProviderError(caught, 4902)) throw caught;
-
-        await provider.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: ARC_TESTNET_CHAIN_ID_HEX,
-              chainName: "Arc Testnet",
-              nativeCurrency: {
-                name: "USDC",
-                symbol: "USDC",
-                decimals: 18,
-              },
-              rpcUrls: [ARC_TESTNET_RPC_URL],
-              blockExplorerUrls: [ARC_TESTNET_EXPLORER_URL],
-            },
-          ],
-        });
-
-        await provider.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: ARC_TESTNET_CHAIN_ID_HEX }],
-        });
-      }
-
+      await requestArcTestnet(provider);
       setChainId(ARC_TESTNET_CHAIN_ID);
       setError(null);
     } catch (caught) {
@@ -438,4 +421,3 @@ export function useArcWallet() {
     setError,
   };
 }
-
