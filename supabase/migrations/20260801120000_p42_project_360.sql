@@ -1,6 +1,8 @@
 -- P4.2: free Project 360 discovery, immutable source selection, module runs,
 -- and aggregate report binding. Direct access is service-role only.
 
+begin;
+
 alter table public.hosted_workflow_quotes
   drop constraint if exists hosted_workflow_quotes_workflow_type_check;
 alter table public.hosted_workflow_quotes
@@ -153,7 +155,12 @@ create table if not exists public.project_360_quotes (
   expected_coverage_count integer not null check (expected_coverage_count between 1 and 5),
   warnings jsonb not null default '[]'::jsonb
     check (jsonb_typeof(warnings) = 'array'),
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now(),
+  constraint project_360_quotes_selection_count_check check (
+    jsonb_array_length(selected_candidate_ids) between 1 and 5
+    and jsonb_array_length(confirmed_sources) = jsonb_array_length(selected_candidate_ids)
+    and expected_coverage_count = jsonb_array_length(selected_candidate_ids)
+  )
 );
 
 create index if not exists project_360_quotes_discovery_idx
@@ -222,17 +229,275 @@ create trigger set_project_360_module_runs_updated_at
   before update on public.project_360_module_runs
   for each row execute function public.set_project_360_updated_at();
 
+create or replace function public.validate_project_360_discovery_tenant()
+returns trigger
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  v_credential_owner text;
+begin
+  if new.machine_credential_id is null then
+    return new;
+  end if;
+
+  select credential.owner_wallet
+    into v_credential_owner
+    from public.byoa_agent_credentials credential
+   where credential.id = new.machine_credential_id;
+
+  if v_credential_owner is null
+     or lower(v_credential_owner) <> lower(new.owner_wallet) then
+    raise exception 'project 360 discovery tenant mismatch';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists validate_project_360_discovery_tenant
+  on public.project_360_discoveries;
+create trigger validate_project_360_discovery_tenant
+  before insert or update of owner_wallet, machine_credential_id
+  on public.project_360_discoveries
+  for each row execute function public.validate_project_360_discovery_tenant();
+
+create or replace function public.validate_project_360_quote_binding()
+returns trigger
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  v_quote public.hosted_workflow_quotes%rowtype;
+  v_discovery public.project_360_discoveries%rowtype;
+  v_selected_count integer;
+  v_confirmed_count integer;
+begin
+  select * into v_quote
+    from public.hosted_workflow_quotes
+   where id = new.quote_id;
+  select * into v_discovery
+    from public.project_360_discoveries
+   where id = new.discovery_id;
+
+  if v_quote.id is null
+     or v_discovery.id is null
+     or v_quote.workflow_type <> 'project_360'
+     or lower(coalesce(v_quote.owner_wallet, v_quote.requester_wallet)) <>
+        lower(v_discovery.owner_wallet)
+     or coalesce(v_quote.machine_credential_id, '') <>
+        coalesce(v_discovery.machine_credential_id::text, '') then
+    raise exception 'project 360 quote tenant mismatch';
+  end if;
+
+  if v_discovery.status <> 'ready'
+     or new.discovery_revision <> v_discovery.revision
+     or new.candidates_hash <> v_discovery.candidates_hash then
+    raise exception 'project 360 discovery snapshot mismatch';
+  end if;
+
+  select count(*) into v_selected_count
+    from public.project_360_candidates candidate
+   where candidate.discovery_id = new.discovery_id
+     and candidate.validation_status = 'valid'
+     and candidate.public_id in (
+       select jsonb_array_elements_text(new.selected_candidate_ids)
+     );
+
+  if v_selected_count <> jsonb_array_length(new.selected_candidate_ids) then
+    raise exception 'project 360 selected candidate mismatch';
+  end if;
+
+  select count(*) into v_confirmed_count
+    from jsonb_array_elements(new.confirmed_sources) source
+    join public.project_360_candidates candidate
+      on candidate.discovery_id = new.discovery_id
+     and candidate.public_id = source ->> 'candidateId'
+     and candidate.source_type = source ->> 'type'
+     and candidate.module = source ->> 'module'
+     and candidate.canonical_value = source ->> 'canonicalValue'
+     and candidate.value_hash = source ->> 'valueHash';
+
+  if v_confirmed_count <> jsonb_array_length(new.confirmed_sources) then
+    raise exception 'project 360 confirmed source mismatch';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists validate_project_360_quote_binding
+  on public.project_360_quotes;
+create trigger validate_project_360_quote_binding
+  before insert on public.project_360_quotes
+  for each row execute function public.validate_project_360_quote_binding();
+
+create or replace function public.reject_project_360_quote_mutation()
+returns trigger
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+begin
+  raise exception 'project 360 quote snapshots are immutable';
+end;
+$$;
+
+drop trigger if exists reject_project_360_quote_mutation
+  on public.project_360_quotes;
+create trigger reject_project_360_quote_mutation
+  before update or delete on public.project_360_quotes
+  for each row execute function public.reject_project_360_quote_mutation();
+
+create or replace function public.reject_quoted_project_360_candidate_mutation()
+returns trigger
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  v_discovery_id uuid := case when tg_op = 'DELETE' then old.discovery_id else new.discovery_id end;
+begin
+  if exists (
+    select 1
+      from public.project_360_quotes quote_snapshot
+     where quote_snapshot.discovery_id = v_discovery_id
+  ) then
+    raise exception 'quoted project 360 candidates are immutable';
+  end if;
+
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists reject_quoted_project_360_candidate_mutation
+  on public.project_360_candidates;
+create trigger reject_quoted_project_360_candidate_mutation
+  before insert or update or delete on public.project_360_candidates
+  for each row execute function public.reject_quoted_project_360_candidate_mutation();
+
+create or replace function public.reject_quoted_project_360_discovery_mutation()
+returns trigger
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+begin
+  if exists (
+    select 1
+      from public.project_360_quotes quote_snapshot
+     where quote_snapshot.discovery_id = old.id
+  ) and (
+    new.owner_wallet is distinct from old.owner_wallet
+    or new.machine_credential_id is distinct from old.machine_credential_id
+    or new.revision is distinct from old.revision
+    or new.primary_type is distinct from old.primary_type
+    or new.primary_value is distinct from old.primary_value
+    or new.primary_value_hash is distinct from old.primary_value_hash
+    or new.candidates_hash is distinct from old.candidates_hash
+  ) then
+    raise exception 'quoted project 360 discovery snapshots are immutable';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists reject_quoted_project_360_discovery_mutation
+  on public.project_360_discoveries;
+create trigger reject_quoted_project_360_discovery_mutation
+  before update on public.project_360_discoveries
+  for each row execute function public.reject_quoted_project_360_discovery_mutation();
+
+create or replace function public.validate_project_360_module_run_tenant()
+returns trigger
+language plpgsql
+security invoker
+set search_path = pg_catalog, public
+as $$
+declare
+  v_job public.hosted_agent_jobs%rowtype;
+  v_discovery public.project_360_discoveries%rowtype;
+begin
+  select job.* into v_job
+    from public.hosted_agent_jobs job
+    join public.project_360_quotes quote_snapshot
+      on quote_snapshot.quote_id = job.workflow_quote_id
+   where job.id = new.job_id;
+
+  select discovery.* into v_discovery
+    from public.project_360_discoveries discovery
+    join public.project_360_quotes quote_snapshot
+      on quote_snapshot.discovery_id = discovery.id
+    join public.hosted_agent_jobs job
+      on job.workflow_quote_id = quote_snapshot.quote_id
+   where job.id = new.job_id;
+
+  if v_job.id is null
+     or v_discovery.id is null
+     or v_job.workflow_type <> 'project_360'
+     or v_job.requester_wallet is null
+     or lower(v_job.requester_wallet) <> lower(v_discovery.owner_wallet)
+     or coalesce(v_job.machine_credential_id, '') <>
+        coalesce(v_discovery.machine_credential_id::text, '') then
+    raise exception 'project 360 module run tenant mismatch';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists validate_project_360_module_run_tenant
+  on public.project_360_module_runs;
+create trigger validate_project_360_module_run_tenant
+  before insert or update of job_id on public.project_360_module_runs
+  for each row execute function public.validate_project_360_module_run_tenant();
+
 alter table public.project_360_discoveries enable row level security;
 alter table public.project_360_candidates enable row level security;
 alter table public.project_360_quotes enable row level security;
 alter table public.project_360_module_runs enable row level security;
 
-revoke all on table public.project_360_discoveries from anon, authenticated;
-revoke all on table public.project_360_candidates from anon, authenticated;
-revoke all on table public.project_360_quotes from anon, authenticated;
-revoke all on table public.project_360_module_runs from anon, authenticated;
+revoke all on table public.project_360_discoveries from public, anon, authenticated;
+revoke all on table public.project_360_candidates from public, anon, authenticated;
+revoke all on table public.project_360_quotes from public, anon, authenticated;
+revoke all on table public.project_360_module_runs from public, anon, authenticated;
+
+revoke all on function public.set_project_360_updated_at()
+  from public, anon, authenticated;
+revoke all on function public.validate_project_360_discovery_tenant()
+  from public, anon, authenticated;
+revoke all on function public.validate_project_360_quote_binding()
+  from public, anon, authenticated;
+revoke all on function public.reject_project_360_quote_mutation()
+  from public, anon, authenticated;
+revoke all on function public.reject_quoted_project_360_candidate_mutation()
+  from public, anon, authenticated;
+revoke all on function public.reject_quoted_project_360_discovery_mutation()
+  from public, anon, authenticated;
+revoke all on function public.validate_project_360_module_run_tenant()
+  from public, anon, authenticated;
 
 grant all on table public.project_360_discoveries to service_role;
 grant all on table public.project_360_candidates to service_role;
 grant all on table public.project_360_quotes to service_role;
 grant all on table public.project_360_module_runs to service_role;
+
+grant execute on function public.set_project_360_updated_at()
+  to service_role;
+grant execute on function public.validate_project_360_discovery_tenant()
+  to service_role;
+grant execute on function public.validate_project_360_quote_binding()
+  to service_role;
+grant execute on function public.reject_project_360_quote_mutation()
+  to service_role;
+grant execute on function public.reject_quoted_project_360_candidate_mutation()
+  to service_role;
+grant execute on function public.reject_quoted_project_360_discovery_mutation()
+  to service_role;
+grant execute on function public.validate_project_360_module_run_tenant()
+  to service_role;
+
+commit;

@@ -23,7 +23,20 @@ function sectionStatusLabel(status: Project360Report["sections"][number]["status
   return "Limited evidence";
 }
 
-export function Project360ReportView({ report }: { report: Project360Report }) {
+type AggregateProof = {
+  status: "pending" | "verified" | "failed";
+  transactionHash: string | null;
+  transactionUrl: string | null;
+  responseHash: string | null;
+};
+
+export function Project360ReportView({
+  report,
+  proof,
+}: {
+  report: Project360Report;
+  proof: AggregateProof | null;
+}) {
   const [copied, setCopied] = useState(false);
 
   async function share() {
@@ -117,9 +130,16 @@ export function Project360ReportView({ report }: { report: Project360Report }) {
         <div className="rounded-xl border border-white/10 p-4 text-xs text-muted-foreground">
           <p className="font-semibold text-foreground">Canonical report boundary</p>
           <p className="mt-1">The aggregate hash binds confirmed sources, all five module statuses, child report hashes, score formula, coverage, evidence matrix, limitations, and the ordered 15-section payload.</p>
-          <a href="https://testnet.arcscan.app" target="_blank" rel="noreferrer" className="mt-2 inline-flex items-center gap-1 text-cyan-400 hover:underline">
-            Open Arc Testnet explorer <ExternalLink className="size-3" />
-          </a>
+          {proof?.status === "verified" && proof.transactionHash && proof.transactionUrl ? (
+            <div className="mt-3 grid gap-2">
+              <p className="break-all font-mono text-[11px] text-foreground">{proof.transactionHash}</p>
+              <a href={proof.transactionUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-cyan-400 hover:underline">
+                View aggregate proof on Arc <ExternalLink className="size-3" />
+              </a>
+            </div>
+          ) : (
+            <p className="mt-2 text-amber-300">Aggregate proof is not yet verified on Arc.</p>
+          )}
         </div>
       </CardContent>
     </Card>

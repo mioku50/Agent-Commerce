@@ -1092,9 +1092,74 @@ export async function getHostedAgentJobView(jobId: string) {
 }
 
 export function redactPublicSellerAccounting<T extends {
-  job: { workflowType: string };
+  job: { workflowType: string } & Record<string, unknown>;
   userPayment: object | null;
 }>(view: T): T {
+  if (view.job.workflowType === "project_360") {
+    const safeJob = { ...view.job } as Record<string, unknown>;
+    const planner = safeJob.plannerSnapshot as
+      | (Record<string, unknown> & {
+          metadata?: { project360Input?: { modules?: unknown } };
+        })
+      | undefined;
+    const selectedProject360Modules = Array.isArray(
+      planner?.metadata?.project360Input?.modules,
+    )
+      ? planner.metadata.project360Input.modules.filter(
+          (module): module is string => typeof module === "string",
+        )
+      : [];
+    if (planner) {
+      const { metadata: _metadata, ...publicPlanner } = planner;
+      safeJob.plannerSnapshot = publicPlanner;
+    }
+    safeJob.project360Modules = selectedProject360Modules;
+    for (const key of [
+      "requesterWallet",
+      "workflowQuoteId",
+      "userPaymentId",
+      "byoaAgentId",
+      "machineCredentialId",
+      "agentRunId",
+      "attemptCount",
+      "recoveryCount",
+    ]) {
+      delete safeJob[key];
+    }
+    const safePayment = view.userPayment
+      ? ({ ...view.userPayment } as Record<string, unknown>)
+      : null;
+    if (safePayment) {
+      delete safePayment.id;
+      delete safePayment.quoteId;
+      delete safePayment.requesterWallet;
+      delete safePayment.failureReason;
+    }
+    const safeLinks = "links" in view && view.links
+      ? {
+          ...(view.links as Record<string, unknown>),
+          agentRun: null,
+          receipts: null,
+          receipt: null,
+          passport: null,
+        }
+      : undefined;
+    const safeProofs = "proofs" in view && Array.isArray(view.proofs)
+      ? view.proofs.map((proof) => {
+          const safeProof = { ...(proof as Record<string, unknown>) };
+          delete safeProof.paymentEventId;
+          return safeProof;
+        })
+      : undefined;
+    return {
+      ...view,
+      job: safeJob,
+      userPayment: safePayment,
+      payerWallet: null,
+      ...(safeLinks ? { links: safeLinks } : {}),
+      ...(safeProofs ? { proofs: safeProofs } : {}),
+    } as T;
+  }
   if (!view.job.workflowType.startsWith("seller_") || !view.userPayment) return view;
   const safePayment = { ...view.userPayment } as Record<string, unknown>;
   delete safePayment.platformFeeUsdc;

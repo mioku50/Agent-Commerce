@@ -37,15 +37,12 @@ function projectRefFromSupabaseUrl(urlObj: URL): string | null {
 const runtimeRef = projectRefFromSupabaseUrl(runtimeUrl);
 const migrationRef = projectRefFromSupabaseUrl(migrationUrl);
 
-console.log({
-  runtimeHost: runtimeUrl.hostname,
-  migrationHost: migrationUrl.hostname,
-  runtimeRef,
-  migrationRef,
-});
-
-if (runtimeRef && migrationRef && runtimeRef !== migrationRef) {
-  throw new Error(
-    `Database target mismatch: runtime=${runtimeRef}, migration=${migrationRef}`,
-  );
+if (!runtimeRef || !migrationRef) {
+  throw new Error("Unable to verify the Production Supabase target identity.");
 }
+
+if (runtimeRef !== migrationRef) {
+  throw new Error("Production Runtime and migration Supabase targets do not match.");
+}
+
+console.log("[db-target-verify] PASS: Runtime and migration use the same Production Supabase project.");

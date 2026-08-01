@@ -822,23 +822,57 @@ export async function createBrowserProject360Quote(input: {
       project360Warnings: warnings,
     },
   });
-  const mapping = await client()
+  const mappingPayload = {
+    quote_id: quoteResult.quote.id,
+    discovery_id: discovery.id,
+    discovery_revision: discovery.revision,
+    candidates_hash: discovery.candidates_hash,
+    selection_hash: selectionHash,
+    selected_candidate_ids: selectedIds,
+    confirmed_sources: sources,
+    module_price_snapshot: lineItems,
+    expected_coverage_count: modules.length,
+    warnings,
+  };
+  let mapping = await client()
     .from("project_360_quotes")
-    .upsert({
-      quote_id: quoteResult.quote.id,
-      discovery_id: discovery.id,
-      discovery_revision: discovery.revision,
-      candidates_hash: discovery.candidates_hash,
-      selection_hash: selectionHash,
-      selected_candidate_ids: selectedIds,
-      confirmed_sources: sources,
-      module_price_snapshot: lineItems,
-      expected_coverage_count: modules.length,
-      warnings,
-    }, { onConflict: "quote_id" })
     .select("*")
-    .single();
-  if (mapping.error || !mapping.data) {
+    .eq("quote_id", quoteResult.quote.id)
+    .maybeSingle();
+  if (mapping.error) {
+    throw new Project360Error(
+      "Unable to inspect the immutable Project 360 quote binding.",
+      "project_quote_binding_failed",
+      503,
+      true,
+    );
+  }
+  if (!mapping.data) {
+    const inserted = await client()
+      .from("project_360_quotes")
+      .insert(mappingPayload)
+      .select("*")
+      .single();
+    if (inserted.error || !inserted.data) {
+      // A concurrent idempotent request may have inserted the immutable row.
+      mapping = await client()
+        .from("project_360_quotes")
+        .select("*")
+        .eq("quote_id", quoteResult.quote.id)
+        .maybeSingle();
+    } else {
+      mapping = inserted;
+    }
+  }
+  const bound = mapping.data as Project360QuoteRow | null;
+  if (
+    mapping.error ||
+    !bound ||
+    bound.discovery_id !== discovery.id ||
+    bound.discovery_revision !== discovery.revision ||
+    bound.candidates_hash !== discovery.candidates_hash ||
+    bound.selection_hash !== selectionHash
+  ) {
     throw new Project360Error(
       "Unable to bind the immutable Project 360 quote.",
       "project_quote_binding_failed",

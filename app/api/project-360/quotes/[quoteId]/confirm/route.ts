@@ -22,6 +22,29 @@ export async function POST(request: NextRequest, { params }: RouteContext) {
   try {
     const owner = requireOwnerSession(request);
     const body = await jsonBody(request);
+    for (const immutableField of [
+      "modules",
+      "selectedModules",
+      "selectedCandidateIds",
+      "confirmedSources",
+      "discoveryId",
+      "selectionHash",
+      "project360Input",
+      "amountUsdc",
+    ]) {
+      if (Object.prototype.hasOwnProperty.call(body, immutableField)) {
+        return NextResponse.json(
+          {
+            error: {
+              code: "project_quote_immutable",
+              message: "Project 360 execution must use the immutable quoted selection and price.",
+              retryable: false,
+            },
+          },
+          { status: 409 },
+        );
+      }
+    }
     const { quoteId } = await params;
     if (!/^[0-9a-f-]{36}$/i.test(quoteId)) {
       return NextResponse.json(
