@@ -4,6 +4,7 @@ import { getByoaClient } from "../byoa/service.ts";
 import {
   createHostedWorkflowQuote,
   getHostedWorkflowQuote,
+  HostedCheckoutInfrastructureError,
   HostedCheckoutPolicyError,
   toPublicHostedWorkflowQuote,
 } from "../commerce/workflow-checkout.ts";
@@ -835,6 +836,16 @@ export async function createBrowserProject360Quote(input: {
         error.reason === "rate_limited" ? 429 : 409,
         error.reason !== "idempotency_conflict",
       );
+    }
+    if (error instanceof HostedCheckoutInfrastructureError) {
+      const checkoutError = new Project360Error(
+        "The immutable Project 360 quote could not be created right now.",
+        `project_quote_${error.stage}_unavailable`,
+        503,
+        true,
+      );
+      checkoutError.cause = error;
+      throw checkoutError;
     }
     throw new Project360Error(
       "The immutable Project 360 quote could not be created right now.",

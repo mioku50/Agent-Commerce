@@ -7,6 +7,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { privateKeyToAccount } from "viem/accounts";
 import { createBrowserProject360Quote } from "../lib/project-360/service.ts";
+import { HostedCheckoutInfrastructureError } from "../lib/commerce/workflow-checkout.ts";
 import { tryGetServerSupabaseConfig } from "../lib/supabase/server-env.ts";
 
 function assert(condition: unknown, message: string): asserts condition {
@@ -74,12 +75,16 @@ async function main() {
     }));
   } catch (error) {
     const safe = error as Error & { code?: string; status?: number; retryable?: boolean };
+    const infrastructureStage = safe.cause instanceof HostedCheckoutInfrastructureError
+      ? safe.cause.stage
+      : null;
     console.error(JSON.stringify({
       status: "quote_failed",
       name: safe.name,
       code: safe.code ?? null,
       httpStatus: safe.status ?? null,
       retryable: safe.retryable ?? false,
+      infrastructureStage,
       message: safe.message.slice(0, 300),
     }));
     process.exitCode = 1;

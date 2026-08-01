@@ -82,6 +82,13 @@ export type MachineErrorCode =
   | "source_module_not_selected"
   | "project_quote_binding_failed"
   | "project_quote_checkout_unavailable"
+  | "project_quote_quote_lookup_unavailable"
+  | "project_quote_runner_configuration_unavailable"
+  | "project_quote_checkout_configuration_unavailable"
+  | "project_quote_policy_lookup_unavailable"
+  | "project_quote_pricing_unavailable"
+  | "project_quote_sponsorship_lookup_unavailable"
+  | "project_quote_quote_persistence_unavailable"
   | "project_quote_integrity_failed"
   | "project_selection_integrity_failed";
 

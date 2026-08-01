@@ -127,6 +127,22 @@ export class HostedCheckoutPolicyError extends Error {
   }
 }
 
+export type HostedCheckoutInfrastructureStage =
+  | "quote_lookup"
+  | "runner_configuration"
+  | "checkout_configuration"
+  | "policy_lookup"
+  | "pricing"
+  | "sponsorship_lookup"
+  | "quote_persistence";
+
+export class HostedCheckoutInfrastructureError extends Error {
+  constructor(public readonly stage: HostedCheckoutInfrastructureStage) {
+    super(`Hosted checkout infrastructure is unavailable at ${stage}.`);
+    this.name = "HostedCheckoutInfrastructureError";
+  }
+}
+
 let checkoutClient: SupabaseClient | null = null;
 
 export function setCheckoutClientForTesting(client: SupabaseClient | null) {
@@ -336,7 +352,7 @@ export async function createHostedWorkflowQuote(input: {
     .select("*")
     .eq("idempotency_hash", input.idempotencyHash)
     .maybeSingle();
-  if (existing.error) throw new Error("Unable to load hosted workflow quote.");
+  if (existing.error) throw new HostedCheckoutInfrastructureError("quote_lookup");
   if (existing.data) {
     const row = existing.data as HostedWorkflowQuoteRow;
     if (row.request_hash !== input.requestHash) {
@@ -345,10 +361,30 @@ export async function createHostedWorkflowQuote(input: {
     return { quote: publicQuote(row), created: false };
   }
 
-  const hostedConfig = getHostedRunnerConfig();
-  const checkoutConfig = getHostedWorkflowCheckoutConfig();
-  await currentPolicyState(input.requesterFingerprint, hostedConfig);
-  const pricing = priceHostedWorkflow(input.plan, checkoutConfig);
+  let hostedConfig: ReturnType<typeof getHostedRunnerConfig>;
+  try {
+    hostedConfig = getHostedRunnerConfig();
+  } catch {
+    throw new HostedCheckoutInfrastructureError("runner_configuration");
+  }
+  let checkoutConfig: ReturnType<typeof getHostedWorkflowCheckoutConfig>;
+  try {
+    checkoutConfig = getHostedWorkflowCheckoutConfig();
+  } catch {
+    throw new HostedCheckoutInfrastructureError("checkout_configuration");
+  }
+  try {
+    await currentPolicyState(input.requesterFingerprint, hostedConfig);
+  } catch (error) {
+    if (error instanceof HostedCheckoutPolicyError) throw error;
+    throw new HostedCheckoutInfrastructureError("policy_lookup");
+  }
+  let pricing: ReturnType<typeof priceHostedWorkflow>;
+  try {
+    pricing = priceHostedWorkflow(input.plan, checkoutConfig);
+  } catch {
+    throw new HostedCheckoutInfrastructureError("pricing");
+  }
   const inputMetadata = hostedWorkflowInputMetadata(input.request.inputText);
   const scheduledMonitoring = input.sponsorship === "scheduled_monitoring";
   if (
@@ -367,7 +403,9 @@ export async function createHostedWorkflowQuote(input: {
       .select("id", { count: "exact", head: true })
       .eq("payment_mode", "sponsored")
       .ilike("requester_wallet", input.requesterWallet);
-  if (sponsored.error) throw new Error("Unable to evaluate sponsored workflow quota.");
+  if (sponsored.error) {
+    throw new HostedCheckoutInfrastructureError("sponsorship_lookup");
+  }
   const paymentMode: HostedCheckoutPaymentMode =
     scheduledMonitoring ||
     (sponsored.count ?? 0) < checkoutConfig.sponsoredQuota
@@ -437,7 +475,7 @@ export async function createHostedWorkflowQuote(input: {
     if (replay.data && (replay.data as HostedWorkflowQuoteRow).request_hash === input.requestHash) {
       return { quote: publicQuote(replay.data as HostedWorkflowQuoteRow), created: false };
     }
-    throw new Error("Unable to create hosted workflow quote.");
+    throw new HostedCheckoutInfrastructureError("quote_persistence");
   }
   return {
     quote: publicQuote(inserted.data as HostedWorkflowQuoteRow),

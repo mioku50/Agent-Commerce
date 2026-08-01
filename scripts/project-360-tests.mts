@@ -269,13 +269,21 @@ const serviceSource = readFileSync(
   new URL("../lib/project-360/service.ts", import.meta.url),
   "utf8",
 );
+const checkoutSource = readFileSync(
+  new URL("../lib/commerce/workflow-checkout.ts", import.meta.url),
+  "utf8",
+);
 assert.doesNotMatch(
   serviceSource,
   /from\("project_360_quotes"\)[\s\S]{0,160}\.upsert\(/,
   "Immutable Project 360 quote mappings must never be updated on replay.",
 );
 assert.match(serviceSource, /project_quote_checkout_unavailable/);
+assert.match(serviceSource, /project_quote_\$\{error\.stage\}_unavailable/);
 assert.match(serviceSource, /error instanceof HostedCheckoutPolicyError/);
+assert.match(serviceSource, /error instanceof HostedCheckoutInfrastructureError/);
+assert.match(checkoutSource, /HostedCheckoutInfrastructureStage/);
+assert.match(checkoutSource, /quote_persistence/);
 
 const confirmationRoute = readFileSync(
   new URL("../app/api/project-360/quotes/[quoteId]/confirm/route.ts", import.meta.url),
