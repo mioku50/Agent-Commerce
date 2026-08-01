@@ -96,6 +96,16 @@ async function verifyProductionProject360Schema() {
       ledger.rows.length === 1 && ledger.rows[0].name === "p42_project_360",
       "The P4.2 Project 360 migration is not recorded exactly once in the Production ledger.",
     );
+    const hardeningLedger = await postgres.query<{ version: string; name: string | null }>(`
+      select version, name
+      from supabase_migrations.schema_migrations
+      where version = '20260801190000'
+    `);
+    assert(
+      hardeningLedger.rows.length === 1 &&
+        hardeningLedger.rows[0].name === "p421_project_360_budget_constraints",
+      "The P4.2.1 Project 360 budget migration is not recorded exactly once in the Production ledger.",
+    );
 
     const tableChecks = await Promise.all([
       server
@@ -183,6 +193,8 @@ async function verifyProductionProject360Schema() {
       "hosted_workflow_quotes_workflow_type_check",
       "hosted_agent_jobs_workflow_type_check",
       "byoa_agent_policies_allowed_workflows_check",
+      "hosted_workflow_quotes_budget_usdc_check",
+      "hosted_agent_jobs_budget_usdc_check",
     ]]);
     const definitions = new Map(
       constraints.rows.map((row) => [row.conname, row.definition]),
@@ -193,6 +205,15 @@ async function verifyProductionProject360Schema() {
       "byoa_agent_policies_allowed_workflows_check",
     ]) {
       assert(definitions.get(name)?.includes("project_360"), `${name} does not allow project_360.`);
+    }
+    for (const name of [
+      "hosted_workflow_quotes_budget_usdc_check",
+      "hosted_agent_jobs_budget_usdc_check",
+    ]) {
+      assert(
+        /0\.0*10?\b/.test(definitions.get(name) ?? ""),
+        `${name} does not allow the approved 0.010000 USDC Project 360 budget.`,
+      );
     }
     for (const name of [
       "project_360_discoveries_public_id_key",

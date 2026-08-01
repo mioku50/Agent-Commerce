@@ -231,6 +231,16 @@ const migration = readFileSync(
   "utf8",
 );
 assert.match(migration, /begin;[\s\S]*commit;/i);
+const budgetMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260801190000_p421_project_360_budget_constraints.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+assert.match(budgetMigration, /hosted_workflow_quotes_budget_usdc_check/i);
+assert.match(budgetMigration, /hosted_agent_jobs_budget_usdc_check/i);
+assert.match(budgetMigration, /between 0\.001 and 0\.010/i);
 for (const guard of [
   "validate_project_360_discovery_tenant",
   "validate_project_360_quote_binding",
