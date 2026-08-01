@@ -344,9 +344,9 @@ export function Project360Client() {
         </div>
       </section>
 
-      <section className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[1.15fr_0.85fr]">
-        <div className="grid content-start gap-6">
-          <Card className="rounded-2xl border-white/10 bg-[#090c13]">
+      <section className="mx-auto grid w-full min-w-0 max-w-7xl grid-cols-[minmax(0,1fr)] gap-6 px-4 py-8 sm:px-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
+        <div className="grid min-w-0 content-start gap-6">
+          <Card className="min-w-0 rounded-2xl border-white/10 bg-[#090c13]">
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><FileSearch className="size-5 text-cyan-400" /> 1. Free Discovery</CardTitle>
             </CardHeader>
@@ -376,7 +376,7 @@ export function Project360Client() {
             </CardContent>
           </Card>
 
-          <Card className="rounded-2xl border-white/10 bg-[#090c13]">
+          <Card className="min-w-0 rounded-2xl border-white/10 bg-[#090c13]">
             <CardHeader>
               <CardTitle className="flex items-center justify-between gap-3">
                 <span className="flex items-center gap-2"><GitBranch className="size-5 text-cyan-400" /> 2. Confirm sources</span>
@@ -427,8 +427,8 @@ export function Project360Client() {
           </Card>
         </div>
 
-        <div className="grid content-start gap-6 lg:sticky lg:top-20">
-          <Card className="rounded-2xl border-white/10 bg-[#090c13]">
+        <div className="grid min-w-0 content-start gap-6 lg:sticky lg:top-20">
+          <Card className="min-w-0 rounded-2xl border-white/10 bg-[#090c13]">
             <CardHeader><CardTitle>3. Project 360 Quote</CardTitle></CardHeader>
             <CardContent className="grid gap-5">
               {!quote || !projectQuote ? (
@@ -445,11 +445,11 @@ export function Project360Client() {
                   <div className="grid gap-2">
                     {projectQuote.lineItems.map((item) => (
                       <div key={item.module} className="rounded-xl border border-white/10 p-3 text-xs">
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-semibold">{item.label}</span>
-                          <span className="font-mono">{item.priceUsdc.toFixed(4)} USDC</span>
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="min-w-0 break-words font-semibold">{item.label}</span>
+                          <span className="shrink-0 font-mono">{item.priceUsdc.toFixed(4)} USDC</span>
                         </div>
-                        <p className="mt-1 text-muted-foreground">{item.serviceSlugs.join(" + ")}</p>
+                        <p className="mt-1 break-all text-muted-foreground">{item.serviceSlugs.join(" + ")}</p>
                         {item.sharedEvidence ? <p className="mt-1 text-emerald-400">Shared GitHub evidence is not charged twice.</p> : null}
                       </div>
                     ))}

@@ -203,10 +203,26 @@ async function noHorizontalOverflow(page: Page, label: string) {
   const dimensions = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
     clientWidth: document.documentElement.clientWidth,
+    offenders: Array.from(document.querySelectorAll<HTMLElement>("body *"))
+      .filter((element) =>
+        element.scrollWidth > element.clientWidth + 1 &&
+        !Array.from(element.children).some((child) => {
+          const nested = child as HTMLElement;
+          return nested.scrollWidth > nested.clientWidth + 1;
+        })
+      )
+      .slice(0, 10)
+      .map((element) => ({
+        tag: element.tagName.toLowerCase(),
+        className: element.className.toString().slice(0, 120),
+        clientWidth: element.clientWidth,
+        scrollWidth: element.scrollWidth,
+        text: (element.textContent ?? "").trim().replace(/\s+/g, " ").slice(0, 80),
+      })),
   }));
   assert(
     dimensions.scrollWidth <= dimensions.clientWidth + 1,
-    `${label} has horizontal overflow (${dimensions.scrollWidth} > ${dimensions.clientWidth}).`,
+    `${label} has horizontal overflow (${dimensions.scrollWidth} > ${dimensions.clientWidth}); offenders=${JSON.stringify(dimensions.offenders)}.`,
   );
 }
 
