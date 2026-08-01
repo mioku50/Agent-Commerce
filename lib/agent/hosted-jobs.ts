@@ -1208,6 +1208,10 @@ export function redactPublicSellerAccounting<T extends {
           return safeProof;
         })
       : undefined;
+    const safeProof = "proof" in view && view.proof
+      ? { ...(view.proof as Record<string, unknown>) }
+      : undefined;
+    if (safeProof) delete safeProof.paymentEventId;
     return {
       ...view,
       job: safeJob,
@@ -1215,6 +1219,7 @@ export function redactPublicSellerAccounting<T extends {
       payerWallet: null,
       ...(safeLinks ? { links: safeLinks } : {}),
       ...(safeProofs ? { proofs: safeProofs } : {}),
+      ...(safeProof ? { proof: safeProof } : {}),
     } as T;
   }
   if (!view.job.workflowType.startsWith("seller_") || !view.userPayment) return view;
