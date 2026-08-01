@@ -46,7 +46,7 @@ const VIEWPORTS = [
   { width: 768, height: 1024 },
   { width: 1440, height: 1000 },
 ] as const;
-const STABLE_BROWSER_UUID = "42000000-0000-4000-8000-000000000042";
+const ACCEPTANCE_RUN_UUID = crypto.randomUUID();
 
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -231,7 +231,7 @@ async function runQuoteUiAtViewport(input: {
       configurable: true,
       value: () => stableUuid,
     });
-  }, STABLE_BROWSER_UUID);
+  }, ACCEPTANCE_RUN_UUID);
   const page = await context.newPage();
   try {
     await page.goto(`${input.baseUrl}/project-360`, { waitUntil: "domcontentloaded" });
@@ -246,7 +246,7 @@ async function runQuoteUiAtViewport(input: {
     const discoveryBody = (await discoveryResponse.json()) as JsonObject;
     assert(
       discoveryResponse.ok() && discoveryBody.discovery?.status === "ready",
-      `Discovery UI failed at ${input.viewport.width}px (HTTP ${discoveryResponse.status()}).`,
+      `Discovery UI failed at ${input.viewport.width}px (HTTP ${discoveryResponse.status()}, status ${String(discoveryBody.discovery?.status ?? "missing")}, code ${String(discoveryBody.error?.code ?? "none")}).`,
     );
     const discovery = discoveryBody.discovery as JsonObject;
     assert(discovery.free === true && discovery.paymentRequired === false, "Discovery is not free.");
@@ -449,8 +449,8 @@ async function main() {
       .gte("created_at", startedAt);
     assert(!noPaymentsYet.error && noPaymentsYet.count === 0, "Discovery or quote creation produced a payment.");
 
-    const discoveryKey = `project360-discovery-${STABLE_BROWSER_UUID}`;
-    const quoteKey = `project360-quote-${STABLE_BROWSER_UUID}`;
+    const discoveryKey = `project360-discovery-${ACCEPTANCE_RUN_UUID}`;
+    const quoteKey = `project360-quote-${ACCEPTANCE_RUN_UUID}`;
     const discoveryConflict = await requestJson(
       baseUrl,
       "/api/project-360/discoveries",

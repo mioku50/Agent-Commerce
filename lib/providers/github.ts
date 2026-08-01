@@ -24,8 +24,27 @@ import type {
 import { redactHostedWorkflowText } from "../agent/hosted-workflows.ts";
 
 const GITHUB_API_BASE = "https://api.github.com";
+const GITHUB_RAW_BASE = "https://raw.githubusercontent.com";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const MAX_EXCERPT_BYTES = 128 * 1024; // 128KB
+const DISCOVERY_FALLBACK_PATHS = [
+  "README.md",
+  "README",
+  "package.json",
+  "pyproject.toml",
+  "Cargo.toml",
+  "go.mod",
+  "foundry.toml",
+  "hardhat.config.ts",
+  "hardhat.config.js",
+  "vercel.json",
+  "docker-compose.yml",
+  "docker-compose.yaml",
+  "docs/agent-api.md",
+  "docs/operations.md",
+  "contracts/README.md",
+  "public/openapi/agent-commerce-v1.json",
+] as const;
 
 type CacheEntry = {
   snapshot: GitHubRepositorySnapshot;
@@ -225,7 +244,7 @@ function discoveryPathPriority(path: string) {
  * It only calls fixed GitHub API hosts through githubFetch and never executes
  * repository content.
  */
-export async function fetchGitHubDiscoveryFiles(
+async function fetchGitHubDiscoveryFilesFromApi(
   repository: GitHubRepositoryRef,
   limits: {
     maxFiles?: number;
@@ -319,6 +338,110 @@ export async function fetchGitHubDiscoveryFiles(
   }
   if (files.length === 0 && firstNonMissingError) throw firstNonMissingError;
   return files;
+}
+
+async function boundedResponseText(response: Response, maxBytes: number) {
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  while (total < maxBytes) {
+    const result = await reader.read();
+    if (result.done) break;
+    const available = maxBytes - total;
+    const chunk = result.value.subarray(0, available);
+    chunks.push(chunk);
+    total += chunk.byteLength;
+    if (chunk.byteLength < result.value.byteLength) {
+      await reader.cancel();
+      break;
+    }
+  }
+  const combined = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    combined.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return new TextDecoder().decode(combined);
+}
+
+async function fetchGitHubDiscoveryFilesFromRaw(
+  repository: GitHubRepositoryRef,
+  limits: {
+    maxFiles?: number;
+    maxFileBytes?: number;
+    maxTotalBytes?: number;
+  },
+) {
+  const maxFiles = Math.max(1, Math.min(limits.maxFiles ?? 40, 40));
+  const maxFileBytes = Math.max(1_024, Math.min(limits.maxFileBytes ?? 64 * 1_024, 64 * 1_024));
+  const maxTotalBytes = Math.max(maxFileBytes, Math.min(limits.maxTotalBytes ?? 512 * 1_024, 512 * 1_024));
+  const encodedRepository = [repository.owner, repository.name].map(encodeURIComponent).join("/");
+
+  for (const branch of ["main", "master"]) {
+    const files = await Promise.all(
+      DISCOVERY_FALLBACK_PATHS.slice(0, maxFiles).map(async (path) => {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 4_000);
+        try {
+          const encodedPath = path.split("/").map(encodeURIComponent).join("/");
+          const response = await fetch(
+            `${GITHUB_RAW_BASE}/${encodedRepository}/${encodeURIComponent(branch)}/${encodedPath}`,
+            {
+              headers: {
+                Accept: "text/plain",
+                Range: `bytes=0-${maxFileBytes - 1}`,
+                "User-Agent": "Veyra-Project-360-Discovery",
+              },
+              signal: controller.signal,
+            },
+          );
+          if (!response.ok) return null;
+          const content = await boundedResponseText(response, maxFileBytes);
+          const sizeBytes = Buffer.byteLength(content, "utf8");
+          return sizeBytes > 0 ? { path, content, sizeBytes } : null;
+        } catch {
+          return null;
+        } finally {
+          clearTimeout(timer);
+        }
+      }),
+    );
+    const bounded: GitHubDiscoveryFile[] = [];
+    let totalBytes = 0;
+    for (const file of files) {
+      if (!file || totalBytes >= maxTotalBytes) continue;
+      const availableBytes = maxTotalBytes - totalBytes;
+      const content = file.sizeBytes <= availableBytes
+        ? file.content
+        : Buffer.from(file.content, "utf8").subarray(0, availableBytes).toString("utf8");
+      const sizeBytes = Buffer.byteLength(content, "utf8");
+      if (sizeBytes > 0) {
+        bounded.push({ path: file.path, content, sizeBytes });
+        totalBytes += sizeBytes;
+      }
+    }
+    if (bounded.length > 0) return bounded;
+  }
+  return [];
+}
+
+export async function fetchGitHubDiscoveryFiles(
+  repository: GitHubRepositoryRef,
+  limits: {
+    maxFiles?: number;
+    maxFileBytes?: number;
+    maxTotalBytes?: number;
+  } = {},
+): Promise<GitHubDiscoveryFile[]> {
+  try {
+    return await fetchGitHubDiscoveryFilesFromApi(repository, limits);
+  } catch (error) {
+    const fallback = await fetchGitHubDiscoveryFilesFromRaw(repository, limits);
+    if (fallback.length > 0) return fallback;
+    throw error;
+  }
 }
 
 function parseRequirementsTxt(content: string): { prod: string[]; dev: string[] } {
