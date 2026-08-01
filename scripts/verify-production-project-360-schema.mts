@@ -106,6 +106,16 @@ async function verifyProductionProject360Schema() {
         hardeningLedger.rows[0].name === "p421_project_360_budget_constraints",
       "The P4.2.1 Project 360 budget migration is not recorded exactly once in the Production ledger.",
     );
+    const executionLedger = await postgres.query<{ version: string; name: string | null }>(`
+      select version, name
+      from supabase_migrations.schema_migrations
+      where version = '20260801193000'
+    `);
+    assert(
+      executionLedger.rows.length === 1 &&
+        executionLedger.rows[0].name === "p421_project_360_execution_constraints",
+      "The P4.2.1 Project 360 execution migration is not recorded exactly once in the Production ledger.",
+    );
 
     const tableChecks = await Promise.all([
       server
@@ -195,6 +205,9 @@ async function verifyProductionProject360Schema() {
       "byoa_agent_policies_allowed_workflows_check",
       "hosted_workflow_quotes_budget_usdc_check",
       "hosted_agent_jobs_budget_usdc_check",
+      "hosted_workflow_quotes_selected_services_check",
+      "hosted_agent_jobs_selected_services_check",
+      "hosted_agent_jobs_spent_usdc_check",
     ]]);
     const definitions = new Map(
       constraints.rows.map((row) => [row.conname, row.definition]),
@@ -215,6 +228,19 @@ async function verifyProductionProject360Schema() {
         `${name} does not allow the approved 0.010000 USDC Project 360 budget.`,
       );
     }
+    for (const name of [
+      "hosted_workflow_quotes_selected_services_check",
+      "hosted_agent_jobs_selected_services_check",
+    ]) {
+      assert(
+        /7\)?/.test(definitions.get(name) ?? ""),
+        `${name} does not allow the seven bounded Project 360 steps.`,
+      );
+    }
+    assert(
+      /0\.0*10?\b/.test(definitions.get("hosted_agent_jobs_spent_usdc_check") ?? ""),
+      "hosted_agent_jobs_spent_usdc_check does not allow the approved Project 360 spend ceiling.",
+    );
     for (const name of [
       "project_360_discoveries_public_id_key",
       "project_360_candidates_public_id_key",

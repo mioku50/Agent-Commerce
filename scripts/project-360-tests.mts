@@ -241,6 +241,15 @@ const budgetMigration = readFileSync(
 assert.match(budgetMigration, /hosted_workflow_quotes_budget_usdc_check/i);
 assert.match(budgetMigration, /hosted_agent_jobs_budget_usdc_check/i);
 assert.match(budgetMigration, /between 0\.001 and 0\.010/i);
+const executionMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260801193000_p421_project_360_execution_constraints.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+assert.match(executionMigration, /jsonb_array_length\(selected_services\) between 1 and 7/i);
+assert.match(executionMigration, /hosted_agent_jobs_spent_usdc_check/i);
 for (const guard of [
   "validate_project_360_discovery_tenant",
   "validate_project_360_quote_binding",
