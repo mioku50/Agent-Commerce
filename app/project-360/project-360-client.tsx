@@ -383,14 +383,14 @@ export function Project360Client() {
                 <Badge variant="outline">{selectedIds.length} included</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3">
+            <CardContent className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
               {!discovery ? (
                 <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-muted-foreground">Candidates appear here after free Discovery.</p>
               ) : discovery.candidates.map((candidate) => {
                 const checked = selectedIds.includes(candidate.id);
                 return (
-                  <label key={candidate.id} className={`grid cursor-pointer gap-3 rounded-xl border p-4 transition-colors ${checked ? "border-cyan-500/40 bg-cyan-500/5" : "border-white/10 bg-white/[0.02]"}`}>
-                    <div className="flex items-start gap-3">
+                  <label key={candidate.id} className={`grid min-w-0 grid-cols-[minmax(0,1fr)] cursor-pointer gap-3 rounded-xl border p-4 transition-colors ${checked ? "border-cyan-500/40 bg-cyan-500/5" : "border-white/10 bg-white/[0.02]"}`}>
+                    <div className="flex min-w-0 items-start gap-3">
                       <input
                         type="checkbox"
                         checked={checked}
@@ -407,11 +407,11 @@ export function Project360Client() {
                         <p className="mt-2 break-all font-mono text-xs">{candidate.value}</p>
                         <p className="mt-2 text-xs text-muted-foreground">Module: {PROJECT_360_MODULE_LABELS[candidate.module]}</p>
                         {candidate.provenance.file ? (
-                          <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-                            <MapPin className="size-3" /> {candidate.provenance.file}:{candidate.provenance.lineStart}
+                          <p className="mt-1 flex min-w-0 items-start gap-1 break-all text-xs text-muted-foreground">
+                            <MapPin className="mt-0.5 size-3 shrink-0" /> {candidate.provenance.file}:{candidate.provenance.lineStart}
                           </p>
                         ) : null}
-                        {candidate.provenance.excerpt ? <p className="mt-2 line-clamp-2 rounded bg-black/20 p-2 font-mono text-[11px] text-muted-foreground">{candidate.provenance.excerpt}</p> : null}
+                        {candidate.provenance.excerpt ? <p className="mt-2 line-clamp-2 break-all rounded bg-black/20 p-2 font-mono text-[11px] text-muted-foreground">{candidate.provenance.excerpt}</p> : null}
                       </div>
                     </div>
                   </label>
