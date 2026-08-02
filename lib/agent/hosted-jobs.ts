@@ -322,8 +322,34 @@ function buildProject360ModuleResults(input: {
       const analysis = input.runtimeServiceOutputs.get("github-due-diligence-analysis") as
         | { assessment?: GitHubDueDiligenceAssessment }
         | undefined;
-      return analysis?.assessment
-        ? moduleResultFromReport({ module, inputHash, report: analysis.assessment })
+      const snapshot = input.runtimeServiceOutputs.get("github-repository-intelligence") as
+        | GitHubRepositorySnapshot
+        | undefined;
+      const report = analysis?.assessment
+        ? {
+            ...analysis.assessment,
+            ...(snapshot
+              ? {
+                  monitoringSignals: {
+                    commitCount30d: snapshot.activity.commitCount30d,
+                    commitCount90d: snapshot.activity.commitCount90d,
+                    sampledHumanContributorCount:
+                      snapshot.contributors.sampledHumanContributorCount,
+                    hasSecurityPolicy: snapshot.documentation.hasSecurityPolicy,
+                    hasLicense: snapshot.documentation.hasLicense,
+                    workflowCount: snapshot.stack.workflowCount,
+                    latestReleaseTag: snapshot.releases.latestRelease?.tagName ?? null,
+                    latestReleaseAt:
+                      snapshot.releases.latestRelease?.publishedAt ?? null,
+                    isArchived: snapshot.repository.isArchived,
+                    pushedAt: snapshot.repository.pushedAt,
+                  },
+                }
+              : {}),
+          }
+        : null;
+      return report
+        ? moduleResultFromReport({ module, inputHash, report })
         : failedProject360ModuleResult(input.projectInput, module);
     }
     if (module === "agent_trust_report") {

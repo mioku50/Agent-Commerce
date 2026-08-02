@@ -737,7 +737,7 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
             </Card>
           ) : null}
           {isProject360Workflow && project360Report ? (
-            <Project360ReportView report={project360Report} proof={project360Proof} />
+            <Project360ReportView report={project360Report} proof={project360Proof} jobId={view.job.id} />
           ) : isApiQualityWorkflow && apiQualityReport ? (
             <Card className="rounded-lg">
               <CardContent className="p-6 grid gap-6">

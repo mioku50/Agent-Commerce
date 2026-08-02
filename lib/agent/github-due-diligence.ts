@@ -88,6 +88,19 @@ export interface GitHubDueDiligenceAssessment {
   suggestedQuestions: string[];
   limitationsDisclaimer: string;
   analyzedAt: string;
+  /** Public, deterministic signals retained by Project 360 monitoring snapshots. */
+  monitoringSignals?: {
+    commitCount30d: number;
+    commitCount90d: number;
+    sampledHumanContributorCount: number;
+    hasSecurityPolicy: boolean;
+    hasLicense: boolean;
+    workflowCount: number;
+    latestReleaseTag: string | null;
+    latestReleaseAt: string | null;
+    isArchived: boolean;
+    pushedAt: string | null;
+  };
 }
 
 export const LIMITATIONS_DISCLAIMER =

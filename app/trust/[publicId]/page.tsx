@@ -52,6 +52,7 @@ function objectTypeLabel(type: TrustSubjectType) {
     wallet: "Wallet",
     arc_contract: "Arc contract",
     service_endpoint: "Service endpoint",
+    project_360: "Project 360",
   };
   return labels[type];
 }
@@ -131,6 +132,9 @@ export default async function PublicTrustProfilePage({ params }: RouteContext) {
       serviceEndpoint: data.profile.identity.serviceEndpoint,
     }).filter((entry): entry is [string, string] => Boolean(entry[1])),
   );
+  const freshCheckUrl = data.profile.objectType === "project_360"
+    ? `/monitoring?project360Job=${encodeURIComponent(current?.fullReportUrl.split("/").at(-1) ?? "")}#project-360-monitoring`
+    : `/monitoring?${freshCheckQuery.toString()}`;
 
   return (
     <main className="min-h-screen bg-background">
@@ -171,7 +175,7 @@ export default async function PublicTrustProfilePage({ params }: RouteContext) {
               </Button>
             ) : null}
             <Button asChild variant="outline">
-              <Link href={`/monitoring?${freshCheckQuery.toString()}`}>
+              <Link href={freshCheckUrl}>
                 <Play /> Run fresh check
               </Link>
             </Button>

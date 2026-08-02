@@ -530,7 +530,7 @@ export async function createMachineProject360Discovery(input: {
   }
 }
 
-function candidatesHashFromRows(rows: Project360CandidateRow[]) {
+export function candidatesHashFromRows(rows: Project360CandidateRow[]) {
   return project360Hash(
     JSON.stringify(
       [...rows]
@@ -611,6 +611,10 @@ export async function createBrowserProject360Quote(input: {
   userAgent: string | null;
   byoaAgentId?: string;
   machineCredentialId?: string;
+  allowSponsored?: boolean;
+  sponsorship?: "regular" | "scheduled_monitoring";
+  monitoringWatchlistId?: string;
+  monitoringRecheckId?: string;
 }) {
   const discovery = input.machineCredentialId
     ? await machineDiscoveryById({
@@ -824,7 +828,15 @@ export async function createBrowserProject360Quote(input: {
         project360DiscoveryId: discovery.public_id,
         project360LineItems: lineItems,
         project360Warnings: warnings,
+        ...(input.monitoringWatchlistId
+          ? { monitoringWatchlistId: input.monitoringWatchlistId }
+          : {}),
+        ...(input.monitoringRecheckId
+          ? { monitoringRecheckId: input.monitoringRecheckId }
+          : {}),
       },
+      allowSponsored: input.allowSponsored,
+      sponsorship: input.sponsorship,
     });
   } catch (error) {
     if (error instanceof HostedCheckoutPolicyError) {

@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { BRAND } from "@/lib/brand";
 import { TrustMonitoringClient } from "./trust-monitoring-client";
 import { WebhookSettings } from "./webhook-settings";
+import { Project360MonitoringClient } from "./project-360-monitoring-client";
 
 export const metadata = {
   title: "Continuous Trust Monitoring",
@@ -67,6 +68,7 @@ export default async function MonitoringPage({ searchParams }: MonitoringPagePro
           serviceEndpoint: first(query.serviceEndpoint),
         }}
       />
+      <Project360MonitoringClient initialJobId={first(query.project360Job)} />
       <WebhookSettings />
     </main>
   );

@@ -1,4 +1,5 @@
 import type { AgentTrustReport, AgentTrustReportInput } from "../agent-trust/types.ts";
+import type { Project360Module, Project360SourceType } from "../project-360/types.ts";
 
 export type TrustMonitoringCadence = "manual" | "daily" | "weekly";
 export type TrustMonitoringStatus = "active" | "paused";
@@ -8,7 +9,15 @@ export type TrustSubjectType =
   | "ai_agent"
   | "wallet"
   | "arc_contract"
-  | "service_endpoint";
+  | "service_endpoint"
+  | "project_360";
+
+export type Project360ProfileInput = {
+  project360: true;
+  configurationHash: string;
+  modules: Project360Module[];
+  sources: Array<{ type: Project360SourceType; value: string; valueHash: string }>;
+};
 export type TrustMonitoringTrigger = "manual" | "scheduled" | "machine";
 export type TrustMonitoringRecheckStatus =
   | "quoted"
@@ -96,7 +105,7 @@ export type TrustProfileRow = {
   public_id: string;
   canonical_subject_key: string;
   subject_type: TrustSubjectType;
-  canonical_subject_input: AgentTrustReportInput;
+  canonical_subject_input: AgentTrustReportInput | Project360ProfileInput;
   display_name: string;
   created_at: string;
   updated_at: string;
@@ -177,6 +186,7 @@ export type TrustAlertEventRow = {
   owner_wallet: string;
   profile_id: string;
   snapshot_id: string | null;
+  project_360_snapshot_id: string | null;
   event_type: TrustAlertEventType;
   event_fingerprint: string;
   message: string;

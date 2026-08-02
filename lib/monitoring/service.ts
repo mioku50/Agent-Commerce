@@ -39,6 +39,8 @@ import {
 } from "./alerts.ts";
 import { canonicalTrustSubject } from "./identity.ts";
 import { publicAppUrl } from "../public-url.ts";
+import { getPublicProject360Profile } from "../project-360/monitoring-service.ts";
+import { Project360Error } from "../project-360/service.ts";
 import type {
   TrustMonitoringCadence,
   TrustMonitoringRecheckRow,
@@ -1340,6 +1342,29 @@ export async function getPublicTrustProfile(publicId: string) {
       404,
     );
   }
+  if (profile.subject_type === "project_360") {
+    try {
+      return await getPublicProject360Profile(profile);
+    } catch (error) {
+      if (error instanceof Project360Error) {
+        if (error.status === 404) {
+          throw new TrustMonitoringError(
+            "Trust profile not found.",
+            "watchlist_not_found",
+            404,
+          );
+        }
+        throw new TrustMonitoringError(
+          "Trust profile is temporarily unavailable.",
+          "monitoring_unavailable",
+          error.status >= 500 ? error.status : 503,
+          true,
+        );
+      }
+      throw error;
+    }
+  }
+  const canonicalInput = profile.canonical_subject_input as AgentTrustReportInput;
   const watchlistResult = await monitoringClient()
     .from("trust_watchlists")
     .select("*")
@@ -1378,20 +1403,20 @@ export async function getPublicTrustProfile(publicId: string) {
   const name =
     currentReport?.subject.name ||
     profile.display_name ||
-    canonicalTrustSubject(profile.canonical_subject_input).displayName;
+    canonicalTrustSubject(canonicalInput).displayName;
   return {
     profile: {
       id: profile.public_id,
       name,
       objectType: profile.subject_type,
       identity: {
-        agentId: profile.canonical_subject_input.agentId ?? null,
-        repositoryUrl: profile.canonical_subject_input.repositoryUrl ?? null,
-        wallet: profile.canonical_subject_input.agentWallet ?? null,
+        agentId: canonicalInput.agentId ?? null,
+        repositoryUrl: canonicalInput.repositoryUrl ?? null,
+        wallet: canonicalInput.agentWallet ?? null,
         contractAddress:
-          profile.canonical_subject_input.contractAddress ?? null,
+          canonicalInput.contractAddress ?? null,
         serviceEndpoint:
-          profile.canonical_subject_input.serviceEndpoint ?? null,
+          canonicalInput.serviceEndpoint ?? null,
       },
       currentScore: current?.trust_score ?? null,
       trustStatus: current?.trust_status ?? null,

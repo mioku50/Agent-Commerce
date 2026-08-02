@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Download, ExternalLink, Share2, ShieldCheck } from "lucide-react";
+import Link from "next/link";
+import { Activity, Check, Download, ExternalLink, Share2, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -54,9 +55,11 @@ type AggregateProof = {
 export function Project360ReportView({
   report,
   proof,
+  jobId,
 }: {
   report: Project360Report;
   proof: AggregateProof | null;
+  jobId: string;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -102,6 +105,17 @@ export function Project360ReportView({
             <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">{report.executiveSummary}</p>
           </div>
           <div className="flex gap-2">
+            {report.verification.status === "verified" && proof?.status === "verified" ? (
+              <Button asChild variant="outline" size="sm">
+                <Link href={`/monitoring?project360Job=${encodeURIComponent(jobId)}#project-360-monitoring`}>
+                  <Activity className="size-4" /> Monitor
+                </Link>
+              </Button>
+            ) : (
+              <Button variant="outline" size="sm" disabled title="Wait for the Aggregate Arc proof">
+                <Activity className="size-4" /> Monitor after proof
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => void share()}>
               {copied ? <Check className="size-4 text-emerald-400" /> : <Share2 className="size-4" />}
               {copied ? "Copied" : "Share"}

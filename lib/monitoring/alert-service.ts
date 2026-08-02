@@ -130,7 +130,7 @@ export async function listTrustAlerts(input: AlertTenant & {
   if (rows.length === 0) {
     return { alerts: [], unreadCount: await unreadCountPromise };
   }
-  const [statesResult, snapshotsResult, profiles] = await Promise.all([
+  const [statesResult, snapshotsResult, projectSnapshotsResult, profiles] = await Promise.all([
     client
       .from("trust_alert_states")
       .select("alert_event_id,state")
@@ -143,9 +143,18 @@ export async function listTrustAlerts(input: AlertTenant & {
         "id",
         rows.map((row) => row.snapshot_id).filter((id): id is string => Boolean(id)),
       ),
+    client
+      .from("project_360_monitor_snapshots")
+      .select("id,public_id")
+      .in(
+        "id",
+        rows
+          .map((row) => row.project_360_snapshot_id)
+          .filter((id): id is string => Boolean(id)),
+      ),
     profilePublicIds(rows.map((row) => row.profile_id)),
   ]);
-  if (statesResult.error || snapshotsResult.error) {
+  if (statesResult.error || snapshotsResult.error || projectSnapshotsResult.error) {
     throw new TrustMonitoringError(
       "Alerts are temporarily unavailable.",
       "monitoring_unavailable",
@@ -160,7 +169,7 @@ export async function listTrustAlerts(input: AlertTenant & {
     ]),
   );
   const snapshots = new Map(
-    (snapshotsResult.data ?? []).map((row) => [
+    [...(snapshotsResult.data ?? []), ...(projectSnapshotsResult.data ?? [])].map((row) => [
       row.id as string,
       row.public_id as string,
     ]),
@@ -171,7 +180,11 @@ export async function listTrustAlerts(input: AlertTenant & {
         row,
         states.get(row.id) ?? "unread",
         profiles.get(row.profile_id) ?? "",
-        row.snapshot_id ? snapshots.get(row.snapshot_id) ?? null : null,
+        row.snapshot_id
+          ? snapshots.get(row.snapshot_id) ?? null
+          : row.project_360_snapshot_id
+            ? snapshots.get(row.project_360_snapshot_id) ?? null
+            : null,
       ),
     )
     .filter((alert) => alert.profileId && (!input.state || alert.state === input.state));

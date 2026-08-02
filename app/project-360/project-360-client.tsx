@@ -118,11 +118,15 @@ async function api(url: string, init?: RequestInit) {
   return body as Record<string, any>;
 }
 
-export function Project360Client() {
+export function Project360Client({
+  initialSource = { type: "github_repository", value: "" },
+}: {
+  initialSource?: { type: Project360SourceType; value: string };
+}) {
   const wallet = useArcWallet();
   const [ownerWallet, setOwnerWallet] = useState<string | null>(null);
-  const [sourceType, setSourceType] = useState<Project360SourceType>("github_repository");
-  const [sourceValue, setSourceValue] = useState("");
+  const [sourceType, setSourceType] = useState<Project360SourceType>(initialSource.type);
+  const [sourceValue, setSourceValue] = useState(initialSource.value);
   const [discovery, setDiscovery] = useState<Discovery | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [quote, setQuote] = useState<HostedQuote | null>(null);

@@ -13,6 +13,11 @@ import type {
   TrustProfileRow,
   TrustWatchlistRow,
 } from "./types.ts";
+import type {
+  Project360MonitorRow,
+  Project360MonitorRecheckRow,
+  Project360MonitorSnapshotRow,
+} from "../project-360/monitoring-types.ts";
 
 const SCORE_ALERT_THRESHOLD = 3;
 
@@ -459,4 +464,207 @@ export async function createRecheckFailureAlert(input: {
       input.profile,
     );
   }
+}
+
+function buildProject360AlertDrafts(
+  previous: Project360MonitorSnapshotRow | null,
+  current: Project360MonitorSnapshotRow,
+): AlertDraft[] {
+  const delta = current.delta_snapshot;
+  const drafts: AlertDraft[] = [];
+  if (delta.score.change !== null && Math.abs(delta.score.change) >= 5) {
+    drafts.push({
+      type: "trust_score_changed",
+      fingerprint: digest(["project360_score", delta.score.before, delta.score.after]),
+      message: `Project Trust Score ${delta.score.change < 0 ? "decreased" : "increased"} from ${delta.score.before} to ${delta.score.after}.`,
+      change: { score: delta.score, coverage: delta.coverage, confidence: delta.confidence },
+    });
+  }
+  if (delta.verdict.changed) {
+    drafts.push({
+      type: "trust_status_changed",
+      fingerprint: digest(["project360_verdict", delta.verdict.before, delta.verdict.after]),
+      message: `Project 360 verdict changed from ${String(delta.verdict.before).replaceAll("_", " ")} to ${delta.verdict.after.replaceAll("_", " ")}.`,
+      change: { verdict: delta.verdict },
+    });
+  }
+  for (const change of delta.changes.filter((item) => item.kind === "new_risk")) {
+    drafts.push({
+      type: "risk_added",
+      fingerprint: digest(["project360_risk_added", change.code]),
+      message: `A new Project 360 risk was detected: ${change.title}.`,
+      change: { risk: publicRisk(change), category: change.category },
+    });
+  }
+  for (const change of delta.changes.filter((item) => item.kind === "improved" && item.code.startsWith("resolved_risk_"))) {
+    drafts.push({
+      type: "risk_resolved",
+      fingerprint: digest(["project360_risk_resolved", change.code]),
+      message: `A Project 360 risk was resolved: ${change.title.replace(/\s+resolved$/i, "")}.`,
+      change: { risk: publicRisk(change), category: change.category },
+    });
+  }
+  if (current.verification_status === "verification_failed") {
+    drafts.push({
+      type: "verification_failed",
+      fingerprint: digest(["project360_verification_failed", current.report_hash]),
+      message: "Aggregate Arc verification could not be completed for the Project 360 snapshot.",
+      change: { verificationStatus: "verification_failed" },
+    });
+  }
+  return drafts.map((draft) => ({
+    ...draft,
+    fingerprint: digest([draft.fingerprint, current.report_hash.toLowerCase(), previous?.report_hash ?? null]),
+  }));
+}
+
+async function scheduleProject360WebhookDeliveries(input: {
+  alert: TrustAlertEventRow;
+  profile: TrustProfileRow;
+  monitor: Project360MonitorRow;
+  snapshot: Project360MonitorSnapshotRow;
+  change: Record<string, unknown>;
+}) {
+  const client = getByoaClient();
+  const profileUrl = `${publicAppUrl()}/trust/${input.profile.public_id}`;
+  const payload = {
+    id: input.alert.public_id,
+    type: input.alert.event_type,
+    createdAt: input.alert.created_at,
+    apiVersion: "2026-08-02",
+    data: {
+      profile: {
+        id: input.profile.public_id,
+        name: input.monitor.label,
+        subjectType: "project_360",
+        publicUrl: profileUrl,
+      },
+      snapshot: {
+        id: input.snapshot.public_id,
+        score: input.snapshot.project_trust_score,
+        status: input.snapshot.verdict,
+        coverage: input.snapshot.coverage_status,
+        confidence: input.snapshot.confidence_percent,
+        verifiedOnArc:
+          input.snapshot.verification_status === "verified" &&
+          Boolean(input.snapshot.proof_transaction_hash),
+        reportUrl: `${profileUrl}#snapshot-${input.snapshot.public_id}`,
+      },
+      change: input.change,
+    },
+  };
+  const eventResult = await client.from("webhook_events").upsert({
+    public_id: input.alert.public_id,
+    owner_wallet: input.alert.owner_wallet,
+    alert_event_id: input.alert.id,
+    event_type: input.alert.event_type,
+    payload,
+    created_at: input.alert.created_at,
+  }, { onConflict: "alert_event_id", ignoreDuplicates: true }).select("id").maybeSingle();
+  let eventId = eventResult.data?.id as string | undefined;
+  if (!eventId) {
+    const existing = await client.from("webhook_events").select("id").eq("alert_event_id", input.alert.id).maybeSingle();
+    eventId = existing.data?.id as string | undefined;
+  }
+  if (!eventId) return;
+  const subscriptions = await client
+    .from("webhook_subscriptions")
+    .select("id,owner_wallet")
+    .ilike("owner_wallet", input.monitor.owner_wallet)
+    .eq("status", "active")
+    .contains("profile_ids", [input.profile.id])
+    .contains("event_types", [input.alert.event_type]);
+  if (!subscriptions.data?.length) return;
+  await client.from("webhook_deliveries").upsert(
+    subscriptions.data.map((subscription) => ({
+      owner_wallet: subscription.owner_wallet,
+      subscription_id: subscription.id,
+      event_id: eventId,
+      status: "pending",
+      attempt_count: 0,
+      next_attempt_at: new Date().toISOString(),
+    })),
+    { onConflict: "subscription_id,event_id", ignoreDuplicates: true },
+  );
+}
+
+export async function createProject360AlertsForSnapshot(input: {
+  monitor: Project360MonitorRow;
+  profile: TrustProfileRow;
+  previous: Project360MonitorSnapshotRow | null;
+  current: Project360MonitorSnapshotRow;
+}) {
+  if (!input.current.delta_snapshot.meaningful && input.current.verification_status !== "verification_failed") return [];
+  const drafts = buildProject360AlertDrafts(input.previous, input.current);
+  if (!drafts.length) return [];
+  const client = getByoaClient();
+  const inserted = await client.from("trust_alert_events").upsert(
+    drafts.map((draft) => ({
+      owner_wallet: input.monitor.owner_wallet,
+      profile_id: input.profile.id,
+      snapshot_id: null,
+      project_360_snapshot_id: input.current.id,
+      event_type: draft.type,
+      event_fingerprint: draft.fingerprint,
+      message: draft.message,
+      payload: draft.change,
+      byoa_agent_id: null,
+      machine_credential_id: null,
+    })),
+    { onConflict: "profile_id,event_type,event_fingerprint", ignoreDuplicates: true },
+  );
+  if (inserted.error) throw inserted.error;
+  const eventsResult = await client.from("trust_alert_events").select("*").eq("profile_id", input.profile.id).in("event_fingerprint", drafts.map((draft) => draft.fingerprint));
+  if (eventsResult.error) throw eventsResult.error;
+  const events = new Map(((eventsResult.data ?? []) as TrustAlertEventRow[]).map((event) => [event.event_fingerprint, event]));
+  const created: TrustAlertEventRow[] = [];
+  for (const draft of drafts) {
+    const alert = events.get(draft.fingerprint);
+    if (!alert) continue;
+    await client.from("trust_alert_states").upsert({ alert_event_id: alert.id, owner_wallet: input.monitor.owner_wallet, state: "unread" }, { onConflict: "alert_event_id,owner_wallet", ignoreDuplicates: true });
+    await scheduleProject360WebhookDeliveries({ alert, profile: input.profile, monitor: input.monitor, snapshot: input.current, change: draft.change });
+    created.push(alert);
+  }
+  return created;
+}
+
+export async function createProject360RecheckFailureAlert(input: {
+  monitor: Project360MonitorRow;
+  profile: TrustProfileRow;
+  recheck: Project360MonitorRecheckRow;
+}) {
+  const type: TrustAlertEventType = "recheck_failed";
+  const fingerprint = digest(["project360_recheck_failed", input.recheck.public_id]);
+  const client = getByoaClient();
+  const result = await client.from("trust_alert_events").insert({
+    owner_wallet: input.monitor.owner_wallet,
+    profile_id: input.profile.id,
+    snapshot_id: null,
+    project_360_snapshot_id: null,
+    event_type: type,
+    event_fingerprint: fingerprint,
+    message: "The scheduled Project 360 recheck could not be completed.",
+    payload: { recheckStatus: "failed", workflow: "project_360" },
+    byoa_agent_id: null,
+    machine_credential_id: null,
+  }).select("*").maybeSingle();
+  let alert = result.data as TrustAlertEventRow | null;
+  if (!alert && result.error?.code === "23505") {
+    const existing = await client.from("trust_alert_events")
+      .select("*")
+      .eq("profile_id", input.profile.id)
+      .eq("event_type", type)
+      .eq("event_fingerprint", fingerprint)
+      .is("snapshot_id", null)
+      .is("project_360_snapshot_id", null)
+      .maybeSingle();
+    alert = existing.data as TrustAlertEventRow | null;
+  }
+  if (!alert) return null;
+  await client.from("trust_alert_states").upsert(
+    { alert_event_id: alert.id, owner_wallet: input.monitor.owner_wallet, state: "unread" },
+    { onConflict: "alert_event_id,owner_wallet", ignoreDuplicates: true },
+  );
+  await scheduleFailureWebhookDeliveries(alert, input.profile);
+  return alert;
 }
