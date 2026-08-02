@@ -397,7 +397,7 @@ async function verifyReportResponsive(input: {
       await page.getByText("Project 360 module progress", { exact: true }).waitFor();
       await page.getByTestId("project-360-module-statuses").waitFor();
       await page.getByText("Section 15", { exact: true }).waitFor();
-      await page.getByText("Project Trust Score", { exact: true }).waitFor();
+      await page.getByRole("heading", { name: "Project Trust Score", exact: true }).waitFor();
       await page.getByText(input.proofHash, { exact: true }).waitFor();
       await page.getByRole("link", { name: "View aggregate proof on Arc" }).waitFor();
       assert(
