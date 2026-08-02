@@ -364,6 +364,8 @@ export function HostedJobResult({ initialView }: { initialView: HostedJobView })
       ) ?? null
     : null;
   const project360ModuleProgress = PROJECT_360_MODULES.map((module) => {
+    const finalModule = project360Report?.modules.find((item) => item.module === module);
+    if (finalModule) return { module, status: finalModule.status };
     const selected = view.job.project360Modules?.includes(module) ?? false;
     const serviceSlugs = PROJECT_360_MODULE_SERVICES[module];
     const moduleServices = view.services.filter((service) =>

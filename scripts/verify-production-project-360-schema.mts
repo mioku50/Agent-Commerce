@@ -116,6 +116,16 @@ async function verifyProductionProject360Schema() {
         executionLedger.rows[0].name === "p421_project_360_execution_constraints",
       "The P4.2.1 Project 360 execution migration is not recorded exactly once in the Production ledger.",
     );
+    const reliabilityLedger = await postgres.query<{ version: string; name: string | null }>(`
+      select version, name
+      from supabase_migrations.schema_migrations
+      where version = '20260802120000'
+    `);
+    assert(
+      reliabilityLedger.rows.length === 1 &&
+        reliabilityLedger.rows[0].name === "p422_project_360_module_reliability",
+      "The P4.2.2 module reliability migration is not recorded exactly once in the Production ledger.",
+    );
 
     const tableChecks = await Promise.all([
       server
@@ -132,7 +142,7 @@ async function verifyProductionProject360Schema() {
         .limit(0),
       server
         .from("project_360_module_runs")
-        .select("id,job_id,module,status,input_hash,attempt_count,child_report_hash,score,confidence,result_snapshot,error_code,started_at,completed_at,updated_at")
+        .select("id,job_id,module,status,input_hash,attempt_count,child_report_hash,score,confidence,result_snapshot,error_code,provider,retryable,public_reason,duration_ms,execution_telemetry,started_at,completed_at,updated_at")
         .limit(0),
     ]);
     const tableError = tableChecks.find((result) => result.error)?.error;
@@ -169,6 +179,7 @@ async function verifyProductionProject360Schema() {
       "project_360_candidates_discovery_idx",
       "project_360_quotes_discovery_idx",
       "project_360_module_runs_job_status_idx",
+      "project_360_module_runs_retry_idx",
     ]]);
     const indexNames = new Set(indexes.rows.map((row) => row.indexname));
     for (const name of [
@@ -179,6 +190,7 @@ async function verifyProductionProject360Schema() {
       "project_360_candidates_discovery_idx",
       "project_360_quotes_discovery_idx",
       "project_360_module_runs_job_status_idx",
+      "project_360_module_runs_retry_idx",
     ]) {
       assert(indexNames.has(name), `A required Project 360 index is missing: ${name}`);
     }
@@ -275,10 +287,22 @@ async function verifyProductionProject360Schema() {
       "pending",
       "running",
       "completed",
+      "insufficient_data",
+      "provider_unavailable",
       "failed",
-      "unsupported",
     ]) {
       assert(moduleStatus.includes(status), `Module-run status constraint omits ${status}.`);
+    }
+    assert(!moduleStatus.includes("unsupported"), "Module-run status constraint still allows unsupported.");
+    const moduleErrorCode = definitions.get("project_360_module_runs_error_code_check") ?? "";
+    for (const code of [
+      "invalid_wallet",
+      "policy_denial",
+      "insufficient_data",
+      "treasury_provider_unavailable",
+      "treasury_provider_malformed_response",
+    ]) {
+      assert(moduleErrorCode.includes(code), `Module-run error constraint omits ${code}.`);
     }
     console.log("  ✓ Indexes, FK, unique, status, idempotency, and workflow constraints are active.");
 

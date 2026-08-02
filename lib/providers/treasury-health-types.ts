@@ -9,6 +9,7 @@ export interface UsdcTransfer {
   from: string;
   to: string;
   value: bigint;
+  timestamp?: string;
 }
 
 export interface AnomalousTransfer {
@@ -73,4 +74,6 @@ export interface TreasuryAnalytics {
   lastTransferAt: string | null;
   blocksScanned: number;
   dataTruncated: boolean;
+  observationWindowDays: number;
+  dataSource: string;
 }

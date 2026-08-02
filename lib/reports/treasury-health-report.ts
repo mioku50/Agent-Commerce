@@ -304,14 +304,14 @@ export function buildTreasuryHealthPublicReport(
     risksAndReviewItems,
 
     evidenceAndDataWindow: {
-      dataSource: "Viem eth_getLogs",
+      dataSource: analytics.dataSource,
       network: "Arc Testnet",
       chainId: 5042002,
       blocksScanned: analytics.blocksScanned,
       firstTransferAt: analytics.firstTransferAt,
       lastTransferAt: analytics.lastTransferAt,
       dataTruncated: analytics.dataTruncated,
-      summary: `Scanned ${analytics.blocksScanned} blocks. Truncated: ${analytics.dataTruncated}.`
+      summary: `Observed the last ${analytics.observationWindowDays} days across ${analytics.blocksScanned} blocks. Truncated: ${analytics.dataTruncated}.`
     },
 
     verification: {

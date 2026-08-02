@@ -14,6 +14,7 @@ const TARGET_FILES = [
   "20260801190000_p421_project_360_budget_constraints.sql",
   "20260801193000_p421_project_360_execution_constraints.sql",
   "20260801223000_p421_project_360_legacy_service_constraint.sql",
+  "20260802120000_p422_project_360_module_reliability.sql",
 ] as const;
 const TARGET_VERSIONS = TARGET_FILES.map((file) => file.split("_", 1)[0]);
 const BASE_VERSION = TARGET_VERSIONS[0];

@@ -121,7 +121,9 @@ const completedGithub: Project360ModuleResult = {
   childReportHash: `0x${"c".repeat(64)}`,
   score: 80,
   confidence: "high",
-  errorCode: null,
+  retryable: false,
+  publicReason: null,
+  internalErrorCode: null,
   report: null,
 };
 const partialReport = buildProject360Report({
@@ -185,6 +187,21 @@ const fullInput = normalizeProject360Input({
   sources: fullSources,
   modules: fullModules,
 });
+const twoSourceInput = normalizeProject360Input({
+  schema: "veyra.project360.input.v1",
+  discoveryId: "dsc_33333333333333333333",
+  discoveryRevision: 1,
+  discoverySnapshotHash: "7".repeat(64),
+  selectionHash: project360SelectionHash({
+    discoveryId: "dsc_33333333333333333333",
+    discoveryRevision: 1,
+    candidatesHash: "7".repeat(64),
+    sources: [fullSources[0], fullSources[2]],
+    modules: ["github_due_diligence", "treasury_health"],
+  }),
+  sources: [fullSources[0], fullSources[2]],
+  modules: ["github_due_diligence", "treasury_health"],
+});
 const request = validateHostedWorkflowRequest({
   workflowType: "project_360",
   project360Input: fullInput,
@@ -211,12 +228,14 @@ const limitedReport = buildProject360Report({
     completedGithub,
     {
       module: "agent_trust_report",
-      status: "failed",
+      status: "provider_unavailable",
       inputHash: "f".repeat(64),
       childReportHash: null,
       score: null,
       confidence: "insufficient",
-      errorCode: "provider_failure",
+      retryable: true,
+      publicReason: "Agent evidence could not be collected from the configured provider.",
+      internalErrorCode: "agent_provider_unavailable",
       report: null,
     },
   ],
@@ -225,6 +244,45 @@ const limitedReport = buildProject360Report({
 assert.equal(limitedReport.coverage.status, "limited");
 assert.equal(limitedReport.coverage.label, "Completed with limited coverage");
 assert.equal(limitedReport.score.value, 80);
+assert.equal(limitedReport.score.breakdown.length, 1);
+assert.equal(limitedReport.modules[1].status, "provider_unavailable");
+assert.equal(limitedReport.modules[1].retryable, true);
+assert.doesNotMatch(JSON.stringify(limitedReport), /agent_provider_unavailable|internalErrorCode/);
+
+const statusCoverage = new Map(limitedReport.modules.map((module) => [module.module, module.status]));
+assert.equal(statusCoverage.get("treasury_health"), "not_selected");
+assert.equal(statusCoverage.get("paid_api_quality"), "not_selected");
+assert.equal(statusCoverage.get("arc_contract_analysis"), "not_selected");
+
+const insufficientReport = buildProject360Report({
+  reportId: "p360_test_insufficient",
+  projectInput: twoSourceInput,
+  moduleResults: [
+    completedGithub,
+    {
+      module: "treasury_health",
+      status: "insufficient_data",
+      inputHash: "9".repeat(64),
+      childReportHash: `0x${"8".repeat(64)}`,
+      score: null,
+      confidence: "insufficient",
+      retryable: false,
+      publicReason: "The confirmed source did not provide enough evidence for a numeric module score.",
+      internalErrorCode: "insufficient_data",
+      report: null,
+    },
+  ],
+  generatedAt: "2026-08-01T00:00:00.000Z",
+});
+assert.equal(insufficientReport.coverage.status, "limited");
+assert.equal(insufficientReport.score.value, 80, "Insufficient data must not count as a zero score.");
+
+const legacyReport = structuredClone(insufficientReport) as any;
+legacyReport.modules[2].status = "unsupported";
+delete legacyReport.modules[2].retryable;
+delete legacyReport.modules[2].publicReason;
+legacyReport.verification.reportHash = computeProject360ReportHash(legacyReport);
+assert.equal(validateProject360ReportPayload(legacyReport), true, "Historical unsupported reports must remain readable.");
 assert.equal(validateProject360ReportPayload({
   ...partialReport,
   score: {
@@ -267,11 +325,22 @@ const legacyServiceMigration = readFileSync(
   ),
   "utf8",
 );
+const reliabilityMigration = readFileSync(
+  new URL(
+    "../supabase/migrations/20260802120000_p422_project_360_module_reliability.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 assert.match(executionMigration, /jsonb_array_length\(selected_services\) <= 7/i);
 assert.match(executionMigration, /hosted_agent_jobs_spent_usdc_check/i);
 assert.match(legacyServiceMigration, /begin;[\s\S]*commit;/i);
 assert.match(legacyServiceMigration, /hosted_agent_jobs_selected_services_array_check/i);
 assert.match(legacyServiceMigration, /jsonb_array_length\(selected_services\) <= 7/i);
+assert.match(reliabilityMigration, /begin;[\s\S]*commit;/i);
+assert.match(reliabilityMigration, /provider_unavailable/);
+assert.match(reliabilityMigration, /execution_telemetry/);
+assert.match(reliabilityMigration, /project_360_module_runs_retry_idx/);
 for (const guard of [
   "validate_project_360_discovery_tenant",
   "validate_project_360_quote_binding",

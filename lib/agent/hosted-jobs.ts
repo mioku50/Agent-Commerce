@@ -61,7 +61,11 @@ import {
   buildApiQualityPublicReport,
   parseApiQualityJobInput,
 } from "../reports/api-quality-report.ts";
-import { analyzeTreasuryHealth } from "../providers/treasury-health.ts";
+import {
+  executeTreasuryHealthWithRetry,
+  TreasuryHealthExecutionError,
+  type TreasuryAttemptTelemetry,
+} from "../providers/treasury-health.ts";
 import { buildTreasuryHealthPublicReport } from "../reports/treasury-health-report.ts";
 import { snapshotArcContract } from "../agent-trust/contract.ts";
 import { snapshotEndpointAvailability } from "../agent-trust/endpoint.ts";
@@ -74,6 +78,7 @@ import {
 import {
   PROJECT_360_MODULES,
   type Project360Module,
+  type Project360ModuleFailure,
   type Project360ModuleResult,
   type Project360Report,
 } from "../project-360/types.ts";
@@ -267,7 +272,7 @@ async function markProject360ModuleRunning(
     .update({
       status: "running",
       started_at: new Date().toISOString(),
-      attempt_count: 1,
+      attempt_count: 0,
     })
     .eq("job_id", jobId)
     .eq("module", module)
@@ -287,15 +292,20 @@ function responseReport<T>(value: unknown): T | null {
 function failedProject360ModuleResult(
   projectInput: NonNullable<HostedWorkflowRequest["project360Input"]>,
   module: Project360Module,
+  failure?: Project360ModuleFailure | null,
 ): Project360ModuleResult {
   return {
     module,
-    status: "failed",
+    status: failure?.status ?? "failed",
     inputHash: project360ModuleInputHash(projectInput, module),
     childReportHash: null,
     score: null,
     confidence: "insufficient",
-    errorCode: "provider_failure",
+    retryable: failure?.retryable ?? false,
+    publicReason:
+      failure?.publicReason ??
+      "The module could not be completed; successful module results were preserved.",
+    internalErrorCode: failure?.internalErrorCode ?? "internal_error",
     report: null,
   };
 }
@@ -304,6 +314,7 @@ function buildProject360ModuleResults(input: {
   projectInput: NonNullable<HostedWorkflowRequest["project360Input"]>;
   runtimeServiceOutputs: ReadonlyMap<string, unknown>;
   agentTrustReport: AgentTrustReport | null;
+  treasuryFailure: Project360ModuleFailure | null;
 }) {
   return input.projectInput.modules.map((module): Project360ModuleResult => {
     const inputHash = project360ModuleInputHash(input.projectInput, module);
@@ -329,7 +340,11 @@ function buildProject360ModuleResults(input: {
       );
       return report
         ? moduleResultFromReport({ module, inputHash, report })
-        : failedProject360ModuleResult(input.projectInput, module);
+        : failedProject360ModuleResult(
+            input.projectInput,
+            module,
+            input.treasuryFailure,
+          );
     }
     if (module === "paid_api_quality") {
       const report = responseReport<ReturnType<typeof buildApiQualityPublicReport>>(
@@ -362,7 +377,9 @@ async function persistProject360ModuleResults(
         score: result.score,
         confidence: result.confidence,
         result_snapshot: result.report,
-        error_code: result.errorCode,
+        error_code: result.internalErrorCode,
+        retryable: result.retryable,
+        public_reason: result.publicReason,
         completed_at: completedAt,
       })
       .eq("job_id", jobId)
@@ -408,6 +425,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
     let agentTrustReport: AgentTrustReport | null = null;
     let project360Report: Project360Report | null = null;
     let project360ModuleResults: Project360ModuleResult[] = [];
+    let treasuryFailure: Project360ModuleFailure | null = null;
     if (request.workflowType === "project_360" && request.project360Input) {
       await initializeProject360ModuleRuns(jobId, request.project360Input);
     }
@@ -534,14 +552,89 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
           if (request.workflowType === "project_360") {
             await markProject360ModuleRunning(jobId, "treasury_health");
           }
-          const targetWallet = request.project360Input?.sources.find(
+          const treasurySource = request.project360Input?.sources.find(
             (source) => source.type === "project_wallet",
-          )?.canonicalValue ?? request.inputText;
-          const analytics = await analyzeTreasuryHealth(targetWallet);
+          );
+          const targetWallet = treasurySource?.canonicalValue ?? request.inputText;
+          const privateAttempts: TreasuryAttemptTelemetry[] = [];
+          let execution;
+          try {
+            execution = await executeTreasuryHealthWithRetry({
+              walletAddress: targetWallet,
+              scanDays: 180,
+              maxAttempts: 3,
+              deadlineMs: 120_000,
+              onAttempt: async (attempt) => {
+                privateAttempts.push(attempt);
+                if (request.workflowType !== "project_360" || !treasurySource) return;
+                console[attempt.errorCode ? "error" : "info"](
+                  `[project360-module] ${JSON.stringify({
+                    project360JobId: jobId,
+                    module: "treasury_health",
+                    candidateType: treasurySource.type,
+                    candidateHash: treasurySource.valueHash,
+                    provider: attempt.provider,
+                    errorCode: attempt.errorCode,
+                    retryable: attempt.retryable,
+                    durationMs: attempt.durationMs,
+                  })}`,
+                );
+                const telemetryUpdate = await getHostedClient()
+                  .from("project_360_module_runs")
+                  .update({
+                    attempt_count: attempt.attempt,
+                    provider: attempt.provider,
+                    retryable: attempt.retryable,
+                    duration_ms: privateAttempts.reduce(
+                      (sum, item) => sum + item.durationMs,
+                      0,
+                    ),
+                    execution_telemetry: { attempts: privateAttempts },
+                  })
+                  .eq("job_id", jobId)
+                  .eq("module", "treasury_health")
+                  .eq("status", "running");
+                if (telemetryUpdate.error) {
+                  console.error(
+                    `[project360-module] ${JSON.stringify({
+                      project360JobId: jobId,
+                      module: "treasury_health",
+                      candidateType: treasurySource.type,
+                      candidateHash: treasurySource.valueHash,
+                      provider: "internal",
+                      errorCode: "telemetry_persistence_failed",
+                      retryable: true,
+                      durationMs: attempt.durationMs,
+                    })}`,
+                  );
+                }
+              },
+            });
+          } catch (error) {
+            if (
+              request.workflowType === "project_360" &&
+              error instanceof TreasuryHealthExecutionError
+            ) {
+              const providerUnavailable =
+                error.failure.internalErrorCode === "treasury_provider_unavailable";
+              treasuryFailure = {
+                status: providerUnavailable ? "provider_unavailable" : "failed",
+                retryable: error.failure.retryable,
+                publicReason: providerUnavailable
+                  ? "Treasury data could not be collected from the configured provider."
+                  : "Treasury data could not be analyzed from the confirmed source.",
+                internalErrorCode: error.failure.internalErrorCode,
+                provider: error.failure.provider,
+                attemptCount: error.attempts.length,
+                durationMs: error.durationMs,
+              };
+            }
+            throw error;
+          }
           const treasuryReport = buildTreasuryHealthPublicReport({
             reportId: jobId,
             targetWallet,
-            analytics,
+            analytics: execution.analytics,
             status: "completed",
           });
           return { report: treasuryReport };
@@ -574,6 +667,7 @@ export async function runHostedAgentJob(jobId: string, inputText: string) {
             projectInput: request.project360Input,
             runtimeServiceOutputs,
             agentTrustReport,
+            treasuryFailure,
           });
           await persistProject360ModuleResults(jobId, project360ModuleResults);
           project360Report = buildProject360Report({

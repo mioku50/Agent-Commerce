@@ -7,14 +7,20 @@
 process.env.NODE_ENV = "test";
 
 import { strict as assert } from "node:assert";
-import { analyzeTreasury, calculateTreasuryHealthScore } from "../lib/providers/treasury-health.ts";
+import {
+  analyzeTreasury,
+  calculateTreasuryHealthScore,
+  executeTreasuryHealthWithRetry,
+  TreasuryHealthExecutionError,
+  TreasuryProviderError,
+} from "../lib/providers/treasury-health.ts";
 import { buildTreasuryHealthPublicReport, formatTreasuryHealthReportAsMarkdown } from "../lib/reports/treasury-health-report.ts";
 import { validateTreasuryHealthReportPayload, computeCanonicalReportHash, stripInternalKeys } from "../lib/reports/canonical-report-hash.ts";
 import { TREASURY_HEALTH_FINALIZER_PRICE_USDC } from "../lib/services/constants.ts";
 import type { UsdcTransfer } from "../lib/providers/treasury-health-types.ts";
 
 async function runTests() {
-  console.log("Starting Treasury Health Test Suite (15 Scenarios)...");
+  console.log("Starting Treasury Health Test Suite (19 Scenarios)...");
 
   const wallet = "0x89d24a6b4ccb1b6faa2625fe562bdd9a23260359";
   const recipient1 = "0x0000000000000000000000000000000000000001";
@@ -179,6 +185,116 @@ async function runTests() {
   // We can just pass dataTruncated=true into analyzeTreasury, as fetchUsdcTransfers logic truncates.
   const analyticsTruncated = analyzeTreasury([], wallet, 0, 1000, true);
   assert.equal(analyticsTruncated.dataTruncated, true);
+
+  // Scenario 16: transient provider failure retries once and succeeds.
+  console.log("Scenario 16: Transient provider retry succeeds");
+  let providerAttempts = 0;
+  const immutableCommerce = { quotes: 1, payments: 1, jobs: 1 };
+  const retrySuccess = await executeTreasuryHealthWithRetry({
+    walletAddress: wallet,
+    initialDelayMs: 1,
+    sleepImpl: async () => undefined,
+    operation: async () => {
+      providerAttempts += 1;
+      if (providerAttempts === 1) {
+        throw new TreasuryProviderError(
+          "treasury_provider_unavailable",
+          "arcscan_blockscout",
+          true,
+          429,
+          "rate limited",
+        );
+      }
+      return analytics1;
+    },
+  });
+  assert.equal(providerAttempts, 2);
+  assert.equal(retrySuccess.attempts.length, 2);
+  assert.equal(retrySuccess.attempts[0].retryable, true);
+  assert.equal(retrySuccess.attempts[1].errorCode, null);
+  assert.deepEqual(
+    immutableCommerce,
+    { quotes: 1, payments: 1, jobs: 1 },
+    "Provider retry must not create another quote, payment, or job.",
+  );
+
+  // Scenario 17: exhausting all retries produces the normalized unavailable state.
+  console.log("Scenario 17: Retry exhaustion is provider unavailable");
+  let exhaustedAttempts = 0;
+  await assert.rejects(
+    executeTreasuryHealthWithRetry({
+      walletAddress: wallet,
+      initialDelayMs: 1,
+      sleepImpl: async () => undefined,
+      operation: async () => {
+        exhaustedAttempts += 1;
+        throw new TreasuryProviderError(
+          "treasury_provider_unavailable",
+          "arc_json_rpc",
+          true,
+          503,
+          "temporarily unavailable",
+        );
+      },
+    }),
+    (error: unknown) =>
+      error instanceof TreasuryHealthExecutionError &&
+      error.failure.internalErrorCode === "treasury_provider_unavailable" &&
+      error.failure.retryable === true &&
+      error.attempts.length === 3,
+  );
+  assert.equal(exhaustedAttempts, 3);
+
+  // Scenario 18: invalid input is non-retryable and never reaches a provider.
+  console.log("Scenario 18: Invalid wallet is not retried");
+  let invalidAttempts = 0;
+  await assert.rejects(
+    executeTreasuryHealthWithRetry({
+      walletAddress: "not-a-wallet",
+      sleepImpl: async () => undefined,
+      operation: async () => {
+        invalidAttempts += 1;
+        throw new TreasuryProviderError(
+          "invalid_wallet",
+          "treasury_input",
+          false,
+          400,
+          "invalid wallet",
+        );
+      },
+    }),
+    (error: unknown) =>
+      error instanceof TreasuryHealthExecutionError &&
+      error.failure.internalErrorCode === "invalid_wallet" &&
+      error.attempts.length === 1,
+  );
+  assert.equal(invalidAttempts, 1);
+
+  // Scenario 19: malformed provider responses are classified as non-retryable.
+  console.log("Scenario 19: Malformed provider response is not retried");
+  let malformedAttempts = 0;
+  await assert.rejects(
+    executeTreasuryHealthWithRetry({
+      walletAddress: wallet,
+      sleepImpl: async () => undefined,
+      operation: async () => {
+        malformedAttempts += 1;
+        throw new TreasuryProviderError(
+          "treasury_provider_malformed_response",
+          "arcscan_blockscout",
+          false,
+          200,
+          "invalid response shape",
+        );
+      },
+    }),
+    (error: unknown) =>
+      error instanceof TreasuryHealthExecutionError &&
+      error.failure.internalErrorCode === "treasury_provider_malformed_response" &&
+      error.failure.retryable === false &&
+      error.attempts.length === 1,
+  );
+  assert.equal(malformedAttempts, 1);
 
   console.log("All Treasury Health tests passed successfully!");
 }

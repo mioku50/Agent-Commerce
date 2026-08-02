@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import type { Project360Report } from "@/lib/project-360/types";
+import { PROJECT_360_MODULE_LABELS } from "@/lib/project-360/types";
 import { BRAND } from "@/lib/brand";
 
 function statusClass(status: Project360Report["coverage"]["status"]) {
@@ -21,6 +22,26 @@ function sectionStatusLabel(status: Project360Report["sections"][number]["status
   if (status === "not_analyzed") return "Not analyzed";
   if (status === "failed") return "Failed independently";
   return "Limited evidence";
+}
+
+function moduleStatusLabel(status: Project360Report["modules"][number]["status"]) {
+  if (String(status) === "unsupported") return "Insufficient data";
+  if (status === "completed") return "Completed";
+  if (status === "not_selected") return "Not selected";
+  if (status === "not_provided") return "Not provided";
+  if (status === "insufficient_data") return "Insufficient data";
+  if (status === "provider_unavailable") return "Provider unavailable";
+  return "Failed";
+}
+
+function moduleStatusDescription(status: Project360Report["modules"][number]["status"]) {
+  if (String(status) === "unsupported") return "Legacy report: the confirmed source did not provide sufficient evidence.";
+  if (status === "completed") return "Included in coverage and Project Trust Score.";
+  if (status === "not_selected") return "A source existed, but this module was outside the immutable quote.";
+  if (status === "not_provided") return "No confirmed source was supplied for this module.";
+  if (status === "insufficient_data") return "The source was analyzed, but evidence was insufficient for a score.";
+  if (status === "provider_unavailable") return "The external provider remained unavailable after bounded retries.";
+  return "The module ended with a non-retryable analysis failure.";
 }
 
 type AggregateProof = {
@@ -104,6 +125,20 @@ export function Project360ReportView({
             <p className="text-xs uppercase tracking-wider text-muted-foreground">Aggregate hash</p>
             <p className="mt-2 break-all font-mono text-xs">{report.verification.reportHash}</p>
           </div>
+        </div>
+
+        <div className="grid gap-3 sm:grid-cols-2" data-testid="project-360-module-statuses">
+          {report.modules.map((module) => (
+            <div key={module.module} className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">{PROJECT_360_MODULE_LABELS[module.module]}</p>
+                <Badge variant="outline">{moduleStatusLabel(module.status)}</Badge>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-muted-foreground">
+                {module.publicReason ?? moduleStatusDescription(module.status)}
+              </p>
+            </div>
+          ))}
         </div>
 
         <div className="grid gap-4">

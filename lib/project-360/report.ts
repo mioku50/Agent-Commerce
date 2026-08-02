@@ -178,12 +178,16 @@ export function moduleResultFromReport(input: {
   }
   return {
     module: input.module,
-    status: "completed",
+    status: score === null ? "insufficient_data" : "completed",
     inputHash: input.inputHash,
     childReportHash: computeCanonicalReportHash(input.report).canonicalHash,
     score,
     confidence,
-    errorCode: null,
+    retryable: false,
+    publicReason: score === null
+      ? "The confirmed source did not provide enough evidence for a numeric module score."
+      : null,
+    internalErrorCode: score === null ? "insufficient_data" : null,
     report: input.report,
   };
 }
@@ -240,7 +244,11 @@ function coverageFor(input: Project360Input, results: Project360ModuleResult[]) 
   const hasSelectedFailure = results.some(
     (result) =>
       input.modules.includes(result.module) &&
-      (result.status === "failed" || result.status === "unsupported"),
+      (
+        result.status === "failed" ||
+        result.status === "provider_unavailable" ||
+        result.status === "insufficient_data"
+      ),
   );
   let status: Project360CoverageStatus;
   let label: string;
@@ -269,7 +277,7 @@ function moduleSection(
     ? "available"
     : result.status === "failed"
       ? "failed"
-      : result.status === "unsupported"
+      : result.status === "provider_unavailable" || result.status === "insufficient_data"
         ? "limited"
         : result.status === "not_provided"
           ? "not_provided"
@@ -285,9 +293,11 @@ function moduleSection(
         ? "Not provided. Add a data source to include this module in a future quote."
         : result.status === "not_selected"
           ? "Not analyzed because the module was not included in the confirmed quote."
-          : result.status === "unsupported"
-            ? "The confirmed source was valid, but sufficient module evidence was unavailable."
-            : "The module failed independently; successful module results were preserved.",
+          : result.status === "insufficient_data"
+            ? "The confirmed source was analyzed, but sufficient evidence for a score was unavailable."
+            : result.status === "provider_unavailable"
+              ? "The configured external provider was unavailable after bounded retries."
+              : "The module failed independently; successful module results were preserved.",
     data: result.report,
   };
 }
@@ -351,7 +361,11 @@ export function buildProject360Report(input: {
       childReportHash: null,
       score: null,
       confidence: "insufficient",
-      errorCode: input.projectInput.modules.includes(module) ? "internal_error" : null,
+      retryable: false,
+      publicReason: input.projectInput.modules.includes(module)
+        ? "The module could not be completed; successful module results were preserved."
+        : null,
+      internalErrorCode: input.projectInput.modules.includes(module) ? "internal_error" : null,
       report: null,
     };
   });
@@ -360,7 +374,10 @@ export function buildProject360Report(input: {
   const narrative = collectNarrative(results);
   const limitations = results
     .filter((result) => result.status !== "completed")
-    .map((result) => `${PROJECT_360_MODULE_LABELS[result.module]}: ${result.status.replaceAll("_", " ")}.`);
+    .map((result) =>
+      `${PROJECT_360_MODULE_LABELS[result.module]}: ${result.status.replaceAll("_", " ")}.` +
+      (result.publicReason ? ` ${result.publicReason}` : ""),
+    );
   if (coverage.status !== "complete") {
     limitations.unshift(
       `Coverage is ${coverage.completed} of 5 modules; this is not a complete 360-degree audit.`,
@@ -397,7 +414,7 @@ export function buildProject360Report(input: {
     confirmedSources: sources,
     discoverySnapshotHash: input.projectInput.discoverySnapshotHash,
     selectionHash: input.projectInput.selectionHash,
-    modules: results.map(({ report: _report, ...result }) => result),
+    modules: results.map(({ report: _report, internalErrorCode: _internalErrorCode, ...result }) => result),
     score: {
       formulaVersion: "project360-score-v1" as const,
       ...score,
@@ -476,9 +493,13 @@ export function validateProject360ReportPayload(value: unknown): value is Projec
           "not_provided",
           "not_selected",
           "completed",
+          "insufficient_data",
+          "provider_unavailable",
           "failed",
+          // Historical P4.2 reports remain readable.
           "unsupported",
         ].includes(moduleResult.status) ||
+        Object.prototype.hasOwnProperty.call(moduleResult, "internalErrorCode") ||
         !/^[0-9a-f]{64}$/.test(moduleResult.inputHash) ||
         (moduleResult.childReportHash !== null &&
           !/^0x[0-9a-fA-F]{64}$/.test(moduleResult.childReportHash)),
@@ -528,6 +549,10 @@ export function validateProject360ReportPayload(value: unknown): value is Projec
   ) return false;
   const normalizedResults = report.modules.map((module) => ({
     ...module,
+    status: String(module.status) === "unsupported" ? "insufficient_data" : module.status,
+    retryable: module.retryable ?? false,
+    publicReason: module.publicReason ?? null,
+    internalErrorCode: null,
     report: null,
   })) as Project360ModuleResult[];
   const expectedScore = calculateProject360Score(normalizedResults);
@@ -550,7 +575,11 @@ export function validateProject360ReportPayload(value: unknown): value is Projec
     (result) => result.status !== "not_provided" && result.status !== "not_selected",
   ).length;
   const hasFailure = report.modules.some(
-    (result) => result.status === "failed" || result.status === "unsupported",
+    (result) =>
+      result.status === "failed" ||
+      result.status === "provider_unavailable" ||
+      result.status === "insufficient_data" ||
+      String(result.status) === "unsupported",
   );
   const coverageStatus: Project360CoverageStatus = completed === 0
     ? "failed"

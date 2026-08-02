@@ -390,6 +390,7 @@ async function verifyReportResponsive(input: {
       });
       await page.getByRole("heading", { name: "Veyra Project 360 Report" }).waitFor();
       await page.getByText("Project 360 module progress", { exact: true }).waitFor();
+      await page.getByTestId("project-360-module-statuses").waitFor();
       await page.getByText("Section 15", { exact: true }).waitFor();
       await page.getByText("Project Trust Score", { exact: true }).waitFor();
       await page.getByText(input.proofHash, { exact: true }).waitFor();
@@ -634,8 +635,18 @@ async function main() {
     );
     assert(
       report.coverage.expected === first.selected.length &&
-        ["partial", "limited", "complete"].includes(report.coverage.status),
+        report.coverage.completed === first.selected.length &&
+        report.coverage.status === (first.selected.length === 5 ? "complete" : "partial"),
       "Production coverage does not reflect the immutable selection.",
+    );
+    const selectedModuleNames = new Set(projectQuote.selectedModules as string[]);
+    assert(
+      report.modules.every((module: JsonObject) =>
+        selectedModuleNames.has(module.module)
+          ? module.status === "completed"
+          : module.module === "agent_trust_report" && module.status === "not_provided",
+      ),
+      "A selected Production module did not complete or the absent Agent module was not normalized as not_provided.",
     );
     assert(
       report.score.breakdown.every((item: JsonObject) =>
@@ -664,13 +675,15 @@ async function main() {
       "userpaymentid",
       "paymenteventid",
       "idempotencyhash",
+      "internalerrorcode",
+      "executiontelemetry",
     ]) {
       assert(!publicKeys.has(forbidden), `Public Project 360 payload leaked ${forbidden}.`);
     }
 
     const paymentRows = await server
       .from("hosted_workflow_user_payments")
-      .select("id,quote_id,job_id,gross_amount_usdc,transaction_hash,status")
+      .select("id,quote_id,job_id,gross_amount_usdc,provider_cost_usdc,transaction_hash,status")
       .eq("quote_id", quote.id);
     assert(
       !paymentRows.error &&
@@ -679,17 +692,31 @@ async function main() {
         paymentRows.data[0].job_id === jobId &&
         paymentRows.data[0].transaction_hash?.toLowerCase() === paymentTransaction.toLowerCase() &&
         Number(paymentRows.data[0].gross_amount_usdc) === Number(amount) &&
+        Number(paymentRows.data[0].provider_cost_usdc) ===
+          Number(quote.pricing.estimatedProviderCostUsdc) &&
         paymentRows.data[0].status === "settled",
       "Payment accounting is not exactly one settled immutable-quote charge.",
     );
     const jobRows = await server
       .from("hosted_agent_jobs")
-      .select("id")
+      .select("id,spent_usdc")
       .eq("workflow_quote_id", quote.id);
     assert(!jobRows.error && jobRows.data?.length === 1, "The immutable quote created duplicate executions.");
+    assert(
+      Number(jobRows.data[0].spent_usdc) === Number(quote.pricing.estimatedProviderCostUsdc),
+      "Provider spend does not equal the immutable quote provider subtotal.",
+    );
+    const projectQuoteRows = await server
+      .from("project_360_quotes")
+      .select("quote_id")
+      .eq("quote_id", quote.id);
+    assert(
+      !projectQuoteRows.error && projectQuoteRows.data?.length === 1,
+      "The Production run does not have exactly one immutable Project 360 quote mapping.",
+    );
     const moduleRows = await server
       .from("project_360_module_runs")
-      .select("module,status,score,child_report_hash")
+      .select("module,status,score,child_report_hash,attempt_count,error_code,provider,retryable,duration_ms,execution_telemetry")
       .eq("job_id", jobId)
       .order("module");
     assert(!moduleRows.error && moduleRows.data?.length === 5, "Module-run ledger is incomplete.");
@@ -697,10 +724,25 @@ async function main() {
     assert(
       moduleRows.data.every((module) =>
         selectedModules.has(module.module)
-          ? ["completed", "failed", "unsupported"].includes(module.status)
+          ? module.status === "completed"
           : ["not_provided", "not_selected"].includes(module.status),
       ),
       "Executed/skipped modules do not match the immutable quote.",
+    );
+    const treasuryModule = moduleRows.data.find((module) => module.module === "treasury_health");
+    assert(
+      treasuryModule?.status === "completed" &&
+        treasuryModule.error_code === null &&
+        treasuryModule.attempt_count >= 1 &&
+        treasuryModule.attempt_count <= 3 &&
+        treasuryModule.provider === "arcscan_blockscout" &&
+        Number(treasuryModule.duration_ms) >= 0 &&
+        Array.isArray((treasuryModule.execution_telemetry as JsonObject)?.attempts),
+      "Treasury Health did not complete with bounded private attempt telemetry.",
+    );
+    assert(
+      moduleRows.data.every((module) => module.status !== "provider_unavailable" && module.status !== "failed"),
+      "Production Project 360 contains a provider or module failure.",
     );
 
     const aggregateProof = final.proofs.find(
@@ -731,12 +773,15 @@ async function main() {
 
     console.log(JSON.stringify({
       productionUrl: baseUrl,
-      migration: "20260801120000_p42_project_360.sql",
+      migration: "20260802120000_p422_project_360_module_reliability.sql",
       discoveryId: discovery.id,
       quoteId: quote.id,
       jobId,
+      paymentId: userPaymentId,
       publicReportUrl: `${baseUrl}/agent-runner/${jobId}`,
+      amountQuotedUsdc: amount,
       amountChargedUsdc: amount,
+      providerSpendUsdc: String(jobRows.data[0].spent_usdc),
       paymentTransaction,
       selectedModules: projectQuote.selectedModules,
       moduleResults: moduleRows.data.map((module) => ({

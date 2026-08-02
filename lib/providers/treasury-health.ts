@@ -4,8 +4,11 @@
  */
 
 import type { PublicClient } from "viem";
-import { parseAbiItem } from "viem";
-import { ARC_TESTNET_USDC_ADDRESS } from "../wallet/arc.ts";
+import { createPublicClient, getAddress, http, isAddress, parseAbiItem } from "viem";
+import {
+  ARC_TESTNET_USDC_ADDRESS,
+  arcTestnetChain,
+} from "../wallet/arc.ts";
 import type {
   UsdcTransfer,
   TreasuryAnalytics,
@@ -27,7 +30,9 @@ export async function fetchUsdcTransfers(
     "event Transfer(address indexed from, address indexed to, uint256 value)"
   );
 
-  const CHUNK_SIZE = BigInt(10000);
+  // Arc produces sub-second blocks. Keep historical RPC backfills narrow so a
+  // shared node never receives an unbounded eth_getLogs range.
+  const CHUNK_SIZE = BigInt(1000);
 
   for (let currentFrom = fromBlock; currentFrom <= toBlock; currentFrom += CHUNK_SIZE) {
     if (transfers.length >= 50000) {
@@ -95,7 +100,10 @@ export function analyzeTreasury(
   walletAddress: string,
   currentBalanceUsdc: number,
   blocksScanned: number,
-  dataTruncated: boolean
+  dataTruncated: boolean,
+  observationEndMs: number = Date.now(),
+  observationWindowDays: number = 180,
+  dataSource: string = "Arc JSON-RPC",
 ): TreasuryAnalytics {
   const normWallet = walletAddress.toLowerCase();
   let totalIn = 0;
@@ -148,8 +156,18 @@ export function analyzeTreasury(
     let wOut = 0;
     let wCount = 0;
 
+    const timestampCutoff = observationEndMs - days * 86_400_000;
+    const hasTimestampedHistory = transfers.every(
+      (transfer) =>
+        typeof transfer.timestamp === "string" &&
+        Number.isFinite(Date.parse(transfer.timestamp)),
+    );
+
     for (const tx of transfers) {
-      if (tx.blockNumber >= minBlock) {
+      const inWindow = hasTimestampedHistory
+        ? Date.parse(tx.timestamp!) >= timestampCutoff
+        : tx.blockNumber >= minBlock;
+      if (inWindow) {
         wCount++;
         const val = Number(tx.value) / 1e6;
         if (tx.to === normWallet) wIn += val;
@@ -203,7 +221,7 @@ export function analyzeTreasury(
         amountUsdc: val,
         direction: "outbound",
         reason: "Unusually large outbound transfer",
-        timestamp: "", // Block timestamp not available from getLogs; filled during report rendering if needed
+        timestamp: tx.timestamp ?? "",
       });
     }
   }
@@ -219,6 +237,13 @@ export function analyzeTreasury(
 
   const topRecipients = sortedRecipients.slice(0, 5);
   const otherRecipients = sortedRecipients.slice(5);
+
+  const timestamps = transfers
+    .map((transfer) => transfer.timestamp)
+    .filter((value): value is string =>
+      typeof value === "string" && Number.isFinite(Date.parse(value)),
+    )
+    .sort((left, right) => Date.parse(left) - Date.parse(right));
 
   return {
     walletAddress: normWallet,
@@ -245,10 +270,12 @@ export function analyzeTreasury(
     anomalousTransfers: anomalies,
     currentBalanceUsdc,
     estimatedRunwayDays: runway,
-    firstTransferAt: null,
-    lastTransferAt: null,
+    firstTransferAt: timestamps[0] ?? null,
+    lastTransferAt: timestamps.at(-1) ?? null,
     blocksScanned,
     dataTruncated,
+    observationWindowDays,
+    dataSource,
   };
 }
 
@@ -320,41 +347,503 @@ export function calculateTreasuryHealthScore(analytics: TreasuryAnalytics) {
   };
 }
 
-import { createPublicClient, http } from "viem";
-import { arcTestnetChain } from "../wallet/arc.ts";
+const TREASURY_HISTORY_PROVIDER = "arcscan_blockscout";
+const TREASURY_BALANCE_PROVIDER = "arc_json_rpc";
+const ARC_BLOCKSCOUT_API_ORIGIN = "https://testnet.arcscan.app";
+const TREASURY_PUBLIC_REASON =
+  "Treasury data could not be collected from the configured provider.";
 
-export async function analyzeTreasuryHealth(walletAddress: string, scanDays: number = 180): Promise<TreasuryAnalytics> {
+export type TreasuryProviderName =
+  | typeof TREASURY_HISTORY_PROVIDER
+  | typeof TREASURY_BALANCE_PROVIDER
+  | "treasury_input";
+
+export class TreasuryProviderError extends Error {
+  constructor(
+    readonly internalErrorCode:
+      | "invalid_wallet"
+      | "unsupported_network"
+      | "missing_input"
+      | "policy_denial"
+      | "treasury_provider_unavailable"
+      | "treasury_provider_malformed_response",
+    readonly provider: TreasuryProviderName,
+    readonly retryable: boolean,
+    readonly httpStatus: number | null,
+    message: string,
+  ) {
+    super(message);
+    this.name = "TreasuryProviderError";
+  }
+}
+
+export type TreasuryAttemptTelemetry = {
+  attempt: number;
+  provider: TreasuryProviderName;
+  errorCode: string | null;
+  retryable: boolean;
+  durationMs: number;
+};
+
+export class TreasuryHealthExecutionError extends Error {
+  constructor(
+    readonly failure: TreasuryProviderError,
+    readonly attempts: TreasuryAttemptTelemetry[],
+    readonly durationMs: number,
+  ) {
+    super(TREASURY_PUBLIC_REASON);
+    this.name = "TreasuryHealthExecutionError";
+  }
+}
+
+type BlockscoutTransfer = {
+  blockNumber?: string;
+  hash?: string;
+  timeStamp?: string;
+  from?: string;
+  to?: string;
+  contractAddress?: string;
+  tokenDecimal?: string;
+  value?: string;
+};
+
+type BlockscoutTransferPage = {
+  status?: string;
+  message?: string;
+  result?: BlockscoutTransfer[] | string;
+};
+
+function nestedHttpStatus(error: unknown): number | null {
+  if (!error || typeof error !== "object") return null;
+  const record = error as Record<string, unknown>;
+  const direct = Number(record.status ?? record.statusCode);
+  if (Number.isInteger(direct) && direct >= 100 && direct <= 599) return direct;
+  return nestedHttpStatus(record.cause);
+}
+
+function errorTokens(error: unknown, values: string[] = []): string[] {
+  if (!error || values.length > 20) return values;
+  if (error instanceof Error) {
+    values.push(error.name, error.message);
+    errorTokens((error as Error & { cause?: unknown }).cause, values);
+  } else if (typeof error === "object") {
+    const record = error as Record<string, unknown>;
+    for (const key of ["name", "code", "message", "details"]) {
+      if (record[key] !== undefined) values.push(String(record[key]));
+    }
+    errorTokens(record.cause, values);
+  }
+  return values;
+}
+
+export function normalizeTreasuryProviderError(
+  error: unknown,
+  provider: TreasuryProviderName,
+) {
+  if (error instanceof TreasuryProviderError) return error;
+  if (error instanceof TreasuryHealthExecutionError) return error.failure;
+  const status = nestedHttpStatus(error);
+  const tokens = errorTokens(error).join(" ").toLowerCase();
+  const retryable =
+    status === 408 ||
+    status === 425 ||
+    status === 429 ||
+    (status !== null && status >= 500) ||
+    [
+      "aborted",
+      "econnreset",
+      "etimedout",
+      "fetch failed",
+      "headers timeout",
+      "rate limit",
+      "socket hang up",
+      "temporarily unavailable",
+      "timed out",
+      "timeout",
+    ].some((token) => tokens.includes(token));
+  return new TreasuryProviderError(
+    retryable
+      ? "treasury_provider_unavailable"
+      : "treasury_provider_malformed_response",
+    provider,
+    retryable,
+    status,
+    TREASURY_PUBLIC_REASON,
+  );
+}
+
+function assertBlockscoutTransfer(value: BlockscoutTransfer): UsdcTransfer | null {
+  const tokenAddress = value.contractAddress;
+  if (
+    typeof tokenAddress !== "string" ||
+    tokenAddress.toLowerCase() !== ARC_TESTNET_USDC_ADDRESS.toLowerCase()
+  ) return null;
+  const from = value.from;
+  const to = value.to;
+  const transactionHash = value.hash;
+  const timestampSeconds = String(value.timeStamp ?? "");
+  const blockNumber = String(value.blockNumber ?? "");
+  const rawValue = value.value;
+  const decimals = Number(value.tokenDecimal);
+  if (
+    !from ||
+    !to ||
+    !isAddress(from) ||
+    !isAddress(to) ||
+    typeof transactionHash !== "string" ||
+    !/^0x[0-9a-fA-F]{64}$/.test(transactionHash) ||
+    !/^\d+$/.test(timestampSeconds) ||
+    !/^\d+$/.test(blockNumber) ||
+    typeof rawValue !== "string" ||
+    !/^\d+$/.test(rawValue) ||
+    decimals !== 6
+  ) {
+    throw new TreasuryProviderError(
+      "treasury_provider_malformed_response",
+      TREASURY_HISTORY_PROVIDER,
+      false,
+      null,
+      "The treasury history provider returned an invalid transfer record.",
+    );
+  }
+  return {
+    blockNumber: BigInt(blockNumber),
+    transactionHash,
+    from: getAddress(from).toLowerCase(),
+    to: getAddress(to).toLowerCase(),
+    value: BigInt(rawValue),
+    timestamp: new Date(Number(timestampSeconds) * 1_000).toISOString(),
+  };
+}
+
+async function fetchBlockscoutUsdcTransfers(input: {
+  walletAddress: string;
+  scanDays: number;
+  latestBlock: bigint;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+  nowMs: number;
+  maxTransfers?: number;
+}) {
+  const fetchImpl = input.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  const cutoffMs = input.nowMs - input.scanDays * 86_400_000;
+  const maxTransfers = input.maxTransfers ?? 50_000;
+  const transfers: UsdcTransfer[] = [];
+  let dataTruncated = false;
+  let reachedCutoff = false;
+  let queryCount = 0;
+  // 200k blocks/day is a conservative envelope around Arc's documented
+  // ~0.48-second block time. Timestamp filtering enforces the exact window.
+  const totalWindowBlocks = BigInt(input.scanDays * 200_000);
+  const startBlock = input.latestBlock > totalWindowBlocks
+    ? input.latestBlock - totalWindowBlocks
+    : BigInt(0);
+  const initialRangeSize = BigInt(30 * 200_000);
+  const ranges: Array<{ fromBlock: bigint; toBlock: bigint }> = [];
+  for (let toBlock = input.latestBlock; toBlock >= startBlock;) {
+    const fromBlock = toBlock - startBlock + BigInt(1) > initialRangeSize
+      ? toBlock - initialRangeSize + BigInt(1)
+      : startBlock;
+    ranges.push({ fromBlock, toBlock });
+    if (fromBlock === BigInt(0) || fromBlock === startBlock) break;
+    toBlock = fromBlock - BigInt(1);
+  }
+
+  while (ranges.length > 0 && !dataTruncated && transfers.length < maxTransfers) {
+    input.signal?.throwIfAborted();
+    const range = ranges.shift()!;
+    const url = new URL("/api", ARC_BLOCKSCOUT_API_ORIGIN);
+    url.searchParams.set("module", "account");
+    url.searchParams.set("action", "tokentx");
+    url.searchParams.set("contractaddress", ARC_TESTNET_USDC_ADDRESS);
+    url.searchParams.set("address", getAddress(input.walletAddress));
+    url.searchParams.set("startblock", range.fromBlock.toString());
+    url.searchParams.set("endblock", range.toBlock.toString());
+    url.searchParams.set("page", "1");
+    url.searchParams.set("offset", "10000");
+    url.searchParams.set("sort", "desc");
+    let response: Response;
+    try {
+      response = await fetchImpl(url, {
+        headers: { Accept: "application/json" },
+        signal: input.signal,
+      });
+    } catch (error) {
+      throw normalizeTreasuryProviderError(error, TREASURY_HISTORY_PROVIDER);
+    }
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      const retryable =
+        response.status === 408 ||
+        response.status === 425 ||
+        response.status === 429 ||
+        response.status >= 500;
+      throw new TreasuryProviderError(
+        retryable
+          ? "treasury_provider_unavailable"
+          : response.status === 403
+            ? "policy_denial"
+            : "treasury_provider_malformed_response",
+        TREASURY_HISTORY_PROVIDER,
+        retryable,
+        response.status,
+        TREASURY_PUBLIC_REASON,
+      );
+    }
+    let payload: unknown;
+    try {
+      payload = await response.json();
+    } catch {
+      throw new TreasuryProviderError(
+        "treasury_provider_malformed_response",
+        TREASURY_HISTORY_PROVIDER,
+        false,
+        response.status,
+        "The treasury history provider returned malformed JSON.",
+      );
+    }
+    if (
+      !payload ||
+      typeof payload !== "object" ||
+      Array.isArray(payload) ||
+      !("result" in payload)
+    ) {
+      throw new TreasuryProviderError(
+        "treasury_provider_malformed_response",
+        TREASURY_HISTORY_PROVIDER,
+        false,
+        response.status,
+        "The treasury history provider returned an invalid response shape.",
+      );
+    }
+    const typed = payload as BlockscoutTransferPage;
+    const noTransactions =
+      typed.status === "0" &&
+      /no transactions found/i.test(String(typed.message ?? typed.result ?? ""));
+    if (!Array.isArray(typed.result) && !noTransactions) {
+      const providerMessage = String(typed.message ?? typed.result ?? "");
+      const retryable = /rate limit|timeout|temporar|unavailable/i.test(providerMessage);
+      throw new TreasuryProviderError(
+        retryable
+          ? "treasury_provider_unavailable"
+          : "treasury_provider_malformed_response",
+        TREASURY_HISTORY_PROVIDER,
+        retryable,
+        response.status,
+        TREASURY_PUBLIC_REASON,
+      );
+    }
+    const items = Array.isArray(typed.result) ? typed.result : [];
+    queryCount += 1;
+    if (queryCount > 100) {
+      dataTruncated = true;
+      break;
+    }
+    if (items.length === 10_000 && range.toBlock > range.fromBlock) {
+      const midpoint = (range.fromBlock + range.toBlock) / BigInt(2);
+      ranges.unshift({ fromBlock: range.fromBlock, toBlock: midpoint });
+      ranges.unshift({ fromBlock: midpoint + BigInt(1), toBlock: range.toBlock });
+      continue;
+    }
+    for (const item of items) {
+      const transfer = assertBlockscoutTransfer(item);
+      if (!transfer) continue;
+      if (Date.parse(transfer.timestamp!) < cutoffMs) {
+        reachedCutoff = true;
+        continue;
+      }
+      transfers.push(transfer);
+      if (transfers.length >= maxTransfers) {
+        dataTruncated = true;
+        break;
+      }
+    }
+    if (items.length === 10_000) dataTruncated = true;
+    if (reachedCutoff) break;
+  }
+
+  transfers.sort((left, right) =>
+    left.blockNumber === right.blockNumber
+      ? left.transactionHash.localeCompare(right.transactionHash)
+      : left.blockNumber < right.blockNumber ? -1 : 1,
+  );
+  return {
+    transfers,
+    dataTruncated,
+    blocksScanned: Number(input.latestBlock - startBlock),
+  };
+}
+
+export type AnalyzeTreasuryHealthOptions = {
+  rpcUrl?: string;
+  fetchImpl?: typeof fetch;
+  signal?: AbortSignal;
+  now?: Date;
+  maxTransfers?: number;
+};
+
+export async function analyzeTreasuryHealth(
+  walletAddress: string,
+  scanDays: number = 180,
+  options: AnalyzeTreasuryHealthOptions = {},
+): Promise<TreasuryAnalytics> {
+  if (!walletAddress?.trim()) {
+    throw new TreasuryProviderError(
+      "missing_input",
+      "treasury_input",
+      false,
+      400,
+      "A treasury wallet is required.",
+    );
+  }
+  if (!isAddress(walletAddress)) {
+    throw new TreasuryProviderError(
+      "invalid_wallet",
+      "treasury_input",
+      false,
+      400,
+      "The treasury wallet is invalid.",
+    );
+  }
+  if (!Number.isInteger(scanDays) || scanDays < 1 || scanDays > 365) {
+    throw new TreasuryProviderError(
+      "policy_denial",
+      "treasury_input",
+      false,
+      400,
+      "The treasury observation window is not allowed.",
+    );
+  }
+  const nowMs = (options.now ?? new Date()).getTime();
+  const rpcUrl =
+    options.rpcUrl?.trim() ||
+    process.env.ARC_TESTNET_RPC_URL?.trim() ||
+    arcTestnetChain.rpcUrls.default.http[0];
   const client = createPublicClient({
     chain: arcTestnetChain,
-    transport: http(),
+    transport: http(rpcUrl, { retryCount: 0, timeout: 12_000 }),
   });
-
-  const latestBlock = await client.getBlockNumber();
-  const blocksToScan = BigInt(scanDays * 43200);
-  const fromBlock = latestBlock > blocksToScan ? latestBlock - blocksToScan : BigInt(0);
-
-  const { transfers, dataTruncated } = await fetchUsdcTransfers(
-    walletAddress,
-    fromBlock,
-    latestBlock,
-    client
-  );
-
-  const balanceWei = (await client.readContract({
-    address: ARC_TESTNET_USDC_ADDRESS as `0x${string}`,
-    abi: [parseAbiItem("function balanceOf(address account) view returns (uint256)")],
-    functionName: "balanceOf",
-    args: [walletAddress as `0x${string}`],
-  })) as bigint;
-  const currentBalanceUsdc = Number(balanceWei) / 1e6;
-
-  const blocksScanned = Number(latestBlock - fromBlock);
-
+  let latestBlock: bigint;
+  let balanceWei: bigint;
+  try {
+    [latestBlock, balanceWei] = await Promise.all([
+      client.getBlockNumber(),
+      client.readContract({
+        address: ARC_TESTNET_USDC_ADDRESS as `0x${string}`,
+        abi: [parseAbiItem("function balanceOf(address account) view returns (uint256)")],
+        functionName: "balanceOf",
+        args: [getAddress(walletAddress)],
+      }) as Promise<bigint>,
+    ]);
+  } catch (error) {
+    throw normalizeTreasuryProviderError(error, TREASURY_BALANCE_PROVIDER);
+  }
+  options.signal?.throwIfAborted();
+  const { transfers, dataTruncated, blocksScanned } =
+    await fetchBlockscoutUsdcTransfers({
+      walletAddress,
+      scanDays,
+      latestBlock,
+      signal: options.signal,
+      fetchImpl: options.fetchImpl,
+      nowMs,
+      maxTransfers: options.maxTransfers,
+    });
   return analyzeTreasury(
     transfers,
-    walletAddress,
-    currentBalanceUsdc,
+    getAddress(walletAddress),
+    Number(balanceWei) / 1e6,
     blocksScanned,
-    dataTruncated
+    dataTruncated,
+    nowMs,
+    scanDays,
+    "Arcscan Blockscout API + Arc JSON-RPC",
   );
+}
+
+export async function executeTreasuryHealthWithRetry(input: {
+  walletAddress: string;
+  scanDays?: number;
+  maxAttempts?: number;
+  initialDelayMs?: number;
+  deadlineMs?: number;
+  operation?: (signal: AbortSignal, attempt: number) => Promise<TreasuryAnalytics>;
+  sleepImpl?: (durationMs: number) => Promise<void>;
+  onAttempt?: (telemetry: TreasuryAttemptTelemetry) => void | Promise<void>;
+}) {
+  const startedAt = Date.now();
+  const maxAttempts = input.maxAttempts ?? 3;
+  const initialDelayMs = input.initialDelayMs ?? 500;
+  const deadlineMs = input.deadlineMs ?? 120_000;
+  const attempts: TreasuryAttemptTelemetry[] = [];
+  const sleepImpl = input.sleepImpl ?? ((durationMs: number) =>
+    new Promise<void>((resolve) => setTimeout(resolve, durationMs)));
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 3) {
+    throw new Error("Treasury retry attempts must be between one and three.");
+  }
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    const elapsed = Date.now() - startedAt;
+    const remaining = deadlineMs - elapsed;
+    if (remaining <= 0) {
+      const failure = new TreasuryProviderError(
+        "treasury_provider_unavailable",
+        TREASURY_HISTORY_PROVIDER,
+        true,
+        null,
+        TREASURY_PUBLIC_REASON,
+      );
+      throw new TreasuryHealthExecutionError(failure, attempts, elapsed);
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(new Error("Treasury provider attempt timed out.")),
+      Math.min(40_000, remaining),
+    );
+    const attemptStartedAt = Date.now();
+    try {
+      const analytics = await (input.operation
+        ? input.operation(controller.signal, attempt)
+        : analyzeTreasuryHealth(input.walletAddress, input.scanDays ?? 180, {
+            signal: controller.signal,
+          }));
+      const telemetry: TreasuryAttemptTelemetry = {
+        attempt,
+        provider: TREASURY_HISTORY_PROVIDER,
+        errorCode: null,
+        retryable: false,
+        durationMs: Date.now() - attemptStartedAt,
+      };
+      attempts.push(telemetry);
+      await input.onAttempt?.(telemetry);
+      return { analytics, attempts, durationMs: Date.now() - startedAt };
+    } catch (error) {
+      const failure = normalizeTreasuryProviderError(error, TREASURY_HISTORY_PROVIDER);
+      const telemetry: TreasuryAttemptTelemetry = {
+        attempt,
+        provider: failure.provider,
+        errorCode: failure.internalErrorCode,
+        retryable: failure.retryable,
+        durationMs: Date.now() - attemptStartedAt,
+      };
+      attempts.push(telemetry);
+      await input.onAttempt?.(telemetry);
+      const delayMs = initialDelayMs * 2 ** (attempt - 1);
+      const canRetry =
+        failure.retryable &&
+        attempt < maxAttempts &&
+        Date.now() - startedAt + delayMs < deadlineMs;
+      if (!canRetry) {
+        throw new TreasuryHealthExecutionError(
+          failure,
+          attempts,
+          Date.now() - startedAt,
+        );
+      }
+      await sleepImpl(delayMs);
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+  throw new Error("Treasury retry loop ended unexpectedly.");
 }

@@ -27,11 +27,37 @@ export type Project360Confidence = "high" | "medium" | "low" | "insufficient";
 export type Project360ModuleStatus =
   | "not_provided"
   | "not_selected"
+  | "completed"
+  | "insufficient_data"
+  | "provider_unavailable"
+  | "failed";
+export type Project360ModuleRunStatus =
+  | Project360ModuleStatus
   | "pending"
   | "running"
-  | "completed"
-  | "failed"
+  // Read compatibility for module rows created before P4.2.2.
   | "unsupported";
+
+export type Project360ModuleFailure = {
+  status: Exclude<Project360ModuleStatus, "completed" | "not_selected" | "not_provided">;
+  retryable: boolean;
+  publicReason: string;
+  internalErrorCode: string;
+  provider: string | null;
+  attemptCount: number;
+  durationMs: number;
+};
+
+export type Project360PublicModuleResult = {
+  module: Project360Module;
+  status: Project360ModuleStatus;
+  inputHash: string;
+  childReportHash: `0x${string}` | null;
+  score: number | null;
+  confidence: Project360Confidence;
+  retryable: boolean;
+  publicReason: string | null;
+};
 
 export const PROJECT_360_MODULE_FOR_SOURCE: Record<Project360SourceType, Project360Module> = {
   github_repository: "github_due_diligence",
@@ -76,7 +102,9 @@ export type Project360ModuleResult = {
   childReportHash: `0x${string}` | null;
   score: number | null;
   confidence: Project360Confidence;
-  errorCode: string | null;
+  retryable: boolean;
+  publicReason: string | null;
+  internalErrorCode: string | null;
   report:
     | GitHubDueDiligenceAssessment
     | AgentTrustReport
@@ -127,7 +155,7 @@ export type Project360Report = {
   confirmedSources: Array<Omit<Project360ConfirmedSource, "candidateId">>;
   discoverySnapshotHash: string;
   selectionHash: string;
-  modules: Array<Omit<Project360ModuleResult, "report">>;
+  modules: Project360PublicModuleResult[];
   score: {
     formulaVersion: "project360-score-v1";
     value: number | null;
