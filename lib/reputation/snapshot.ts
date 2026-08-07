@@ -9,7 +9,7 @@ import { arcTestnet } from "viem/chains";
 import { proofRegistryAbi } from "../commerce/onchain-proof.ts";
 import { fetchReputationEvidenceForAgent, saveReputationSnapshot } from "./db.ts";
 import { computeAgentReputation, createReputationSnapshot } from "./engine.ts";
-import type { CanonicalAgentIdentity, ReputationSnapshot } from "./types.ts";
+import type { CanonicalAgentIdentity, EconomicProvenance, ReputationSnapshot } from "./types.ts";
 
 const PROOF_REGISTRY_ADDRESS = (process.env.AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS || "0x0db0b8ddc03c3c56c0662b547822e4654167b684") as `0x${string}`;
 
@@ -29,7 +29,8 @@ export async function publishReputationSnapshotProofToArc(
   snapshot: ReputationSnapshot,
   identityOwner?: string,
   attesterKeyOverride?: string,
-  economicValueUsdc?: number
+  economicValueUsdc?: number,
+  provenance?: EconomicProvenance
 ): Promise<{ transactionHash: string | null; blockNumber: number; verifiedOnchain: boolean; proofAlreadyRegistered?: boolean }> {
   const rpcUrl = process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network";
   const publicClient = createPublicClient({
@@ -39,12 +40,25 @@ export async function publishReputationSnapshotProofToArc(
 
   const receiptId = snapshot.canonicalHash as Hex;
   const serviceHash = keccak256(toBytes("veyra.reputation.snapshot.v1"));
-  
-  const attesterAddr = getAddress("0x0d2c04580e081e222bbe5bf9818af337e2633eb7");
-  let buyer = (identityOwner && isAddress(identityOwner) ? getAddress(identityOwner) : attesterAddr) as `0x${string}`;
-  const seller = attesterAddr;
-  if (buyer.toLowerCase() === seller.toLowerCase()) {
-    buyer = getAddress("0x0000000000000000000000000000000000000001");
+
+  // Resolve buyer/seller from real economic provenance.
+  // Priority: EconomicProvenance (ERC-8183 job or x402 payment) > identityOwner fallback.
+  // Never fabricate synthetic addresses.
+  let buyer: `0x${string}`;
+  let seller: `0x${string}`;
+
+  if (provenance && isAddress(provenance.buyer) && isAddress(provenance.seller)) {
+    // Real economic participants from an ERC-8183 job or x402 payment
+    buyer = getAddress(provenance.buyer) as `0x${string}`;
+    seller = getAddress(provenance.seller) as `0x${string}`;
+  } else {
+    // Fallback: use identity owner as buyer, attester as seller.
+    // This only applies when no economic event is linked to this snapshot.
+    const attesterAddr = getAddress("0x0d2c04580e081e222bbe5bf9818af337e2633eb7");
+    buyer = (identityOwner && isAddress(identityOwner) ? getAddress(identityOwner) : attesterAddr) as `0x${string}`;
+    seller = attesterAddr;
+    // If buyer == seller (agent owner is the attester), keep them equal.
+    // The contract allows same-address registration; a sentinel is worse than honesty.
   }
 
   const amountVal = (economicValueUsdc && economicValueUsdc > 0) ? economicValueUsdc : 1.0;

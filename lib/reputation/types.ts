@@ -97,6 +97,18 @@ export type ReputationSnapshot = {
   createdAt: string;
 };
 
+/**
+ * Economic provenance for Arc Proof registration.
+ * buyer/seller MUST originate from a real economic event (ERC-8183 job or x402 payment).
+ * Never fabricate addresses — if no provenance exists, omit this entirely.
+ */
+export type EconomicProvenance = {
+  buyer: string;   // ERC-8183 job.client or x402 payer
+  seller: string;  // ERC-8183 job.provider or x402 payee/service owner
+  source: "erc8183_job" | "x402_payment";
+  sourceId: string; // jobId or paymentId
+};
+
 export type SanitizedEvidenceItem = {
   evidenceId: string;
   type: ReputationEvidenceType;

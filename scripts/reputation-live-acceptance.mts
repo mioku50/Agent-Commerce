@@ -36,7 +36,7 @@ import {
   ingestVeyraReportEvidence,
 } from "../lib/reputation/ingest.ts";
 import { publishReputationSnapshotProofToArc } from "../lib/reputation/snapshot.ts";
-import type { CanonicalAgentIdentity, ReputationEvidence } from "../lib/reputation/types.ts";
+import type { CanonicalAgentIdentity, EconomicProvenance, ReputationEvidence } from "../lib/reputation/types.ts";
 
 const RPC_URL = process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network";
 const PROOF_REGISTRY_ADDRESS = (process.env.AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS || "0x0db0b8ddc03c3c56c0662b547822e4654167b684") as `0x${string}`;
@@ -466,9 +466,10 @@ async function main() {
     await ingestVeyraReportEvidence({
       agentId,
       reportId: sourceReportId,
-      status: "healthy",
-      trustScore: reportTrustScore,
+      reportType: "veyra_agent_trust",
       reportHash: keccak256(stringToBytes(sourceReportId)),
+      score: reportTrustScore,
+      passed: reportTrustScore >= 50,
       observedAt: now,
     });
   }
@@ -491,13 +492,28 @@ async function main() {
   assert.equal(reloadedSnapshot.canonicalHash, initialSnapshot.canonicalHash, "[8] FAIL: DB reloaded snapshot canonicalHash mismatch");
   console.log(`✅ [9] DB Fail-Closed Verified: Saved & reloaded snapshot ID ${reloadedSnapshot.snapshotId}`);
 
-  // [9] Publish & Verify Arc Proof onchain
+  // [9] Publish & Verify Arc Proof onchain — with real economic provenance
+  // buyer/seller MUST come from a real economic event, never fabricated.
+  let economicProvenance: EconomicProvenance | undefined;
+  if (clientAddress && providerAddress && jobId) {
+    economicProvenance = {
+      buyer: clientAddress,
+      seller: providerAddress,
+      source: "erc8183_job",
+      sourceId: jobId,
+    };
+    console.log(`📋 Economic Provenance: ERC-8183 Job #${jobId} → Buyer: ${clientAddress}, Seller: ${providerAddress}`);
+  } else {
+    console.log("ℹ️ No linked economic event for proof provenance — buyer/seller will use identity owner fallback");
+  }
+
   console.log("⚡ Publishing Canonical Reputation Hash to Arc Proof Registry on Arc Testnet...");
   const proofResult = await publishReputationSnapshotProofToArc(
     initialSnapshot,
     canonicalIdentity.owner,
     undefined,
-    paymentAmountUsdc || jobEconomicUsdc
+    paymentAmountUsdc || jobEconomicUsdc,
+    economicProvenance
   );
 
   assert.ok(proofResult.verifiedOnchain, "[9] FAIL: publishReputationSnapshotProofToArc failed onchain verification");
@@ -512,7 +528,7 @@ async function main() {
   });
   assert.ok(isRegisteredOnchain, "[9] FAIL: Proof is not registered onchain in AgentCommerceProofRegistry");
 
-  const [, , , , , , onchainResponseHash] = await publicClient.readContract({
+  const [, , , , , onchainResponseHash] = await publicClient.readContract({
     address: PROOF_REGISTRY_ADDRESS,
     abi: proofRegistryAbi,
     functionName: "getProof",
