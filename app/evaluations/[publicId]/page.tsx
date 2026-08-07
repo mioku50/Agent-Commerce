@@ -49,6 +49,17 @@ export default async function PublicEvaluationReportPage({
           <div className="flex items-center gap-3">
             <ShieldCheck className="w-10 h-10 text-sky-400" />
             <div>
+              <div className="flex items-center gap-2 text-xs text-slate-400 mb-1">
+                <Link href="/evaluators" className="hover:text-white transition-colors">
+                  Evaluators
+                </Link>
+                <span>/</span>
+                <Link href="/evaluations" className="hover:text-white transition-colors">
+                  Explorer
+                </Link>
+                <span>/</span>
+                <span className="text-sky-400 font-medium">Receipt</span>
+              </div>
               <h1 className="text-2xl font-bold tracking-tight text-white">Veyra Canonical Evaluation Report</h1>
               <p className="text-xs text-slate-400">Independent ERC-8183 Job Verification Layer on Arc Testnet</p>
             </div>
