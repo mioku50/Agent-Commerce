@@ -90,6 +90,7 @@
     "erc8004:test": "node --experimental-transform-types --no-warnings scripts/erc8004-tests.mts",
     "erc8004:product-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/erc8004-product-test.mts",
     "erc8004:production-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/register-veyra-erc8004-identity.mts",
+    "erc8004:production-acceptance": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/erc8004-production-acceptance.mts",
     "erc8183:test": "node --experimental-transform-types --no-warnings scripts/erc8183-tests.mts",
     "erc8183:product-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/erc8183-product-test.mts",
     "erc8183:contract-test": "cd contracts && forge test",
