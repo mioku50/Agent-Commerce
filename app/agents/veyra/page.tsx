@@ -16,11 +16,10 @@ import {
   Code2,
   FileText,
   BadgeCheck,
-  Sparkles,
   ArrowRight,
 } from "lucide-react";
 import { getByoaClient } from "@/lib/byoa/service.ts";
-import { getVeyraAgentIdentityRecord } from "@/lib/erc8004/client.ts";
+import { getCanonicalVeyraAgentIdentity, getArcPublicClient } from "@/lib/erc8004/client.ts";
 import {
   ARC_ERC8004_IDENTITY_REGISTRY,
   ARC_ERC8004_REPUTATION_REGISTRY,
@@ -30,7 +29,8 @@ import {
 export const revalidate = 30;
 
 export default async function PublicVeyraAgentIdentityPage() {
-  const identityRecord = await getVeyraAgentIdentityRecord();
+  const publicClient = getArcPublicClient();
+  const identityRecord = await getCanonicalVeyraAgentIdentity(publicClient);
   const agentId = identityRecord?.agent_id || process.env.ERC8004_VEYRA_AGENT_ID || "unregistered";
   const identityRegistry = identityRecord?.registry_address || ARC_ERC8004_IDENTITY_REGISTRY;
   const ownerAddress = identityRecord?.owner_address || process.env.VEYRA_EVALUATOR_ATTESTER_ADDRESS || "0x0d2c04580e081e222bbe5bf9818af337e2633eb7";
@@ -59,7 +59,7 @@ export default async function PublicVeyraAgentIdentityPage() {
     <div className="min-h-screen bg-slate-950 text-slate-100 p-6 md:p-12 font-sans">
       <div className="max-w-5xl mx-auto space-y-10">
         {/* Header Breadcrumb */}
-        <div className="flex items-center justify-between border-b border-slate-800 pb-6">
+        <div className="flex flex-col md:flex-row md:items-center justify-between border-b border-slate-800 pb-6 gap-4">
           <div className="flex items-center gap-3">
             <ShieldCheck className="w-10 h-10 text-sky-400" />
             <div>
@@ -75,10 +75,29 @@ export default async function PublicVeyraAgentIdentityPage() {
               </h1>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/40">
-              <BadgeCheck className="w-4 h-4 text-sky-400" /> ERC-8004 Identity #{agentId}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> Owner Verified Onchain
             </span>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+              <BadgeCheck className="w-4 h-4 text-sky-400" /> Agent #{agentId}
+            </span>
+          </div>
+        </div>
+
+        {/* Live Badges Bar */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs font-semibold">
+          <div className="bg-slate-900/90 border border-emerald-500/30 p-3 rounded-xl flex items-center gap-2 text-emerald-300">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Metadata Verified
+          </div>
+          <div className="bg-slate-900/90 border border-emerald-500/30 p-3 rounded-xl flex items-center gap-2 text-emerald-300">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> ERC-8183 Evaluator Active
+          </div>
+          <div className="bg-slate-900/90 border border-emerald-500/30 p-3 rounded-xl flex items-center gap-2 text-emerald-300">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Validation Capability Active
+          </div>
+          <div className="bg-slate-900/90 border border-sky-500/30 p-3 rounded-xl flex items-center gap-2 text-sky-300">
+            <Cpu className="w-4 h-4 text-sky-400" /> Arc Testnet (5042002)
           </div>
         </div>
 
@@ -89,9 +108,6 @@ export default async function PublicVeyraAgentIdentityPage() {
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold text-sky-400 uppercase tracking-wider bg-sky-950/60 border border-sky-800/60 px-2.5 py-1 rounded-md">
                   Official Portable Onchain Identity
-                </span>
-                <span className="text-xs text-emerald-400 font-semibold bg-emerald-950/60 border border-emerald-800/60 px-2.5 py-1 rounded-md flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" /> Arc Testnet (5042002)
                 </span>
               </div>
               <h2 className="text-3xl font-black text-white">Veyra Trust Evaluator</h2>
@@ -118,10 +134,10 @@ export default async function PublicVeyraAgentIdentityPage() {
           </div>
         </section>
 
-        {/* Identity & Registry Contracts Grid */}
+        {/* Identity & Registry Contracts Grid with Arcscan Explorer Links */}
         <section className="space-y-4">
           <h3 className="text-xl font-bold text-white flex items-center gap-2">
-            <Lock className="w-5 h-5 text-sky-400" /> Canonical Identity Parameters
+            <Lock className="w-5 h-5 text-sky-400" /> Canonical Identity Parameters & Arcscan Explorer Links
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
             <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-xl space-y-2">
@@ -134,14 +150,42 @@ export default async function PublicVeyraAgentIdentityPage() {
               <div className="text-slate-200 font-bold break-all">{ownerAddress}</div>
               <div className="text-slate-400 font-sans text-3xs">Verified ERC-721 contract owner</div>
             </div>
-            <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-xl space-y-2">
-              <div className="text-slate-500 font-sans uppercase tracking-wider text-2xs">Identity Registry</div>
-              <div className="text-slate-300 font-bold break-all">{identityRegistry}</div>
-            </div>
-            <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-xl space-y-2">
-              <div className="text-slate-500 font-sans uppercase tracking-wider text-2xs">Validation Registry</div>
-              <div className="text-slate-300 font-bold break-all">{ARC_ERC8004_VALIDATION_REGISTRY}</div>
-            </div>
+            <a
+              href={`https://testnet.arcscan.app/address/${identityRegistry}`}
+              target="_blank"
+              rel="noreferrer"
+              className="bg-slate-900/80 border border-slate-800 hover:border-sky-500/50 transition-colors p-5 rounded-xl space-y-2 group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-sans uppercase tracking-wider text-2xs">Identity Registry</span>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400" />
+              </div>
+              <div className="text-slate-300 font-bold break-all group-hover:text-sky-300">{identityRegistry}</div>
+            </a>
+            <a
+              href={`https://testnet.arcscan.app/address/${evaluatorAddress}`}
+              target="_blank"
+              rel="noreferrer"
+              className="bg-slate-900/80 border border-slate-800 hover:border-sky-500/50 transition-colors p-5 rounded-xl space-y-2 group"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-sans uppercase tracking-wider text-2xs">ERC-8183 Evaluator Contract</span>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400" />
+              </div>
+              <div className="text-slate-300 font-bold break-all group-hover:text-sky-300">{evaluatorAddress}</div>
+            </a>
+            <a
+              href={`https://testnet.arcscan.app/address/${ARC_ERC8004_VALIDATION_REGISTRY}`}
+              target="_blank"
+              rel="noreferrer"
+              className="bg-slate-900/80 border border-slate-800 hover:border-sky-500/50 transition-colors p-5 rounded-xl space-y-2 group md:col-span-2"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-slate-500 font-sans uppercase tracking-wider text-2xs">Validation Registry</span>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-400 group-hover:text-sky-400" />
+              </div>
+              <div className="text-slate-300 font-bold break-all group-hover:text-sky-300">{ARC_ERC8004_VALIDATION_REGISTRY}</div>
+            </a>
           </div>
         </section>
 
@@ -177,16 +221,16 @@ export default async function PublicVeyraAgentIdentityPage() {
           </h3>
           <div className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 space-y-4">
             <p className="text-xs text-slate-300 leading-relaxed">
-              Veyra strictly adheres to the ERC-8004 security standard: <strong>Veyra never posts self-feedback or artificial reputation scores to its own Agent ID</strong>. External agents and users leave independent attestations based on interaction receipts.
+              Veyra strictly adheres to the ERC-8004 security standard: <strong>Veyra never posts self-feedback or artificial reputation scores to its own Agent ID</strong>. External feedback count: <strong>0</strong>. Independent reviewers: <strong>0</strong>.
             </p>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs font-mono pt-2">
               <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl">
-                <div className="text-slate-500 font-sans text-2xs uppercase">Independent Reviewers</div>
-                <div className="text-lg font-bold text-white mt-1">External Observer Verified</div>
+                <div className="text-slate-500 font-sans text-2xs uppercase">External Feedback</div>
+                <div className="text-lg font-bold text-white mt-1">0 External Attestations</div>
               </div>
               <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl">
-                <div className="text-slate-500 font-sans text-2xs uppercase">Evidence-Linked Feedback</div>
-                <div className="text-lg font-bold text-emerald-400 mt-1">Receipt Hash Anchored</div>
+                <div className="text-slate-500 font-sans text-2xs uppercase">Independent Reviewers</div>
+                <div className="text-lg font-bold text-slate-400 mt-1">0 Reviewers</div>
               </div>
               <div className="bg-slate-950/80 border border-slate-800 p-4 rounded-xl">
                 <div className="text-slate-500 font-sans text-2xs uppercase">Reputation Registry</div>
