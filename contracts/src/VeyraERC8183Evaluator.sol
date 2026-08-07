@@ -178,21 +178,13 @@ contract VeyraERC8183Evaluator is EIP712, AccessControl, Pausable, ReentrancyGua
             revert JobAlreadyResolved(verdict.agenticCommerce, verdict.jobId);
         }
 
-        IERC8183AgenticCommerce commerceContract = IERC8183AgenticCommerce(verdict.agenticCommerce);
-        IERC8183AgenticCommerce.Job memory job = commerceContract.getJob(verdict.jobId);
-
-        if (job.status != IERC8183AgenticCommerce.Status.Submitted) {
-            revert JobNotSubmitted(job.status);
-        }
-        if (job.evaluator != address(this)) {
-            revert EvaluatorMismatch(address(this), job.evaluator);
-        }
-
         // Checks-Effects-Interactions pattern: set state BEFORE external calls
         executedDigests[digest] = true;
         resolvedJobs[verdict.agenticCommerce][verdict.jobId] = true;
 
         bytes memory optParams = abi.encode(verdict.deliverableHash, verdict.policyHash, uint16(1));
+
+        IERC8183AgenticCommerce commerceContract = IERC8183AgenticCommerce(verdict.agenticCommerce);
 
         if (verdict.decision == Decision.Complete) {
             commerceContract.complete(verdict.jobId, verdict.reportHash, optParams);

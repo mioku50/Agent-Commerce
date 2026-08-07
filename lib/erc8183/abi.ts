@@ -11,9 +11,9 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
     inputs: [
       { type: "address", name: "provider" },
       { type: "address", name: "evaluator" },
-      { type: "uint256", name: "budget" },
-      { type: "uint64", name: "expiredAt" },
+      { type: "uint256", name: "expiredAt" },
       { type: "string", name: "description" },
+      { type: "address", name: "token" },
     ],
     outputs: [{ type: "uint256", name: "jobId" }],
   },
@@ -24,6 +24,7 @@ export const ERC8183_AGENTIC_COMMERCE_ABI = [
     inputs: [
       { type: "uint256", name: "jobId" },
       { type: "bytes32", name: "deliverableHash" },
+      { type: "bytes", name: "optParams" },
     ],
     outputs: [],
   },

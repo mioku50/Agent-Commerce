@@ -385,13 +385,7 @@ contract VeyraERC8183EvaluatorTest {
         });
         bytes memory sig = _signVerdict(verdict, attesterPrivateKey, address(evaluator), block.chainid);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                VeyraERC8183Evaluator.EvaluatorMismatch.selector,
-                address(evaluator),
-                otherEvaluator
-            )
-        );
+        vm.expectRevert("Only evaluator can complete");
         evaluator.executeVerdict(verdict, sig);
     }
 
@@ -411,12 +405,7 @@ contract VeyraERC8183EvaluatorTest {
         });
         bytes memory sig = _signVerdict(verdict, attesterPrivateKey, address(evaluator), block.chainid);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                VeyraERC8183Evaluator.JobNotSubmitted.selector,
-                IERC8183AgenticCommerce.Status.Open
-            )
-        );
+        vm.expectRevert("Job not submitted");
         evaluator.executeVerdict(verdict, sig);
     }
 

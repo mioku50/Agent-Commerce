@@ -110,6 +110,11 @@ export async function executeOffchainJobEvaluation(
     };
   }
 
+  console.log("🔍 Policy Evaluation Checks:");
+  for (const c of policyResult.checks) {
+    console.log(`  [${c.passed ? "PASS" : "FAIL"}] ${c.id}: ${c.message}`);
+  }
+
   const decisionType: "complete" | "reject" = policyResult.outcome === "PASS" ? "complete" : "reject";
   const decisionEnum = decisionType === "complete" ? Decision.Complete : Decision.Reject;
 
@@ -195,6 +200,7 @@ export async function executeOffchainJobEvaluation(
       ],
     });
   } catch (err) {
+    console.error("❌ Relayer submission error details:", err);
     return {
       status: "retryable",
       decision: null,
