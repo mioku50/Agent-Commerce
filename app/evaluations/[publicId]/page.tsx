@@ -108,9 +108,17 @@ export default async function PublicEvaluationReportPage({
 
         {/* Technical Hashes */}
         <div className="bg-slate-900/60 border border-slate-800 rounded-xl p-6 space-y-4">
-          <h3 className="text-sm font-semibold text-white border-b border-slate-800 pb-2 flex items-center gap-2">
-            <FileCheck2 className="w-4 h-4 text-sky-400" /> Proof Hashes & Addresses
-          </h3>
+          <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+            <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+              <FileCheck2 className="w-4 h-4 text-sky-400" /> Proof Hashes & Addresses
+            </h3>
+            <Link
+              href="/agents/veyra"
+              className="inline-flex items-center gap-1.5 text-xs text-sky-400 hover:text-sky-300 font-semibold"
+            >
+              Veyra ERC-8004 Identity <ExternalLink className="w-3.5 h-3.5" />
+            </Link>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
             <div>
               <span className="text-slate-400 block mb-0.5">ERC-8183 Contract:</span>
