@@ -12,7 +12,13 @@ import {
   type Erc8004AgentIdentityRecord,
   type Erc8004ValidationStatus,
 } from "./types.ts";
-import { getByoaClient } from "@/lib/byoa/service.ts";
+
+export {
+  ARC_ERC8004_IDENTITY_REGISTRY,
+  ARC_ERC8004_REPUTATION_REGISTRY,
+  ARC_ERC8004_VALIDATION_REGISTRY,
+};
+import { getByoaClient } from "../byoa/service.ts";
 
 export const ARC_TESTNET_RPC_URL =
   process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network";
@@ -155,8 +161,8 @@ export async function recoverAgentIdFromLogs(
   client = getArcPublicClient()
 ): Promise<string | null> {
   const latestBlock = await client.getBlockNumber();
-  const blockRange = 9900n;
-  const fromBlock = latestBlock > blockRange ? latestBlock - blockRange : 0n;
+  const blockRange = BigInt(9900);
+  const fromBlock = latestBlock > blockRange ? latestBlock - blockRange : BigInt(0);
 
   const logs = await client.getLogs({
     address: registryAddress as `0x${string}`,
