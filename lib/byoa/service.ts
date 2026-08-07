@@ -1128,6 +1128,17 @@ export function byoaManifest(baseUrl: string, sellerWorkflows: unknown[] = []) {
         getEvaluation: `${baseUrl}/api/erc8183/v1/evaluations/{evaluationId}`,
       },
     },
+    agentReputation: {
+      capability: "agent_reputation",
+      standard: "ERC-8004",
+      network: "Arc Testnet",
+      chainId: 5042002,
+      endpoints: {
+        getAgent: `${baseUrl}/api/reputation/v1/agents/{agentId}`,
+        getHistory: `${baseUrl}/api/reputation/v1/agents/{agentId}/history`,
+        getEvidence: `${baseUrl}/api/reputation/v1/agents/{agentId}/evidence`,
+      },
+    },
     scopes: ["manifest:read", "quotes:create", "workflows:execute", "results:read"],
   };
 }

@@ -21,6 +21,45 @@
     }
   ],
   "paths": {
+    "/api/reputation/v1/agents/{agentId}": {
+      "get": {
+        "summary": "Get Evidence-Weighted Agent Reputation",
+        "description": "Returns deterministic trust score (0-100), coverage, 6-dimension breakdown, and explanations for an AI agent on Arc Testnet.",
+        "operationId": "getAgentReputation",
+        "security": [],
+        "parameters": [
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string" },
+            "description": "ERC-8004 Agent ID or canonical identifier"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Agent reputation object",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "agentId": { "type": "string" },
+                    "trustScore": { "type": "integer", "example": 86 },
+                    "confidence": { "type": "string", "example": "High" },
+                    "coverage": { "type": "number", "example": 82 },
+                    "statusLabel": { "type": "string", "example": "Strong" },
+                    "dimensions": { "type": "object" },
+                    "topPositiveEvidence": { "type": "array", "items": { "type": "string" } },
+                    "riskSignals": { "type": "array", "items": { "type": "string" } }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/erc8183/v1/evaluator": {
       "get": {
         "summary": "Get Veyra ERC-8183 Evaluator Metadata",
