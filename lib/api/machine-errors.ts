@@ -52,6 +52,7 @@ export type MachineErrorCode =
   | "verification_pending"
   | "provider_unavailable"
   | "rate_limited"
+  | "evaluation_not_found"
   | "internal_error"
   | "api_quality_service_not_found"
   | "api_quality_service_unavailable"

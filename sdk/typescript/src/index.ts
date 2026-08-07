@@ -39,6 +39,7 @@ export type MachineErrorCode =
   | "verification_pending"
   | "provider_unavailable"
   | "rate_limited"
+  | "evaluation_not_found"
   | "payment_authorization_required"
   | "request_timeout"
   | "network_error"
@@ -1306,5 +1307,65 @@ export class AgentCommerceClient {
       signal: options.wait?.signal,
     });
     return { quote, launch, run, report };
+  }
+
+  async prepareErc8183Deliverable(
+    input: {
+      contentUri: string;
+      contentHash: `0x${string}`;
+      contentType?: "application/json";
+      schemaId?: "veyra://schemas/structured-deliverable-v1";
+      policyId?: "structured-deliverable-v1";
+    },
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<any>(
+      "/api/erc8183/v1/deliverables/prepare",
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      options,
+    );
+  }
+
+  async evaluateErc8183Job(
+    input: {
+      chainId?: number;
+      agenticCommerce: string;
+      jobId: string;
+      deliverable: any;
+    },
+    options: { idempotencyKey?: string; signal?: AbortSignal } = {},
+  ) {
+    return this.request<{
+      evaluationId: string;
+      status: string;
+      statusUrl: string;
+    }>(
+      "/api/erc8183/v1/evaluations",
+      {
+        method: "POST",
+        headers: options.idempotencyKey ? { "Idempotency-Key": options.idempotencyKey } : undefined,
+        body: JSON.stringify({
+          chainId: input.chainId ?? 5042002,
+          agenticCommerce: input.agenticCommerce,
+          jobId: input.jobId,
+          deliverable: input.deliverable,
+        }),
+      },
+      options,
+    );
+  }
+
+  async getErc8183Evaluation(
+    evaluationId: string,
+    options: { signal?: AbortSignal } = {},
+  ) {
+    return this.request<any>(
+      `/api/erc8183/v1/evaluations/${encodeURIComponent(evaluationId)}`,
+      { method: "GET" },
+      options,
+    );
   }
 }

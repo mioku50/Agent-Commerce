@@ -27,6 +27,7 @@ export const MACHINE_API_OPTIONAL_SCOPES = [
   "alerts:write",
   "webhooks:read",
   "webhooks:write",
+  "erc8183:evaluate",
 ] as const;
 
 export const MACHINE_API_AVAILABLE_SCOPES = [
@@ -45,6 +46,7 @@ export const BYOA_SCOPES = [
   "alerts:write",
   "webhooks:read",
   "webhooks:write",
+  "erc8183:evaluate",
 ] as const;
 
 export type ByoaScope = (typeof BYOA_SCOPES)[number];

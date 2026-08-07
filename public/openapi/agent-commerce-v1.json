@@ -777,6 +777,37 @@
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
+    },
+    "/api/erc8183/v1/deliverables/prepare": {
+      "post": {
+        "summary": "Prepare ERC-8183 Deliverable Commitment V1",
+        "operationId": "prepareDeliverableCommitment",
+        "description": "Computes deterministic deliverableHash and policyHash for VeyraDeliverableV1 commitment.",
+        "responses": {
+          "200": { "description": "Deliverable commitment hashes and submit arguments" }
+        }
+      }
+    },
+    "/api/erc8183/v1/evaluations": {
+      "post": {
+        "summary": "Run offchain evaluation for ERC-8183 job",
+        "operationId": "runErc8183Evaluation",
+        "description": "Runs deterministic policy evaluation, creates canonical report, signs EIP-712 verdict and submits onchain settlement on Arc Testnet.",
+        "parameters": [{ "$ref": "#/components/parameters/IdempotencyKey" }],
+        "responses": {
+          "200": { "description": "Evaluation execution status and report URL" }
+        }
+      }
+    },
+    "/api/erc8183/v1/evaluations/{evaluationId}": {
+      "get": {
+        "summary": "Read ERC-8183 evaluation result",
+        "operationId": "getErc8183Evaluation",
+        "description": "Returns sanitized evaluation record, canonical report, and Arc settlement transaction link.",
+        "responses": {
+          "200": { "description": "Sanitized evaluation result" }
+        }
+      }
     }
   },
   "components": {

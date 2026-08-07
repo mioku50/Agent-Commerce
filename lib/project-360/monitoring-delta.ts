@@ -125,20 +125,20 @@ function category(module: Project360Module): TrustDeltaChange["category"] {
 
 function signalChanges(previous: Project360Report | null, current: Project360Report) {
   const changes: TrustDeltaChange[] = [];
-  for (const module of Object.keys(SIGNAL_KEYS) as Project360Module[]) {
-    const before = collectSignals(sectionFor(previous, module), SIGNAL_KEYS[module]);
-    const after = collectSignals(sectionFor(current, module), SIGNAL_KEYS[module]);
+  for (const mod of Object.keys(SIGNAL_KEYS) as Project360Module[]) {
+    const before = collectSignals(sectionFor(previous, mod), SIGNAL_KEYS[mod]);
+    const after = collectSignals(sectionFor(current, mod), SIGNAL_KEYS[mod]);
     for (const key of new Set([...before.keys(), ...after.keys()])) {
       const left = before.get(key) ?? null;
       const right = after.get(key) ?? null;
       if (JSON.stringify(left) === JSON.stringify(right)) continue;
       changes.push({
-        code: `${module}_${code([key])}`,
+        code: `${mod}_${code([key])}`,
         kind: "activity",
         severity: "info",
-        category: category(module),
-        title: `${PROJECT_360_MODULE_LABELS[module]}: ${key.split(".").at(-1)}`,
-        summary: `A public ${PROJECT_360_MODULE_LABELS[module]} signal changed.`,
+        category: category(mod),
+        title: `${PROJECT_360_MODULE_LABELS[mod]}: ${key.split(".").at(-1)}`,
+        summary: `A public ${PROJECT_360_MODULE_LABELS[mod]} signal changed.`,
         before: left,
         after: right,
       });
