@@ -1,0 +1,154 @@
+/**
+ * Copyright 2026 Circle Internet Group, Inc. All rights reserved.
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { getByoaClient } from "../byoa/service.ts";
+import type { ReputationEvidence, ReputationSnapshot } from "./types.ts";
+
+export async function saveReputationEvidence(evidence: ReputationEvidence): Promise<boolean> {
+  try {
+    const supabase = getByoaClient();
+    const { error } = await supabase.from("agent_reputation_evidence").upsert(
+      {
+        agent_id: evidence.agentId,
+        evidence_type: evidence.type,
+        tier: evidence.tier,
+        source_id: evidence.sourceId,
+        source_hash: evidence.sourceHash || null,
+        score: evidence.score ?? null,
+        positive: evidence.positive,
+        confidence: evidence.confidence,
+        economic_value_usdc: evidence.economicValueUsdc || 0,
+        counterparty_address: evidence.counterpartyAddress || null,
+        verified_onchain: evidence.verifiedOnchain,
+        arc_proof_verified: evidence.arcProofVerified,
+        sybil_risk: evidence.sybilRisk,
+        observed_at: evidence.observedAt,
+        canonical_hash: evidence.canonicalHash,
+        metadata: {
+          reason: evidence.reason || null,
+        },
+      },
+      { onConflict: "agent_id,source_id,canonical_hash" }
+    );
+    if (error) {
+      console.error("Failed to save reputation evidence:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Database error saving reputation evidence:", err);
+    return false;
+  }
+}
+
+export async function fetchReputationEvidenceForAgent(agentId: string): Promise<ReputationEvidence[]> {
+  try {
+    const supabase = getByoaClient();
+    const { data, error } = await supabase
+      .from("agent_reputation_evidence")
+      .select("*")
+      .eq("agent_id", agentId)
+      .order("observed_at", { ascending: false });
+
+    if (error || !data) {
+      return [];
+    }
+
+    return data.map((row) => ({
+      evidenceId: row.id,
+      agentId: row.agent_id,
+      type: row.evidence_type,
+      tier: row.tier as 0 | 1 | 2 | 3 | 4,
+      sourceId: row.source_id,
+      sourceHash: row.source_hash || undefined,
+      score: row.score !== null ? Number(row.score) : undefined,
+      positive: Boolean(row.positive),
+      confidence: Number(row.confidence),
+      economicValueUsdc: row.economic_value_usdc ? Number(row.economic_value_usdc) : 0,
+      counterpartyAddress: row.counterparty_address || undefined,
+      verifiedOnchain: Boolean(row.verified_onchain),
+      arcProofVerified: Boolean(row.arc_proof_verified),
+      sybilRisk: row.sybil_risk || "none",
+      reason: row.metadata?.reason || undefined,
+      observedAt: row.observed_at,
+      canonicalHash: row.canonical_hash,
+    }));
+  } catch (err) {
+    console.error("Failed to fetch reputation evidence:", err);
+    return [];
+  }
+}
+
+export async function saveReputationSnapshot(snapshot: ReputationSnapshot): Promise<boolean> {
+  try {
+    const supabase = getByoaClient();
+    const { error } = await supabase.from("agent_reputation_snapshots").upsert({
+      snapshot_id: snapshot.snapshotId,
+      agent_id: snapshot.agentId,
+      trust_score: snapshot.trustScore,
+      identity_score: snapshot.dimensions.identity,
+      execution_score: snapshot.dimensions.execution,
+      validation_score: snapshot.dimensions.validation,
+      economic_reliability_score: snapshot.dimensions.economicReliability,
+      service_quality_score: snapshot.dimensions.serviceQuality,
+      reputation_score: snapshot.dimensions.reputation,
+      coverage: snapshot.coverage,
+      confidence: snapshot.confidence,
+      status_label: snapshot.statusLabel,
+      evidence_count: snapshot.evidenceCount,
+      economic_evidence_count: snapshot.economicEvidenceCount,
+      canonical_hash: snapshot.canonicalHash,
+      arc_proof_tx: snapshot.arcProofTx || null,
+      snapshot_payload: snapshot as unknown as Record<string, unknown>,
+    });
+    if (error) {
+      console.error("Failed to save reputation snapshot:", error.message);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error("Database error saving reputation snapshot:", err);
+    return false;
+  }
+}
+
+export async function fetchLatestReputationSnapshot(agentId: string): Promise<ReputationSnapshot | null> {
+  try {
+    const supabase = getByoaClient();
+    const { data, error } = await supabase
+      .from("agent_reputation_snapshots")
+      .select("snapshot_payload")
+      .eq("agent_id", agentId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .single();
+
+    if (error || !data || !data.snapshot_payload) {
+      return null;
+    }
+    return data.snapshot_payload as unknown as ReputationSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchReputationSnapshotHistory(agentId: string): Promise<ReputationSnapshot[]> {
+  try {
+    const supabase = getByoaClient();
+    const { data, error } = await supabase
+      .from("agent_reputation_snapshots")
+      .select("snapshot_payload")
+      .eq("agent_id", agentId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    if (error || !data) {
+      return [];
+    }
+    return data.map((r) => r.snapshot_payload as unknown as ReputationSnapshot);
+  } catch {
+    return [];
+  }
+}
