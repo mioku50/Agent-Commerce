@@ -157,6 +157,11 @@ export const TRUST_ALERT_EVENT_TYPES = [
   "verification_failed",
   "recheck_failed",
   "subject_unavailable",
+  "reputation.updated",
+  "reputation.degraded",
+  "reputation.recovered",
+  "evidence.added",
+  "erc8183.job_rejected",
 ] as const;
 
 export type TrustAlertEventType = (typeof TRUST_ALERT_EVENT_TYPES)[number];
