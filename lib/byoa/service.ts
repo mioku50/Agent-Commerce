@@ -1081,6 +1081,38 @@ export function byoaManifest(baseUrl: string, sellerWorkflows: unknown[] = []) {
       passport: `${baseUrl}/api/byoa/agents/{publicId}/passport`,
     },
     sellerWorkflows,
+    standards: {
+      erc8004: {
+        supported: true,
+        agentId: process.env.ERC8004_VEYRA_AGENT_ID || process.env.NEXT_PUBLIC_ERC8004_VEYRA_AGENT_ID || null,
+        identityRegistry: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+        reputationRegistry: "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+        validationRegistry: "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
+      },
+      erc8183: {
+        supported: true,
+        role: "evaluator",
+      },
+      x402: {
+        supported: true,
+      },
+    },
+    erc8004Identity: {
+      capability: "erc8004_identity",
+      standard: "ERC-8004",
+      network: "Arc Testnet",
+      chainId: 5042002,
+      agentId: process.env.ERC8004_VEYRA_AGENT_ID || process.env.NEXT_PUBLIC_ERC8004_VEYRA_AGENT_ID || null,
+      identityRegistry: "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+      reputationRegistry: "0x8004B663056A597Dffe9eCcC1965A193B7388713",
+      validationRegistry: "0x8004Cb1BF31DAf7788923b405b754f57acEB4272",
+      metadataUri: `${baseUrl}/.well-known/veyra-agent.json`,
+      endpoints: {
+        agent: `${baseUrl}/api/erc8004/v1/agent`,
+        reputation: `${baseUrl}/api/erc8004/v1/reputation`,
+        validations: `${baseUrl}/api/erc8004/v1/validations`,
+      },
+    },
     erc8183Evaluation: {
       capability: "erc8183_evaluation",
       standard: "ERC-8183",
