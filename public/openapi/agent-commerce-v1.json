@@ -21,6 +21,36 @@
     }
   ],
   "paths": {
+    "/api/erc8183/v1/evaluator": {
+      "get": {
+        "summary": "Get Veyra ERC-8183 Evaluator Metadata",
+        "description": "Returns public capability metadata for the canonical Veyra ERC-8183 evaluator on Arc Testnet.",
+        "operationId": "getErc8183Evaluator",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Safe public evaluator metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "standard": { "type": "string", "example": "ERC-8183" },
+                    "network": { "type": "string", "example": "arc-testnet" },
+                    "chainId": { "type": "integer", "example": 5042002 },
+                    "status": { "type": "string", "enum": ["active", "paused"], "example": "active" },
+                    "evaluatorAddress": { "type": "string", "example": "0x0d2c04580e081e222bbe5bf9818af337e2633eb7" },
+                    "commerceAddress": { "type": "string", "example": "0x0747EEf0706327138c69792bF28Cd525089e4583" },
+                    "policy": { "type": "string", "example": "structured-deliverable-v1" }
+                  },
+                  "required": ["standard", "network", "chainId", "status", "evaluatorAddress", "commerceAddress", "policy"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/agent/v1/workflows": {
       "get": {
         "summary": "List available workflows",
