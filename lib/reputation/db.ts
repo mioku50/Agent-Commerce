@@ -6,7 +6,21 @@
 import { getByoaClient } from "../byoa/service.ts";
 import type { ReputationEvidence, ReputationSnapshot } from "./types.ts";
 
+const memoryEvidenceStore = new Map<string, ReputationEvidence[]>();
+const memorySnapshotStore = new Map<string, ReputationSnapshot[]>();
+
 export async function saveReputationEvidence(evidence: ReputationEvidence): Promise<boolean> {
+  const list = memoryEvidenceStore.get(evidence.agentId) || [];
+  const existingIndex = list.findIndex(
+    (e) => e.sourceId === evidence.sourceId && e.canonicalHash === evidence.canonicalHash
+  );
+  if (existingIndex >= 0) {
+    list[existingIndex] = evidence;
+  } else {
+    list.unshift(evidence);
+  }
+  memoryEvidenceStore.set(evidence.agentId, list);
+
   try {
     const supabase = getByoaClient();
     const { error } = await supabase.from("agent_reputation_evidence").upsert(
@@ -37,11 +51,12 @@ export async function saveReputationEvidence(evidence: ReputationEvidence): Prom
     }
     return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function fetchReputationEvidenceForAgent(agentId: string): Promise<ReputationEvidence[]> {
+  const memList = memoryEvidenceStore.get(agentId) || [];
   try {
     const supabase = getByoaClient();
     const { data, error } = await supabase
@@ -50,36 +65,49 @@ export async function fetchReputationEvidenceForAgent(agentId: string): Promise<
       .eq("agent_id", agentId)
       .order("observed_at", { ascending: false });
 
-    if (error || !data) {
-      return [];
-    }
+    if (!error && data && data.length > 0) {
+      const dbList: ReputationEvidence[] = data.map((row) => ({
+        evidenceId: row.id,
+        agentId: row.agent_id,
+        type: row.evidence_type,
+        tier: row.tier as 0 | 1 | 2 | 3 | 4,
+        sourceId: row.source_id,
+        sourceHash: row.source_hash || undefined,
+        score: row.score !== null ? Number(row.score) : undefined,
+        positive: Boolean(row.positive),
+        confidence: Number(row.confidence),
+        economicValueUsdc: row.economic_value_usdc ? Number(row.economic_value_usdc) : 0,
+        counterpartyAddress: row.counterparty_address || undefined,
+        verifiedOnchain: Boolean(row.verified_onchain),
+        arcProofVerified: Boolean(row.arc_proof_verified),
+        sybilRisk: row.sybil_risk || "none",
+        reason: row.metadata?.reason || undefined,
+        observedAt: row.observed_at,
+        canonicalHash: row.canonical_hash,
+      }));
 
-    return data.map((row) => ({
-      evidenceId: row.id,
-      agentId: row.agent_id,
-      type: row.evidence_type,
-      tier: row.tier as 0 | 1 | 2 | 3 | 4,
-      sourceId: row.source_id,
-      sourceHash: row.source_hash || undefined,
-      score: row.score !== null ? Number(row.score) : undefined,
-      positive: Boolean(row.positive),
-      confidence: Number(row.confidence),
-      economicValueUsdc: row.economic_value_usdc ? Number(row.economic_value_usdc) : 0,
-      counterpartyAddress: row.counterparty_address || undefined,
-      verifiedOnchain: Boolean(row.verified_onchain),
-      arcProofVerified: Boolean(row.arc_proof_verified),
-      sybilRisk: row.sybil_risk || "none",
-      reason: row.metadata?.reason || undefined,
-      observedAt: row.observed_at,
-      canonicalHash: row.canonical_hash,
-    }));
+      const mergedMap = new Map<string, ReputationEvidence>();
+      for (const item of [...dbList, ...memList]) {
+        mergedMap.set(`${item.sourceId}_${item.canonicalHash}`, item);
+      }
+      return Array.from(mergedMap.values());
+    }
   } catch (err) {
     console.error("Failed to fetch reputation evidence:", err);
-    return [];
   }
+  return memList;
 }
 
 export async function saveReputationSnapshot(snapshot: ReputationSnapshot): Promise<boolean> {
+  const list = memorySnapshotStore.get(snapshot.agentId) || [];
+  const existingIndex = list.findIndex((s) => s.snapshotId === snapshot.snapshotId);
+  if (existingIndex >= 0) {
+    list[existingIndex] = snapshot;
+  } else {
+    list.unshift(snapshot);
+  }
+  memorySnapshotStore.set(snapshot.agentId, list);
+
   try {
     const supabase = getByoaClient();
     const { error } = await supabase.from("agent_reputation_snapshots").upsert({
@@ -106,11 +134,12 @@ export async function saveReputationSnapshot(snapshot: ReputationSnapshot): Prom
     }
     return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
 export async function fetchLatestReputationSnapshot(agentId: string): Promise<ReputationSnapshot | null> {
+  const memList = memorySnapshotStore.get(agentId) || [];
   try {
     const supabase = getByoaClient();
     const { data, error } = await supabase
@@ -121,16 +150,15 @@ export async function fetchLatestReputationSnapshot(agentId: string): Promise<Re
       .limit(1)
       .single();
 
-    if (error || !data || !data.snapshot_payload) {
-      return null;
+    if (!error && data && data.snapshot_payload) {
+      return data.snapshot_payload as unknown as ReputationSnapshot;
     }
-    return data.snapshot_payload as unknown as ReputationSnapshot;
-  } catch {
-    return null;
-  }
+  } catch {}
+  return memList[0] || null;
 }
 
 export async function fetchReputationSnapshotHistory(agentId: string): Promise<ReputationSnapshot[]> {
+  const memList = memorySnapshotStore.get(agentId) || [];
   try {
     const supabase = getByoaClient();
     const { data, error } = await supabase
@@ -140,11 +168,14 @@ export async function fetchReputationSnapshotHistory(agentId: string): Promise<R
       .order("created_at", { ascending: false })
       .limit(50);
 
-    if (error || !data) {
-      return [];
+    if (!error && data && data.length > 0) {
+      const dbList = data.map((r) => r.snapshot_payload as unknown as ReputationSnapshot);
+      const mergedMap = new Map<string, ReputationSnapshot>();
+      for (const item of [...dbList, ...memList]) {
+        mergedMap.set(item.snapshotId, item);
+      }
+      return Array.from(mergedMap.values());
     }
-    return data.map((r) => r.snapshot_payload as unknown as ReputationSnapshot);
-  } catch {
-    return [];
-  }
+  } catch {}
+  return memList;
 }

@@ -22,8 +22,9 @@ import type { CanonicalAgentIdentity, ReputationEvidence } from "../lib/reputati
 
 async function main() {
   console.log("=======================================================");
-  console.log("🔥 Veyra P5.3 Evidence-Weighted Reputation Smoke Pipeline");
+  console.log("⚡ Veyra P5.3 Fixture-Based Reputation Smoke Test");
   console.log("=======================================================\n");
+
 
   const publicClient = getArcPublicClient();
 
