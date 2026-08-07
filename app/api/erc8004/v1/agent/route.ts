@@ -4,26 +4,29 @@
  */
 
 import { NextResponse } from "next/server";
-import { getVeyraAgentIdentityRecord } from "@/lib/erc8004/client.ts";
+import { getArcPublicClient, getCanonicalVeyraAgentIdentity } from "@/lib/erc8004/client.ts";
 import {
   ARC_ERC8004_IDENTITY_REGISTRY,
   ARC_ERC8004_REPUTATION_REGISTRY,
   ARC_ERC8004_VALIDATION_REGISTRY,
-  type Erc8004Metadata,
 } from "@/lib/erc8004/types.ts";
 
 export const revalidate = 60;
 
 export async function GET() {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "https://agent-commerce-six.vercel.app";
-  const identityRecord = await getVeyraAgentIdentityRecord();
+  const publicClient = getArcPublicClient();
+  const identityRecord = await getCanonicalVeyraAgentIdentity(publicClient);
 
-  const metadata: Erc8004Metadata = {
+  const isVerifiedOnchain = Boolean(identityRecord?.agent_id && identityRecord.owner_address);
+
+  const metadata = {
     name: "Veyra Trust Evaluator",
     description: "Independent trust, deliverable, and contract evaluator for agentic commerce on Arc Testnet.",
     version: "1.0.0",
     network: "arc-testnet",
     chainId: 5042002,
+    verifiedOnchain: isVerifiedOnchain,
     identity: {
       standard: "ERC-8004",
       registry: identityRecord?.registry_address || ARC_ERC8004_IDENTITY_REGISTRY,
