@@ -1081,6 +1081,21 @@ export function byoaManifest(baseUrl: string, sellerWorkflows: unknown[] = []) {
       passport: `${baseUrl}/api/byoa/agents/{publicId}/passport`,
     },
     sellerWorkflows,
+    erc8183Evaluation: {
+      capability: "erc8183_evaluation",
+      standard: "ERC-8183",
+      network: "Arc Testnet",
+      chainId: 5042002,
+      evaluator: process.env.NEXT_PUBLIC_VEYRA_ERC8183_EVALUATOR_ADDRESS || "0x0d2c04580e081e222bbe5bf9818af337e2633eb7",
+      commerce: process.env.NEXT_PUBLIC_ARC_ERC8183_COMMERCE_ADDRESS || "0x0747EEf0706327138c69792bF28Cd525089e4583",
+      policy: "structured-deliverable-v1",
+      endpoints: {
+        evaluator: `${baseUrl}/api/erc8183/v1/evaluator`,
+        prepare: `${baseUrl}/api/erc8183/v1/deliverables/prepare`,
+        evaluate: `${baseUrl}/api/erc8183/v1/evaluations`,
+        getEvaluation: `${baseUrl}/api/erc8183/v1/evaluations/{evaluationId}`,
+      },
+    },
     scopes: ["manifest:read", "quotes:create", "workflows:execute", "results:read"],
   };
 }

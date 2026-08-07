@@ -105,3 +105,13 @@ export type Erc8183EvaluationRecord = {
   evaluated_at: string | null;
   settled_at: string | null;
 };
+
+export interface EvaluatorMetadata {
+  standard: "ERC-8183";
+  network: "arc-testnet";
+  chainId: 5042002;
+  status: "active" | "paused";
+  evaluatorAddress: `0x${string}`;
+  commerceAddress: `0x${string}`;
+  policy: "structured-deliverable-v1";
+}
