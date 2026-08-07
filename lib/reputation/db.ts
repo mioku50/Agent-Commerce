@@ -33,12 +33,10 @@ export async function saveReputationEvidence(evidence: ReputationEvidence): Prom
       { onConflict: "agent_id,source_id,canonical_hash" }
     );
     if (error) {
-      console.error("Failed to save reputation evidence:", error.message);
       return false;
     }
     return true;
-  } catch (err) {
-    console.error("Database error saving reputation evidence:", err);
+  } catch {
     return false;
   }
 }
@@ -104,12 +102,10 @@ export async function saveReputationSnapshot(snapshot: ReputationSnapshot): Prom
       snapshot_payload: snapshot as unknown as Record<string, unknown>,
     });
     if (error) {
-      console.error("Failed to save reputation snapshot:", error.message);
       return false;
     }
     return true;
-  } catch (err) {
-    console.error("Database error saving reputation snapshot:", err);
+  } catch {
     return false;
   }
 }

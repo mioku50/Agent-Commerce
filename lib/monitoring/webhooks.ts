@@ -646,3 +646,42 @@ export async function deliverDueWebhooks(limit = 25) {
   );
   return { processed: deliveries.length };
 }
+
+export async function dispatchWebhookEvents(input: {
+  ownerWallet: string;
+  eventType: string;
+  eventFingerprint: string;
+  message: string;
+  payload: Record<string, unknown>;
+}) {
+  try {
+    const client = getByoaClient();
+    const eventId = `evt_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
+    const createdAt = new Date().toISOString();
+
+    const fullPayload = {
+      id: eventId,
+      type: input.eventType,
+      createdAt,
+      apiVersion: "2026-07-30",
+      data: {
+        message: input.message,
+        fingerprint: input.eventFingerprint,
+        ...input.payload,
+      },
+    };
+
+    await client.from("webhook_events").insert({
+      public_id: eventId,
+      owner_wallet: input.ownerWallet.toLowerCase(),
+      event_type: input.eventType,
+      payload: fullPayload,
+      created_at: createdAt,
+    });
+    return true;
+  } catch (err) {
+    console.error("Failed to dispatch webhook event:", err);
+    return false;
+  }
+}
+
