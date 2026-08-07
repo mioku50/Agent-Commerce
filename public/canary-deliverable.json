@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "veyra.structured-deliverable.v1",
+  "title": "Veyra P5.0 Canary Deliverable",
+  "summary": "Verified automated offchain execution output for Arc Testnet canary job",
+  "result": {
+    "status": "success",
+    "metrics": {
+      "executionTimeMs": 125,
+      "accuracy": 1.0
+    }
+  },
+  "evidence": [
+    {
+      "type": "canary_proof",
+      "description": "Veyra Arc Testnet evaluator MVP production canary proof"
+    }
+  ],
+  "generatedAt": "2026-08-07T11:00:00.000Z"
+}
