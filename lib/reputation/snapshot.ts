@@ -28,8 +28,9 @@ export async function generateAndSaveReputationSnapshot(
 export async function publishReputationSnapshotProofToArc(
   snapshot: ReputationSnapshot,
   identityOwner?: string,
-  attesterKeyOverride?: string
-): Promise<{ transactionHash: string; blockNumber: number; verifiedOnchain: boolean }> {
+  attesterKeyOverride?: string,
+  economicValueUsdc?: number
+): Promise<{ transactionHash: string | null; blockNumber: number; verifiedOnchain: boolean; proofAlreadyRegistered?: boolean }> {
   const rpcUrl = process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network";
   const publicClient = createPublicClient({
     chain: arcTestnet,
@@ -38,9 +39,17 @@ export async function publishReputationSnapshotProofToArc(
 
   const receiptId = snapshot.canonicalHash as Hex;
   const serviceHash = keccak256(toBytes("veyra.reputation.snapshot.v1"));
-  const buyer = (identityOwner && isAddress(identityOwner) ? getAddress(identityOwner) : getAddress("0x0d2c04580e081e222bbe5bf9818af337e2633eb7")) as `0x${string}`;
-  const seller = getAddress("0x0d2c04580e081e222bbe5bf9818af337e2633eb7") as `0x${string}`;
-  const amount = BigInt(15000000); // 15 USDC in 6-decimal atomic units
+  
+  const attesterAddr = getAddress("0x0d2c04580e081e222bbe5bf9818af337e2633eb7");
+  let buyer = (identityOwner && isAddress(identityOwner) ? getAddress(identityOwner) : attesterAddr) as `0x${string}`;
+  const seller = attesterAddr;
+  if (buyer.toLowerCase() === seller.toLowerCase()) {
+    buyer = getAddress("0x0000000000000000000000000000000000000001");
+  }
+
+  const amountVal = (economicValueUsdc && economicValueUsdc > 0) ? economicValueUsdc : 1.0;
+  const amount = BigInt(Math.round(amountVal * 1_000_000)); // 6-decimal atomic units
+
   const requestHash = keccak256(toBytes(snapshot.agentId));
   const responseHash = snapshot.canonicalHash as Hex;
 
@@ -61,6 +70,15 @@ export async function publishReputationSnapshotProofToArc(
         args: [receiptId],
       });
 
+      if (respHash.toLowerCase() !== snapshot.canonicalHash.toLowerCase()) {
+        return {
+          transactionHash: null,
+          blockNumber: 0,
+          verifiedOnchain: false,
+          proofAlreadyRegistered: true,
+        };
+      }
+
       let logs: any[] = [];
       try {
         const currentBlock = await publicClient.getBlockNumber();
@@ -76,16 +94,35 @@ export async function publishReputationSnapshotProofToArc(
         logs = [];
       }
 
-      const txHash = logs.at(-1)?.transactionHash || snapshot.arcProofTx || receiptId;
-      const blockNum = logs.at(-1)?.blockNumber ? Number(logs.at(-1)!.blockNumber) : 0;
+      const logTxHash = logs.at(-1)?.transactionHash;
+      const isValidLogTx = logTxHash && /^0x[0-9a-fA-F]{64}$/.test(logTxHash) && logTxHash.toLowerCase() !== receiptId.toLowerCase();
+      const storedTxHash = snapshot.arcProofTx && /^0x[0-9a-fA-F]{64}$/.test(snapshot.arcProofTx) && snapshot.arcProofTx.toLowerCase() !== receiptId.toLowerCase() ? snapshot.arcProofTx : null;
+      
+      const realTxHash = isValidLogTx ? logTxHash : storedTxHash;
+      let blockNum = logs.at(-1)?.blockNumber ? Number(logs.at(-1)!.blockNumber) : 0;
 
-      snapshot.arcProofTx = txHash;
-      await saveReputationSnapshot(snapshot);
+      if (realTxHash) {
+        try {
+          const receipt = await publicClient.getTransactionReceipt({ hash: realTxHash as `0x${string}` });
+          if (receipt.status === "success") {
+            blockNum = Number(receipt.blockNumber);
+            snapshot.arcProofTx = realTxHash;
+            await saveReputationSnapshot(snapshot);
+            return {
+              transactionHash: realTxHash,
+              blockNumber: blockNum,
+              verifiedOnchain: true,
+              proofAlreadyRegistered: true,
+            };
+          }
+        } catch {}
+      }
 
       return {
-        transactionHash: txHash,
+        transactionHash: realTxHash || null,
         blockNumber: blockNum,
-        verifiedOnchain: respHash.toLowerCase() === snapshot.canonicalHash.toLowerCase(),
+        verifiedOnchain: true,
+        proofAlreadyRegistered: true,
       };
     }
   } catch (err) {
@@ -137,12 +174,11 @@ export async function publishReputationSnapshotProofToArc(
     };
   } catch (err: any) {
     if (err?.message?.includes("0xa53006da") || err?.message?.includes("DuplicateReceipt")) {
-      snapshot.arcProofTx = snapshot.arcProofTx || receiptId;
-      await saveReputationSnapshot(snapshot);
       return {
-        transactionHash: snapshot.arcProofTx,
+        transactionHash: snapshot.arcProofTx && /^0x[0-9a-fA-F]{64}$/.test(snapshot.arcProofTx) ? snapshot.arcProofTx : null,
         blockNumber: 0,
         verifiedOnchain: true,
+        proofAlreadyRegistered: true,
       };
     }
     throw err;

@@ -9,17 +9,24 @@ import type { ReputationEvidence, ReputationSnapshot } from "./types.ts";
 const memoryEvidenceStore = new Map<string, ReputationEvidence[]>();
 const memorySnapshotStore = new Map<string, ReputationSnapshot[]>();
 
+function isMemoryStoreAllowed(): boolean {
+  return process.env.NODE_ENV === "test" || process.env.REPUTATION_ALLOW_MEMORY_STORE === "true";
+}
+
 export async function saveReputationEvidence(evidence: ReputationEvidence): Promise<boolean> {
-  const list = memoryEvidenceStore.get(evidence.agentId) || [];
-  const existingIndex = list.findIndex(
-    (e) => e.sourceId === evidence.sourceId && e.canonicalHash === evidence.canonicalHash
-  );
-  if (existingIndex >= 0) {
-    list[existingIndex] = evidence;
-  } else {
-    list.unshift(evidence);
+  const allowMemory = isMemoryStoreAllowed();
+  if (allowMemory) {
+    const list = memoryEvidenceStore.get(evidence.agentId) || [];
+    const existingIndex = list.findIndex(
+      (e) => e.sourceId === evidence.sourceId && e.canonicalHash === evidence.canonicalHash
+    );
+    if (existingIndex >= 0) {
+      list[existingIndex] = evidence;
+    } else {
+      list.unshift(evidence);
+    }
+    memoryEvidenceStore.set(evidence.agentId, list);
   }
-  memoryEvidenceStore.set(evidence.agentId, list);
 
   try {
     const supabase = getByoaClient();
@@ -47,15 +54,22 @@ export async function saveReputationEvidence(evidence: ReputationEvidence): Prom
       { onConflict: "agent_id,source_id,canonical_hash" }
     );
     if (error) {
-      return false;
+      if (!allowMemory) {
+        throw new Error(`DB Evidence Upsert Failed: ${error.message}`);
+      }
+      return true;
     }
     return true;
-  } catch {
+  } catch (err) {
+    if (!allowMemory) {
+      throw err instanceof Error ? err : new Error(String(err));
+    }
     return true;
   }
 }
 
 export async function fetchReputationEvidenceForAgent(agentId: string): Promise<ReputationEvidence[]> {
+  const allowMemory = isMemoryStoreAllowed();
   const memList = memoryEvidenceStore.get(agentId) || [];
   try {
     const supabase = getByoaClient();
@@ -65,7 +79,13 @@ export async function fetchReputationEvidenceForAgent(agentId: string): Promise<
       .eq("agent_id", agentId)
       .order("observed_at", { ascending: false });
 
-    if (!error && data && data.length > 0) {
+    if (error) {
+      if (!allowMemory) {
+        throw new Error(`DB Fetch Evidence Failed: ${error.message}`);
+      }
+    }
+
+    if (data && data.length > 0) {
       const dbList: ReputationEvidence[] = data.map((row) => ({
         evidenceId: row.id,
         agentId: row.agent_id,
@@ -86,6 +106,10 @@ export async function fetchReputationEvidenceForAgent(agentId: string): Promise<
         canonicalHash: row.canonical_hash,
       }));
 
+      if (!allowMemory) {
+        return dbList;
+      }
+
       const mergedMap = new Map<string, ReputationEvidence>();
       for (const item of [...dbList, ...memList]) {
         mergedMap.set(`${item.sourceId}_${item.canonicalHash}`, item);
@@ -93,20 +117,26 @@ export async function fetchReputationEvidenceForAgent(agentId: string): Promise<
       return Array.from(mergedMap.values());
     }
   } catch (err) {
+    if (!allowMemory) {
+      throw err instanceof Error ? err : new Error(String(err));
+    }
     console.error("Failed to fetch reputation evidence:", err);
   }
-  return memList;
+  return allowMemory ? memList : [];
 }
 
 export async function saveReputationSnapshot(snapshot: ReputationSnapshot): Promise<boolean> {
-  const list = memorySnapshotStore.get(snapshot.agentId) || [];
-  const existingIndex = list.findIndex((s) => s.snapshotId === snapshot.snapshotId);
-  if (existingIndex >= 0) {
-    list[existingIndex] = snapshot;
-  } else {
-    list.unshift(snapshot);
+  const allowMemory = isMemoryStoreAllowed();
+  if (allowMemory) {
+    const list = memorySnapshotStore.get(snapshot.agentId) || [];
+    const existingIndex = list.findIndex((s) => s.snapshotId === snapshot.snapshotId);
+    if (existingIndex >= 0) {
+      list[existingIndex] = snapshot;
+    } else {
+      list.unshift(snapshot);
+    }
+    memorySnapshotStore.set(snapshot.agentId, list);
   }
-  memorySnapshotStore.set(snapshot.agentId, list);
 
   try {
     const supabase = getByoaClient();
@@ -130,15 +160,22 @@ export async function saveReputationSnapshot(snapshot: ReputationSnapshot): Prom
       snapshot_payload: snapshot as unknown as Record<string, unknown>,
     });
     if (error) {
-      return false;
+      if (!allowMemory) {
+        throw new Error(`DB Save Snapshot Failed: ${error.message}`);
+      }
+      return true;
     }
     return true;
-  } catch {
+  } catch (err) {
+    if (!allowMemory) {
+      throw err instanceof Error ? err : new Error(String(err));
+    }
     return true;
   }
 }
 
 export async function fetchLatestReputationSnapshot(agentId: string): Promise<ReputationSnapshot | null> {
+  const allowMemory = isMemoryStoreAllowed();
   const memList = memorySnapshotStore.get(agentId) || [];
   try {
     const supabase = getByoaClient();
@@ -148,16 +185,27 @@ export async function fetchLatestReputationSnapshot(agentId: string): Promise<Re
       .eq("agent_id", agentId)
       .order("created_at", { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (!error && data && data.snapshot_payload) {
+    if (error) {
+      if (!allowMemory) {
+        throw new Error(`DB Fetch Latest Snapshot Failed: ${error.message}`);
+      }
+    }
+
+    if (data && data.snapshot_payload) {
       return data.snapshot_payload as unknown as ReputationSnapshot;
     }
-  } catch {}
-  return memList[0] || null;
+  } catch (err) {
+    if (!allowMemory) {
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  return allowMemory ? memList[0] || null : null;
 }
 
 export async function fetchReputationSnapshotHistory(agentId: string): Promise<ReputationSnapshot[]> {
+  const allowMemory = isMemoryStoreAllowed();
   const memList = memorySnapshotStore.get(agentId) || [];
   try {
     const supabase = getByoaClient();
@@ -168,14 +216,27 @@ export async function fetchReputationSnapshotHistory(agentId: string): Promise<R
       .order("created_at", { ascending: false })
       .limit(50);
 
-    if (!error && data && data.length > 0) {
+    if (error) {
+      if (!allowMemory) {
+        throw new Error(`DB Fetch Snapshot History Failed: ${error.message}`);
+      }
+    }
+
+    if (data && data.length > 0) {
       const dbList = data.map((r) => r.snapshot_payload as unknown as ReputationSnapshot);
+      if (!allowMemory) {
+        return dbList;
+      }
       const mergedMap = new Map<string, ReputationSnapshot>();
       for (const item of [...dbList, ...memList]) {
         mergedMap.set(item.snapshotId, item);
       }
       return Array.from(mergedMap.values());
     }
-  } catch {}
-  return memList;
+  } catch (err) {
+    if (!allowMemory) {
+      throw err instanceof Error ? err : new Error(String(err));
+    }
+  }
+  return allowMemory ? memList : [];
 }

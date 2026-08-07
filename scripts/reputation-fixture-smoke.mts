@@ -21,6 +21,7 @@ import {
 import type { CanonicalAgentIdentity, ReputationEvidence } from "../lib/reputation/types.ts";
 
 async function main() {
+  process.env.REPUTATION_ALLOW_MEMORY_STORE = "true";
   console.log("=======================================================");
   console.log("⚡ Veyra P5.3 Fixture-Based Reputation Smoke Test");
   console.log("=======================================================\n");

@@ -94,10 +94,11 @@ export async function fetchJobSubmittedLogs(
   );
 
   const uniqueLogs = Array.from(new Map(filteredLogs.map((l) => [l.transactionHash, l])).values());
+  const latestLogs = uniqueLogs.length > 0 ? [uniqueLogs[uniqueLogs.length - 1]] : [];
 
-  return uniqueLogs.map((log) => ({
+  return latestLogs.map((log) => ({
     jobId,
-    deliverableHash: log.data as `0x${string}`,
+    deliverableHash: (log.data && log.data !== "0x" ? log.data : log.topics[2]) as `0x${string}`,
     blockNumber: log.blockNumber,
     transactionHash: log.transactionHash,
   }));
