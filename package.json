@@ -87,6 +87,7 @@
     "byoa:settlement-db-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-settlement-recovery-db-test.mts",
     "byoa:canary": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/byoa-canary.mts",
     "erc8183:test": "node --experimental-transform-types --no-warnings scripts/erc8183-tests.mts",
+    "erc8183:product-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/erc8183-product-test.mts",
     "erc8183:contract-test": "cd contracts && forge test",
     "erc8183:production-verify": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/verify-production-erc8183-schema.mts",
     "erc8183:production-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/erc8183-production-smoke.mts",
