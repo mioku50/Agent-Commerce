@@ -93,7 +93,7 @@ export async function getCanonicalVeyraAgentIdentity(
  */
 export async function fetchAgentIdentityOnchain(
   agentId: bigint,
-  registryAddress = ARC_ERC8004_IDENTITY_REGISTRY,
+  registryAddress: string = ARC_ERC8004_IDENTITY_REGISTRY,
   client = getArcPublicClient()
 ) {
   const contract = getContract({
