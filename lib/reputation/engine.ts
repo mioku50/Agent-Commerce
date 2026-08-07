@@ -253,9 +253,9 @@ export function computeAgentReputation(
   else if (coverage >= 65) confidence = "High";
   else if (coverage >= 30) confidence = "Medium";
 
-  // Determine Status Label
+  // Determine Status Label (requires at least 50% coverage for strong trust statuses)
   let statusLabel: ReputationStatusLabel = "Limited Evidence";
-  if (coverage < 30) {
+  if (coverage < 50) {
     statusLabel = "Limited Evidence";
   } else if (trustScore >= 90) {
     statusLabel = "Highly Trusted";
