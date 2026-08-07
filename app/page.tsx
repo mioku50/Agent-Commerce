@@ -283,6 +283,36 @@ export default async function Home() {
         </div>
       </section>
 
+      {/* Trust Infrastructure for Agentic Commerce - ERC-8183 Evaluator Block */}
+      <section className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6">
+        <div className="relative overflow-hidden rounded-2xl border border-sky-500/30 bg-gradient-to-br from-[#0a1120] via-[#080d1a] to-[#06080d] p-8 shadow-[0_0_40px_rgba(14,165,233,0.15)] transition-all duration-300">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-3 max-w-2xl">
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10 font-semibold">
+                  Trust Infrastructure for Agentic Commerce
+                </Badge>
+                <span className="text-xs text-muted-foreground font-mono">Arc Testnet</span>
+              </div>
+              <h2 className="text-2xl font-bold tracking-tight sm:text-3xl text-foreground">
+                Independent ERC-8183 Evaluator
+              </h2>
+              <p className="text-sm leading-relaxed text-muted-foreground sm:text-base">
+                Veyra can independently evaluate agent deliverables and authorize ERC-8183 job settlement on Arc. Non-custodial, fail-closed policy evaluation backed by cryptographic EIP-712 proofs.
+              </p>
+            </div>
+            <div className="flex items-center gap-4 shrink-0">
+              <Button asChild size="lg" className="rounded-xl bg-sky-500 hover:bg-sky-400 font-bold text-slate-950 shadow-[0_0_20px_rgba(14,165,233,0.3)]">
+                <Link href="/evaluators">
+                  <ShieldCheck className="size-5" />
+                  Explore Evaluator
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* Available Workflows Grid */}
       <section className="border-t border-white/5 bg-[#06080d]/60 py-16">
         <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
