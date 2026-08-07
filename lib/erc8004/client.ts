@@ -30,9 +30,6 @@ export function getArcPublicClient(rpcUrl = ARC_TESTNET_RPC_URL) {
   });
 }
 
-/**
- * Retrieves Veyra's canonical registered ERC-8004 agent identity record from Supabase or environment fallback.
- */
 export async function getVeyraAgentIdentityRecord(): Promise<Erc8004AgentIdentityRecord | null> {
   const envAgentId = process.env.ERC8004_VEYRA_AGENT_ID || process.env.NEXT_PUBLIC_ERC8004_VEYRA_AGENT_ID;
 
@@ -65,6 +62,30 @@ export async function getVeyraAgentIdentityRecord(): Promise<Erc8004AgentIdentit
   }
 
   return null;
+}
+
+export async function getCanonicalVeyraAgentIdentity(
+  publicClient = getArcPublicClient()
+): Promise<Erc8004AgentIdentityRecord | null> {
+  const dbRecord = await getVeyraAgentIdentityRecord();
+  if (!dbRecord || !dbRecord.agent_id) {
+    return null;
+  }
+
+  try {
+    const agentId = BigInt(dbRecord.agent_id);
+    const registryAddress = (dbRecord.registry_address || ARC_ERC8004_IDENTITY_REGISTRY) as `0x${string}`;
+    const onchain = await fetchAgentIdentityOnchain(agentId, registryAddress, publicClient);
+
+    return {
+      ...dbRecord,
+      owner_address: onchain.owner || dbRecord.owner_address,
+      metadata_uri: onchain.tokenURI || dbRecord.metadata_uri,
+    };
+  } catch (err) {
+    console.warn("⚠️ Onchain identity verification warning for canonical agentId:", err);
+    return dbRecord;
+  }
 }
 
 /**
