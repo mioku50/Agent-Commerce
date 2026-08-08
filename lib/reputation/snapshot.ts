@@ -31,7 +31,7 @@ export async function publishReputationSnapshotProofToArc(
   attesterKeyOverride?: string,
   economicValueUsdc?: number,
   provenance?: EconomicProvenance
-): Promise<{ transactionHash: string | null; blockNumber: number; verifiedOnchain: boolean; proofAlreadyRegistered?: boolean }> {
+): Promise<{ transactionHash: string | null; blockNumber: number; verifiedOnchain: boolean; proofAlreadyRegistered?: boolean; proofStatus?: string }> {
   const rpcUrl = process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network";
   const publicClient = createPublicClient({
     chain: arcTestnet,
