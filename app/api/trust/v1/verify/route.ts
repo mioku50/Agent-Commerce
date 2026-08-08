@@ -10,7 +10,10 @@ export async function POST(request: NextRequest) {
     }
 
     const chainId = 5042002;
-    const contractAddr = (process.env.NEXT_PUBLIC_VEYRA_ERC8183_EVALUATOR_ADDRESS || "0x1cD66BCd4FCB73a079c05635840Fde029Ce6BEbB") as `0x${string}`;
+    const contractAddr = process.env.VEYRA_TRUST_GATE_ADDRESS as `0x${string}` | undefined;
+    if (!contractAddr) {
+      return NextResponse.json({ error: "Trust clearance verification is unavailable." }, { status: 503 });
+    }
     const domain = getTrustGateEip712Domain(chainId, contractAddr);
 
     const offchainResult = await verifyTrustClearanceOffchain(clearance, signature as `0x${string}`, domain);
@@ -26,7 +29,7 @@ export async function POST(request: NextRequest) {
       reason: offchainResult.reason,
       onchainValid: onchainResult?.valid
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+  } catch {
+    return NextResponse.json({ error: "Trust clearance verification failed." }, { status: 500 });
   }
 }

@@ -99,16 +99,16 @@ export async function runDeterministicEvaluationPolicy(input: {
     return { outcome: "DETERMINISTIC_FAIL", checks, failureCategory: "evaluator_mismatch" };
   }
 
-  // 3. Job Status = Submitted (1) or Pending Settlement (2)
-  const isSubmitted = input.onchainJob.status === 1 || input.onchainJob.status === 2;
+  // 3. The current Arc reference implementation uses Submitted = 2.
+  const isSubmitted = input.onchainJob.status === 2;
   checks.push({
     id: "job_status_submitted",
     name: "Job Status Submitted Check",
     passed: isSubmitted,
     severity: "critical",
     message: isSubmitted
-      ? `ERC-8183 Job status ${input.onchainJob.status} is active for evaluation.`
-      : `Job status is ${input.onchainJob.status}, expected Submitted (1 or 2).`,
+      ? "ERC-8183 Job status is Submitted (2)."
+      : `Job status is ${input.onchainJob.status}, expected Submitted (2).`,
   });
   if (!isSubmitted) {
     return { outcome: "DETERMINISTIC_FAIL", checks, failureCategory: "job_not_submitted" };

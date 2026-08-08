@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { createPublicClient, createWalletClient, http, isAddress, getAddress, keccak256, toBytes, type Hex } from "viem";
+import { createPublicClient, createWalletClient, http, keccak256, toBytes, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { arcTestnet } from "viem/chains";
 import { proofRegistryAbi } from "../commerce/onchain-proof.ts";
 import { fetchReputationEvidenceForAgent, saveReputationSnapshot } from "./db.ts";
 import { computeAgentReputation, createReputationSnapshot } from "./engine.ts";
 import type { CanonicalAgentIdentity, EconomicProvenance, ReputationSnapshot } from "./types.ts";
+import { prepareEconomicProvenance } from "./economic-provenance.ts";
 
 const PROOF_REGISTRY_ADDRESS = (process.env.AGENT_COMMERCE_PROOF_REGISTRY_ADDRESS || "0x0db0b8ddc03c3c56c0662b547822e4654167b684") as `0x${string}`;
 
@@ -43,7 +44,8 @@ export async function publishReputationSnapshotProofToArc(
 
   // If no real economic provenance, skip commerce proof registration entirely.
   // Never fabricate synthetic buyer/seller/amount.
-  if (!provenance || !isAddress(provenance.buyer) || !isAddress(provenance.seller)) {
+  const preparedProvenance = prepareEconomicProvenance(provenance, economicValueUsdc);
+  if (!preparedProvenance) {
     console.log("[reputation-proof] No economic provenance — skipping commerce proof registration");
     return {
       transactionHash: null,
@@ -53,13 +55,9 @@ export async function publishReputationSnapshotProofToArc(
     };
   }
 
-  const buyer = getAddress(provenance.buyer) as `0x${string}`;
-  const seller = getAddress(provenance.seller) as `0x${string}`;
-
-  if (!economicValueUsdc || economicValueUsdc <= 0) {
-    throw new Error("EconomicProvenance provided but economicValueUsdc is missing or zero");
-  }
-  const amount = BigInt(Math.round(economicValueUsdc * 1_000_000)); // 6-decimal atomic units
+  const buyer = preparedProvenance.buyer;
+  const seller = preparedProvenance.seller;
+  const amount = preparedProvenance.amountAtomic;
 
   const requestHash = keccak256(toBytes(snapshot.agentId));
   const responseHash = snapshot.canonicalHash as Hex;

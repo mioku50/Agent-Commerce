@@ -1,4 +1,5 @@
 import { ingestErc8183JobOutcomeEvidence, ingestX402PaymentEvidence } from "../reputation/ingest.ts";
+import { deriveReputationScoreFromEvaluation } from "../reputation/erc8183-adapter.ts";
 
 export async function feedbackFromErc8183Completion(
   params: {
@@ -9,7 +10,7 @@ export async function feedbackFromErc8183Completion(
     providerAddress: string;
     deliverableHash: string;
     completeTx: string;
-    economicValueUsdc?: number;
+    economicValueUsdc: number;
   },
   dryRun: boolean = false
 ): Promise<void> {
@@ -20,6 +21,14 @@ export async function feedbackFromErc8183Completion(
   }
 
   const verdictPassed = params.outcome === "completed";
+  const score = deriveReputationScoreFromEvaluation({
+    status: params.outcome,
+    decision: verdictPassed ? "complete" : "reject",
+  });
+
+  if (verdictPassed && (!Number.isFinite(params.economicValueUsdc) || params.economicValueUsdc <= 0)) {
+    throw new Error("Completed ERC-8183 feedback requires positive settled economic value");
+  }
   
   if (dryRun) {
     console.log("Would ingestErc8183JobOutcomeEvidence:", {
@@ -27,6 +36,7 @@ export async function feedbackFromErc8183Completion(
       jobId: params.jobId,
       deliverableHash: params.deliverableHash,
       verdictPassed,
+      score,
       economicValueUsdc: params.economicValueUsdc,
       clientAddress: params.clientAddress,
       arcProofTx: params.completeTx,
@@ -39,6 +49,7 @@ export async function feedbackFromErc8183Completion(
     jobId: params.jobId,
     deliverableHash: params.deliverableHash,
     verdictPassed,
+    score,
     economicValueUsdc: params.economicValueUsdc,
     clientAddress: params.clientAddress,
     arcProofTx: params.completeTx,

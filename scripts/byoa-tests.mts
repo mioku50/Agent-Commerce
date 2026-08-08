@@ -95,7 +95,7 @@ assert.deepEqual(
 );
 assert.throws(
   () => normalizeCredentialScopes(["manifest:read", "quotes:create", "workflows:execute", "results:read"], "machine_api"),
-  /exactly match/,
+  /core permission set/,
 );
 assert.throws(() => normalizeScopes(["admin"]), /unsupported/);
 assert.throws(

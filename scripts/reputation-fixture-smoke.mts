@@ -18,6 +18,7 @@ import {
   ingestX402PaymentEvidence,
   ingestVeyraReportEvidence,
 } from "../lib/reputation/ingest.ts";
+import { deriveReputationScoreFromEvaluation } from "../lib/reputation/erc8183-adapter.ts";
 import type { CanonicalAgentIdentity, ReputationEvidence } from "../lib/reputation/types.ts";
 
 async function main() {
@@ -72,7 +73,7 @@ async function main() {
     jobId: "smoke_job_8183_1",
     deliverableHash: "0xdacbe0295adefb8a83801a12cf9595d93a327700fd8c785cd847d23c29f91411",
     verdictPassed: true,
-    score: 100,
+    score: deriveReputationScoreFromEvaluation({ status: "completed", decision: "complete" }),
     economicValueUsdc: 15.0,
     clientAddress: "0x3333333333333333333333333333333333333333",
     arcProofTx: "0x0000000000000000000000000000000000000000000000000000000000000000",

@@ -1,19 +1,14 @@
 import { createPublicClient, createWalletClient, http, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
+import { arcTestnet } from "viem/chains";
 import { signTrustClearance } from "../lib/trust-gate/sign.ts";
 import { verifyTrustClearanceOnchain } from "../lib/trust-gate/verify.ts";
 
-const arcTestnet = {
-  id: 5042002,
-  name: "Arc Testnet",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
-  rpcUrls: {
-    default: { http: [process.env.ARC_TESTNET_RPC_URL!] },
-  },
-};
-
 const trustGateAddress = process.env.VEYRA_TRUST_GATE_ADDRESS as Hex;
-const attesterPk = process.env.VEYRA_TRUST_ATTESTER_PRIVATE_KEY as Hex || process.env.CANARY_DEPLOYER_PRIVATE_KEY as Hex;
+const attesterPk = (
+  process.env.VEYRA_TRUST_ATTESTER_PRIVATE_KEY
+  || process.env.CANARY_DEPLOYER_PRIVATE_KEY
+) as Hex;
 
 if (!trustGateAddress || !attesterPk) {
   throw new Error("Missing VEYRA_TRUST_GATE_ADDRESS or private key env vars");

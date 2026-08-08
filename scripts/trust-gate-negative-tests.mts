@@ -11,7 +11,7 @@ import { computeAgentReputation } from "../lib/reputation/engine.ts";
 const arcTestnet = {
   id: 5042002,
   name: "Arc Testnet",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
+  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 18 },
   rpcUrls: {
     default: { http: [process.env.ARC_TESTNET_RPC_URL!] },
   },

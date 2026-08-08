@@ -3,6 +3,7 @@ import { evaluateTrustDecision } from "../lib/trust-gate/decision.ts";
 import { computeCanonicalDecisionHash } from "../lib/trust-gate/canonical.ts";
 import type { ReputationSnapshot } from "../lib/reputation/types.ts";
 import type { TrustDecisionRequest } from "../lib/trust-gate/types.ts";
+import { deriveReputationScoreFromEvaluation } from "../lib/reputation/erc8183-adapter.ts";
 
 const createMockSnapshot = (overrides: Partial<ReputationSnapshot>): ReputationSnapshot => {
   return {
@@ -95,12 +96,12 @@ async function runTests() {
     assert.ok(result.reasons.includes("SYBIL_RISK"));
   }
 
-  // 7. Request 50 USDC with ALLOW_WITH_LIMITS (max 25) -> VALUE_EXCEEDS_TRUST_LIMIT -> downgrade
+  // 7. Request above the immutable limit must fail closed, not remain executable.
   {
     const req = createMockRequest({ requestedValueUsdc: 50 });
     const snap = createMockSnapshot({ trustScore: 75, confidence: "Medium", coverage: 0.55 });
     const result = await evaluateTrustDecision(req, snap);
-    assert.equal(result.decision, "REQUIRE_EVALUATOR");
+    assert.equal(result.decision, "DENY");
     assert.ok(result.reasons.includes("VALUE_EXCEEDS_TRUST_LIMIT"));
   }
 
@@ -132,6 +133,22 @@ async function runTests() {
     // Hash manually constructed decision object with same fields
     const hash2 = computeCanonicalDecisionHash({ ...result1 });
     assert.equal(hash1, hash2);
+  }
+
+  // 11. ERC-8183 score policy is canonical and rejects inconsistent states.
+  {
+    assert.equal(
+      deriveReputationScoreFromEvaluation({ status: "completed", decision: "complete" }),
+      100,
+    );
+    assert.equal(
+      deriveReputationScoreFromEvaluation({ status: "rejected", decision: "reject" }),
+      0,
+    );
+    assert.throws(
+      () => deriveReputationScoreFromEvaluation({ status: "completed", decision: "reject" }),
+      /not a consistent terminal result/,
+    );
   }
 
   console.log("All Trust Gate tests passed!");

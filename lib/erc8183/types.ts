@@ -58,7 +58,7 @@ export type EvaluationCheck = {
   details?: Record<string, unknown>;
 };
 
-export type Erc8183JobStatus = "Open" | "Submitted" | "Completed" | "Rejected" | "Expired";
+export type Erc8183JobStatus = "Open" | "Funded" | "Submitted" | "Completed" | "Rejected" | "Expired";
 
 export type Erc8183Job = {
   jobId: bigint;
@@ -69,6 +69,7 @@ export type Erc8183Job = {
   expiredAt: bigint;
   status: Erc8183JobStatus;
   description: string;
+  hook: `0x${string}`;
   deliverableHash?: `0x${string}`;
 };
 

@@ -69,6 +69,7 @@ async function runTests() {
     providerAddress: "0x222",
     deliverableHash: "0xhash2",
     completeTx: "0xtx2",
+    economicValueUsdc: 1,
   }, true);
   if (logOutput.includes("Would ingestErc8183JobOutcomeEvidence")) {
     originalLog("✅ feedbackFromErc8183Completion creates evidence for valid inputs");

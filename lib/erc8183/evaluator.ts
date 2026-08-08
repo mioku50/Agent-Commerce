@@ -75,10 +75,11 @@ export async function executeOffchainJobEvaluation(
   // Step 3: Run Deterministic Policy Engine
   const statusNumMap: Record<string, number> = {
     Open: 0,
-    Submitted: 1,
-    Completed: 2,
-    Rejected: 3,
-    Expired: 4,
+    Funded: 1,
+    Submitted: 2,
+    Completed: 3,
+    Rejected: 4,
+    Expired: 5,
   };
 
   const policyResult = await runDeterministicEvaluationPolicy({

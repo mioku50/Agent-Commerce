@@ -1,16 +1,7 @@
 import { recoverTypedDataAddress, type Hex } from "viem";
 import { EIP712_CLEARANCE_TYPES, getTrustGateEip712Domain } from "./sign.ts";
 import { createPublicClient, http } from "viem";
-import { mainnet } from "viem/chains";
-
-const arcTestnet = {
-  id: 5042002,
-  name: "Arc Testnet",
-  nativeCurrency: { name: "USDC", symbol: "USDC", decimals: 6 },
-  rpcUrls: {
-    default: { http: [process.env.ARC_TESTNET_RPC_URL || "https://testnet.arc.io/rpc"] },
-  },
-};
+import { arcTestnet } from "viem/chains";
 
 export async function verifyTrustClearanceOffchain(
   clearanceMessage: any,
@@ -50,7 +41,7 @@ export async function verifyTrustClearanceOnchain(
 ) {
   const client = createPublicClient({
     chain: arcTestnet,
-    transport: http(rpcUrl || process.env.ARC_TESTNET_RPC_URL),
+    transport: http(rpcUrl || process.env.ARC_TESTNET_RPC_URL || "https://rpc.testnet.arc.network"),
   });
 
   try {

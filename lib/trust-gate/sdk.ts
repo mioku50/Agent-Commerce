@@ -1,4 +1,5 @@
 import type { TrustDecision, TrustDecisionRequest } from "./types.ts";
+import { isExecutableTrustDecision } from "./types.ts";
 
 const DEFAULT_BASE_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
@@ -68,7 +69,7 @@ export async function preflightErc8183Job(params: {
     action: "erc8183_job",
     requestedValueUsdc: params.budget,
   });
-  const allowed = ["ALLOW", "ALLOW_WITH_LIMITS", "REQUIRE_EVALUATOR"].includes(result.decision.decision);
+  const allowed = isExecutableTrustDecision(result.decision.decision);
   return { allowed, ...result };
 }
 
@@ -85,6 +86,6 @@ export async function preflightX402Payment(params: {
     requestedValueUsdc: params.amount,
     serviceId: params.serviceId,
   });
-  const allowed = ["ALLOW", "ALLOW_WITH_LIMITS"].includes(result.decision.decision);
+  const allowed = result.decision.decision === "ALLOW" || result.decision.decision === "ALLOW_WITH_LIMITS";
   return { allowed, ...result };
 }

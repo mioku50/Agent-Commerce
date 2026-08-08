@@ -10,13 +10,22 @@ import {
   TRUST_POLICY_VERSION,
   TRUST_DECISION_EXPIRY_SECONDS,
 } from "./types.ts";
-import { resolvePolicy, POLICY_TIERS, DENY_TIER } from "./policy.ts";
+import { resolvePolicy, DENY_TIER } from "./policy.ts";
 import { computeCanonicalDecisionHash } from "./canonical.ts";
 
 export async function evaluateTrustDecision(
   request: TrustDecisionRequest,
   useInMemorySnapshot?: ReputationSnapshot | null
 ): Promise<TrustDecision> {
+  if (
+    !request.subjectAgentId?.trim()
+    || !request.action
+    || !Number.isFinite(request.requestedValueUsdc)
+    || request.requestedValueUsdc < 0
+  ) {
+    throw new Error("Invalid trust decision request");
+  }
+
   const snapshot = useInMemorySnapshot !== undefined 
     ? useInMemorySnapshot 
     : (await fetchLatestReputationSnapshot(request.subjectAgentId));
@@ -88,12 +97,9 @@ export async function evaluateTrustDecision(
 
   if (request.requestedValueUsdc > tier.maxValueUsdc && tier.level !== "DENY") {
     reasons.push("VALUE_EXCEEDS_TRUST_LIMIT");
-    const currentIndex = POLICY_TIERS.findIndex((t) => t.level === tier.level);
-    if (currentIndex >= 0 && currentIndex < POLICY_TIERS.length - 1) {
-       tier = POLICY_TIERS[currentIndex + 1];
-    } else {
-       tier = DENY_TIER;
-    }
+    // Every lower trust tier has an equal or smaller limit. Downgrading by one
+    // tier would still return an executable decision for an over-limit amount.
+    tier = DENY_TIER;
   }
 
   const decision: TrustDecision = {

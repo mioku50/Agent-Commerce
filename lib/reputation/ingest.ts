@@ -41,7 +41,7 @@ export async function ingestErc8183JobOutcomeEvidence(params: {
   jobId: string;
   deliverableHash: string;
   verdictPassed: boolean;
-  score?: number;
+  score: number;
   economicValueUsdc?: number;
   clientAddress?: string;
   arcProofTx?: string;
@@ -60,7 +60,7 @@ export async function ingestErc8183JobOutcomeEvidence(params: {
     tier: params.verdictPassed ? (isTier4 ? 4 : 3) : 3,
     sourceId: params.jobId,
     sourceHash: params.deliverableHash,
-    score: params.score !== undefined ? params.score : params.verdictPassed ? 100 : 0,
+    score: params.score,
     positive: params.verdictPassed,
     confidence: 1.0,
     economicValueUsdc: params.economicValueUsdc || 0,

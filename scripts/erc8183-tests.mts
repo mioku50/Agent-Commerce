@@ -12,6 +12,7 @@ import { Decision } from "../lib/erc8183/types.ts";
 import { computeVerdictDigest, signVerdict } from "../lib/erc8183/verdict.ts";
 import { buildErc8183EvaluationReport } from "../lib/reports/erc8183-evaluation-report.ts";
 import { SSRFProtectionError } from "../lib/seller/ssrf.ts";
+import { ERC8183_AGENTIC_COMMERCE_ABI } from "../lib/erc8183/abi.ts";
 
 async function runAllErc8183Tests() {
   console.log("⚡ Running ERC-8183 Evaluator TypeScript tests...");
@@ -76,7 +77,7 @@ async function runAllErc8183Tests() {
     evaluator: "0x3333333333333333333333333333333333333333",
     budget: 5_000_000n,
     expiredAt: BigInt(Math.floor(Date.now() / 1000) + 3600),
-    status: 1, // Submitted
+    status: 2, // Submitted in the current Arc reference implementation
     description: "Market brief job",
   };
 
@@ -98,6 +99,19 @@ async function runAllErc8183Tests() {
 
   assert.equal(passResult.outcome, "PASS", "Valid policy check should PASS");
   assert.ok(passResult.checks.every((c) => c.passed), "All checks should pass");
+
+  const fundedResult = await runDeterministicEvaluationPolicy({
+    deliverable: mockValidDeliverable,
+    onchainJob: { ...mockJob, status: 1 },
+    onchainDeliverableHash: computedValidDeliverableHash,
+    onchainSubmittedEventCount: 1,
+    expectedEvaluatorContract: "0x3333333333333333333333333333333333333333",
+    allowlistedCommerceAddress: "0x0747EEf0706327138c69792bF28Cd525089e4583",
+    targetChainId: 5042002,
+    currentChainId: 5042002,
+    fetcher: mockFetcherSuccess as any,
+  });
+  assert.equal(fundedResult.failureCategory, "job_not_submitted", "Funded must not be treated as Submitted");
 
   // 4. Policy Engine - Deterministic Failures
   // a) Content hash mismatch
@@ -194,6 +208,9 @@ async function runAllErc8183Tests() {
 
   assert.equal(canonicalReport.reportType, "erc8183_evaluation");
   assert.ok(canonicalReport.reportHash.startsWith("0x"), "Report hash must start with 0x");
+
+  assert.ok(ERC8183_AGENTIC_COMMERCE_ABI.some((item) => item.type === "function" && item.name === "setBudget"));
+  assert.ok(ERC8183_AGENTIC_COMMERCE_ABI.some((item) => item.type === "function" && item.name === "fund"));
 
   console.log("✅ All ERC-8183 Evaluator TypeScript tests passed!");
 }

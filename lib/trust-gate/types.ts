@@ -81,3 +81,9 @@ export interface PolicyTierConfig {
 
 export const TRUST_POLICY_VERSION = "veyra-trust-policy-v1";
 export const TRUST_DECISION_EXPIRY_SECONDS = 300;
+
+export function isExecutableTrustDecision(decision: TrustDecisionLevel): boolean {
+  return decision === "ALLOW"
+    || decision === "ALLOW_WITH_LIMITS"
+    || decision === "REQUIRE_EVALUATOR";
+}
