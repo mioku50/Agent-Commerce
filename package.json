@@ -114,7 +114,9 @@
     "trust-gate:product-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/trust-gate-product-tests.mts",
     "trust-gate:test": "node --experimental-transform-types --no-warnings scripts/trust-gate-tests.mts",
     "trust-gate:api-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/trust-gate-api-tests.mts",
-    "trust-gate:contract-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/trust-gate-contract-tests.mts"
+    "trust-gate:contract-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/trust-gate-contract-tests.mts",
+    "trust-gate:negative-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/trust-gate-negative-tests.mts",
+    "trust-gate:live-acceptance": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/trust-gate-live-acceptance.mts"
   },
   "dependencies": {
     "@circle-fin/adapter-viem-v2": "^1.14.0",
