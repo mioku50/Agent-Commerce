@@ -110,7 +110,8 @@
     "agy:run:new": "bash .agents/skills/opus-gemini-golova-ruki/scripts/new-run.sh",
     "codex:head": "bash .agents/skills/codex-gemini-golova-ruki/scripts/codex-head.sh",
     "codex:worker": "bash .agents/skills/codex-gemini-golova-ruki/scripts/gemini-worker.sh",
-    "codex:run:new": "bash .agents/skills/codex-gemini-golova-ruki/scripts/new-run.sh"
+    "codex:run:new": "bash .agents/skills/codex-gemini-golova-ruki/scripts/new-run.sh",
+    "trust-gate:test": "node --experimental-transform-types --no-warnings scripts/trust-gate-tests.mts"
   },
   "dependencies": {
     "@circle-fin/adapter-viem-v2": "^1.14.0",
