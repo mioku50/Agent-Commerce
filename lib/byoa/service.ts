@@ -1096,6 +1096,12 @@ export function byoaManifest(baseUrl: string, sellerWorkflows: unknown[] = []) {
       x402: {
         supported: true,
       },
+      trust_decisions: {
+        evaluate: `${baseUrl}/api/trust/v1/decisions`,
+        get: `${baseUrl}/api/trust/v1/decisions/{decisionId}`,
+        verify: `${baseUrl}/api/trust/v1/verify`,
+        limits: `${baseUrl}/api/trust/v1/agents/{agentId}/limits`
+      }
     },
     erc8004Identity: {
       capability: "erc8004_identity",

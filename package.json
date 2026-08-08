@@ -112,6 +112,7 @@
     "codex:worker": "bash .agents/skills/codex-gemini-golova-ruki/scripts/gemini-worker.sh",
     "codex:run:new": "bash .agents/skills/codex-gemini-golova-ruki/scripts/new-run.sh",
     "trust-gate:test": "node --experimental-transform-types --no-warnings scripts/trust-gate-tests.mts",
+    "trust-gate:api-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/trust-gate-api-tests.mts",
     "trust-gate:contract-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/trust-gate-contract-tests.mts"
   },
   "dependencies": {
