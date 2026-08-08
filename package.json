@@ -96,6 +96,7 @@
     "reputation:fixture-smoke": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/reputation-fixture-smoke.mts",
     "reputation:live-acceptance": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/reputation-live-acceptance.mts",
     "reputation:negative-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/reputation-negative-tests.mts",
+    "reputation:provenance-regression": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/reputation-provenance-regression.mts",
     "reputation:production-smoke": "npm run reputation:fixture-smoke && npm run reputation:live-acceptance",
     "erc8183:test": "node --experimental-transform-types --no-warnings scripts/erc8183-tests.mts",
     "erc8183:product-test": "node --experimental-transform-types --no-warnings --env-file-if-exists=.env.local scripts/erc8183-product-test.mts",

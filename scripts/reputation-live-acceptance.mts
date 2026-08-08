@@ -516,6 +516,8 @@ async function main() {
     economicProvenance
   );
 
+  assert.notStrictEqual(proofResult.proofStatus, "no_economic_provenance",
+    "[10] FAIL: Proof was skipped due to missing economic provenance — this should not happen in live acceptance");
   assert.ok(proofResult.verifiedOnchain, "[9] FAIL: publishReputationSnapshotProofToArc failed onchain verification");
   console.log(`✅ [10] Arc Proof Verified onchain! TX: ${proofResult.transactionHash || "already registered"}, Block: ${proofResult.blockNumber}`);
 

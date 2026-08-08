@@ -41,28 +41,25 @@ export async function publishReputationSnapshotProofToArc(
   const receiptId = snapshot.canonicalHash as Hex;
   const serviceHash = keccak256(toBytes("veyra.reputation.snapshot.v1"));
 
-  // Resolve buyer/seller from real economic provenance.
-  // Priority: EconomicProvenance (ERC-8183 job or x402 payment) > identityOwner fallback.
-  // Never fabricate synthetic addresses.
-  let buyer: `0x${string}`;
-  let seller: `0x${string}`;
-
-  if (provenance && isAddress(provenance.buyer) && isAddress(provenance.seller)) {
-    // Real economic participants from an ERC-8183 job or x402 payment
-    buyer = getAddress(provenance.buyer) as `0x${string}`;
-    seller = getAddress(provenance.seller) as `0x${string}`;
-  } else {
-    // Fallback: use identity owner as buyer, attester as seller.
-    // This only applies when no economic event is linked to this snapshot.
-    const attesterAddr = getAddress("0x0d2c04580e081e222bbe5bf9818af337e2633eb7");
-    buyer = (identityOwner && isAddress(identityOwner) ? getAddress(identityOwner) : attesterAddr) as `0x${string}`;
-    seller = attesterAddr;
-    // If buyer == seller (agent owner is the attester), keep them equal.
-    // The contract allows same-address registration; a sentinel is worse than honesty.
+  // If no real economic provenance, skip commerce proof registration entirely.
+  // Never fabricate synthetic buyer/seller/amount.
+  if (!provenance || !isAddress(provenance.buyer) || !isAddress(provenance.seller)) {
+    console.log("[reputation-proof] No economic provenance — skipping commerce proof registration");
+    return {
+      transactionHash: null,
+      blockNumber: 0,
+      verifiedOnchain: false,
+      proofStatus: "no_economic_provenance",
+    };
   }
 
-  const amountVal = (economicValueUsdc && economicValueUsdc > 0) ? economicValueUsdc : 1.0;
-  const amount = BigInt(Math.round(amountVal * 1_000_000)); // 6-decimal atomic units
+  const buyer = getAddress(provenance.buyer) as `0x${string}`;
+  const seller = getAddress(provenance.seller) as `0x${string}`;
+
+  if (!economicValueUsdc || economicValueUsdc <= 0) {
+    throw new Error("EconomicProvenance provided but economicValueUsdc is missing or zero");
+  }
+  const amount = BigInt(Math.round(economicValueUsdc * 1_000_000)); // 6-decimal atomic units
 
   const requestHash = keccak256(toBytes(snapshot.agentId));
   const responseHash = snapshot.canonicalHash as Hex;
