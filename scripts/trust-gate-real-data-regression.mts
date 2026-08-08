@@ -90,6 +90,16 @@ assert.match(
 );
 assert.match(
   acceptance,
+  /\.eq\("endpoint", endpoint\)/,
+  "Anti-cheat V3: x402 absence must be scoped to the exact request endpoint",
+);
+assert.match(
+  acceptance,
+  /\.gte\("created_at", startedAt\)[\s\S]*\.lte\("created_at", endedAt\)/,
+  "Anti-cheat V3: x402 absence must use a bounded request window",
+);
+assert.match(
+  acceptance,
   /economicValueUsdc:\s*actualSettledValueUsdc/,
   "Anti-cheat V3: reputation evidence must receive actual settlement value",
 );

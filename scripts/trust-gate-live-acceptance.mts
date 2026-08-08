@@ -62,6 +62,9 @@ const VEYRA_EVALUATOR_ADDRESS = (
 ) as `0x${string}`;
 const DELIVERABLE_URI =
   "https://raw.githubusercontent.com/mioku50/Agent-Commerce/main/public/canary-deliverable.json";
+const BLOCKED_X402_ENDPOINT =
+  process.env.TRUST_GATE_LIVE_X402_ENDPOINT
+  || "/api/reference-seller/project-update-intelligence";
 
 const trustGateAbi = [
   {
@@ -161,33 +164,40 @@ function countHostedJobsForBuyer(buyer: string) {
   );
 }
 
-function paymentEventsQuery(buyer: string, seller: string, settledOnly: boolean) {
+function paymentEventsQuery(
+  buyer: string,
+  seller: string,
+  endpoint: string,
+  settledOnly: boolean,
+) {
   let query = getByoaClient()
     .from("payment_events")
     .select("id", { count: "exact", head: true })
     .ilike("payer", buyer)
     .ilike("onchain_seller", seller)
+    .eq("endpoint", endpoint)
     .eq("network", "eip155:5042002");
   if (settledOnly) query = query.not("gateway_tx", "is", null);
   return query;
 }
 
-function countPaymentEvents(buyer: string, seller: string) {
-  return requireCount(paymentEventsQuery(buyer, seller, false), "payment_events");
+function countPaymentEvents(buyer: string, seller: string, endpoint: string) {
+  return requireCount(paymentEventsQuery(buyer, seller, endpoint, false), "payment_events");
 }
 
-function countX402Settlements(buyer: string, seller: string) {
-  return requireCount(paymentEventsQuery(buyer, seller, true), "x402 settlements");
+function countX402Settlements(buyer: string, seller: string, endpoint: string) {
+  return requireCount(paymentEventsQuery(buyer, seller, endpoint, true), "x402 settlements");
 }
 
 async function countX402SettlementsInWindow(
   buyer: string,
   seller: string,
+  endpoint: string,
   startedAt: string,
   endedAt: string,
 ) {
   return requireCount(
-    paymentEventsQuery(buyer, seller, true)
+    paymentEventsQuery(buyer, seller, endpoint, true)
       .gte("created_at", startedAt)
       .lte("created_at", endedAt),
     "bounded x402 settlements",
@@ -277,12 +287,14 @@ async function runBlockedPath(input: {
   agentId: string;
   buyer: `0x${string}`;
   provider: `0x${string}`;
+  endpoint: string;
 }): Promise<BlockedPathEvidence> {
   const executableProbe = await evaluateTrustDecision({
     subjectAgentId: input.agentId,
     counterpartyWallet: input.provider,
     action: "x402_payment",
     requestedValueUsdc: 0,
+    serviceId: input.endpoint,
   }, input.snapshot);
   assert.ok(
     isExecutableTrustDecision(executableProbe.decision),
@@ -291,8 +303,8 @@ async function runBlockedPath(input: {
 
   const blockedAmount = executableProbe.policy.maxValueUsdc + 0.000001;
   const dbJobsBefore = await countHostedJobsForBuyer(input.buyer);
-  const dbPaymentsBefore = await countPaymentEvents(input.buyer, input.provider);
-  const x402Before = await countX402Settlements(input.buyer, input.provider);
+  const dbPaymentsBefore = await countPaymentEvents(input.buyer, input.provider, input.endpoint);
+  const x402Before = await countX402Settlements(input.buyer, input.provider, input.endpoint);
   const blockBefore = await input.publicClient.getBlockNumber();
   const startedAt = new Date().toISOString();
 
@@ -301,6 +313,7 @@ async function runBlockedPath(input: {
     counterpartyWallet: input.provider,
     action: "x402_payment",
     requestedValueUsdc: blockedAmount,
+    serviceId: input.endpoint,
   }, input.snapshot);
   assert.ok(
     decision.decision === "DENY" || decision.decision === "REVIEW_REQUIRED",
@@ -316,9 +329,9 @@ async function runBlockedPath(input: {
   const endedAt = new Date().toISOString();
   const [dbJobsAfter, dbPaymentsAfter, x402After, boundedX402, jobCreatedEvents, clearanceAfter] = await Promise.all([
     countHostedJobsForBuyer(input.buyer),
-    countPaymentEvents(input.buyer, input.provider),
-    countX402Settlements(input.buyer, input.provider),
-    countX402SettlementsInWindow(input.buyer, input.provider, startedAt, endedAt),
+    countPaymentEvents(input.buyer, input.provider, input.endpoint),
+    countX402Settlements(input.buyer, input.provider, input.endpoint),
+    countX402SettlementsInWindow(input.buyer, input.provider, input.endpoint, startedAt, endedAt),
     queryMatchingJobCreatedEvents({
       publicClient: input.publicClient,
       fromBlockExclusive: blockBefore,
@@ -707,6 +720,7 @@ async function main() {
     agentId: identity.agentId,
     buyer: buyer.address,
     provider: provider.address,
+    endpoint: BLOCKED_X402_ENDPOINT,
   });
 
   assert.equal(blocked.dbJobDelta, 0, "DB Job Delta must be zero after blocked preflight");
